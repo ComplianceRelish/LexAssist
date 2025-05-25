@@ -1,0 +1,101 @@
+/* AdminTiersDashboard - Modern, clean admin UI */
+.admin-tiers-dashboard {
+  max-width: 1000px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 6px 32px rgba(0,0,0,0.09);
+  font-family: 'Inter', Arial, sans-serif;
+}
+.admin-tiers-dashboard h2 {
+  text-align: center;
+  margin-bottom: 2rem;
+  color: #1e293b;
+}
+.admin-tiers-dashboard h3 {
+  margin-top: 2rem;
+  color: #2563eb;
+}
+.tiers-list table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+.tiers-list th, .tiers-list td {
+  border: 1px solid #e5e7eb;
+  padding: 0.7rem 0.8rem;
+  text-align: left;
+}
+.tiers-list th {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+.tiers-list td button {
+  margin-right: 0.6rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.98rem;
+  transition: background 0.2s;
+}
+.tiers-list td button:last-child {
+  background: #ef4444;
+}
+.tiers-list td button:hover {
+  opacity: 0.9;
+}
+.create-tier-form, .edit-tier-form, .assign-tier-form, .revoke-admin-form, .payments-placeholder {
+  margin-top: 2.5rem;
+  padding: 1.1rem 1.5rem;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+.create-tier-form input, .edit-tier-form input, .assign-tier-form select, .revoke-admin-form select {
+  margin: 0.3rem 0.7rem 0.3rem 0;
+  padding: 0.5rem 0.8rem;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  font-size: 1rem;
+  background: #fff;
+}
+.create-tier-form button, .edit-tier-form button, .assign-tier-form button, .revoke-admin-form button {
+  padding: 0.5rem 1.2rem;
+  border-radius: 7px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  margin-left: 0.6rem;
+  transition: background 0.2s;
+}
+.create-tier-form button:hover, .edit-tier-form button:hover, .assign-tier-form button:hover, .revoke-admin-form button:hover {
+  background: #1e293b;
+}
+.loading-message {
+  color: #2563eb;
+  text-align: center;
+  margin: 1rem 0;
+}
+.success-message {
+  color: #22c55e;
+  text-align: center;
+  margin: 1rem 0;
+  font-weight: 600;
+}
+.error-message {
+  color: #ef4444;
+  text-align: center;
+  margin: 1rem 0;
+  font-weight: 500;
+}
+.payments-placeholder {
+  text-align: center;
+  color: #64748b;
+  font-style: italic;
+  background: #f1f5f9;
+}

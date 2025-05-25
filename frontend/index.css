@@ -1,0 +1,70 @@
+/* Add Tailwind base styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Lex Assist Brand Colors */
+:root {
+  --primary-color: #0a2e5c; /* Navy blue from logo */
+  --secondary-color: #c8972c; /* Gold from logo */
+  --accent-color: #f0f4f8; /* Light blue-gray for backgrounds */
+  --text-primary: #333333;
+  --text-secondary: #666666;
+}
+
+/* Custom styling for Lex Assist */
+.lex-card {
+  @apply bg-white rounded-lg shadow-md p-6 transition-all duration-200;
+}
+
+.lex-card:hover {
+  @apply shadow-lg;
+}
+
+.lex-button-primary {
+  @apply px-4 py-2 bg-[#0a2e5c] text-white rounded-md hover:bg-opacity-90 transition-all duration-200;
+}
+
+.lex-button-secondary {
+  @apply px-4 py-2 bg-white border border-[#0a2e5c] text-[#0a2e5c] rounded-md hover:bg-[#f0f4f8] transition-all duration-200;
+}
+
+.lex-input {
+  @apply w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#0a2e5c] focus:border-transparent outline-none transition-all duration-200;
+}
+
+.lex-tab {
+  @apply px-4 py-2 font-medium text-gray-600 border-b-2 border-transparent hover:text-[#0a2e5c] cursor-pointer transition-all duration-200;
+}
+
+.lex-tab-active {
+  @apply px-4 py-2 font-medium text-[#0a2e5c] border-b-2 border-[#0a2e5c] cursor-pointer;
+}
+
+/* Animation for loading states */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.lex-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

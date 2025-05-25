@@ -1,0 +1,106 @@
+/* Brand-consistent modal overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 23, 42, 0.7); /* dark overlay */
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  padding: 2.5rem 2rem 2rem 2rem;
+  min-width: 340px;
+  max-width: 95vw;
+  position: relative;
+  transform: translateY(-40px);
+  opacity: 0;
+  transition: all 0.35s cubic-bezier(.6,1.2,.4,1);
+}
+.modal-overlay.open .modal-content {
+  transform: translateY(0);
+  opacity: 1;
+}
+.slide-in {
+  animation: slideIn 0.35s cubic-bezier(.6,1.2,.4,1);
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-40px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.modal-close:hover {
+  color: #1e293b;
+}
+.modal-title {
+  text-align: center;
+  margin-bottom: 1.1rem;
+  color: #1e293b;
+  font-weight: 700;
+}
+.register-form .form-group {
+  margin-bottom: 1.05rem;
+}
+.register-form input {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 1rem;
+  background: #f8fafc;
+  transition: border 0.2s;
+}
+.register-form input:focus {
+  outline: none;
+  border: 1.5px solid #2563eb;
+}
+.register-button {
+  width: 100%;
+  padding: 0.7rem 0;
+  border-radius: 8px;
+  background: linear-gradient(90deg,#2563eb 0,#1e293b 100%);
+  color: #fff;
+  font-weight: 600;
+  font-size: 1.08rem;
+  border: none;
+  cursor: pointer;
+  margin-top: 0.3rem;
+  transition: background 0.2s;
+}
+.register-button:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+.success-message {
+  color: #22c55e;
+  text-align: center;
+  margin: 1.3rem 0 0.5rem 0;
+  font-weight: 600;
+}
+.error-message {
+  color: #ef4444;
+  text-align: center;
+  margin-bottom: 0.7rem;
+  font-weight: 500;
+}
