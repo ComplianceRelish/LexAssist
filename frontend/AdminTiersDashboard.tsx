@@ -47,8 +47,8 @@ export default function AdminTiersDashboard() {
       setTiers(await getAllTiers());
       setOrgs(await getAllOrganizations());
       setUsers(await getAllUsers());
-    } catch (e) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An unknown error occurred');
     } finally {
       setLoading(false);
     }
@@ -61,8 +61,8 @@ export default function AdminTiersDashboard() {
       setSuccess("Tier created");
       setNewTier(emptyTier);
       fetchData();
-    } catch (e) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An unknown error occurred');
     } finally {
       setLoading(false);
     }
@@ -83,14 +83,14 @@ export default function AdminTiersDashboard() {
     }
   }
 
-  async function handleDeleteTier(id) {
+  async function handleDeleteTier(id: string) {
     setLoading(true);
     try {
       await deleteTier(id);
       setSuccess("Tier deleted");
       fetchData();
-    } catch (e) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An unknown error occurred');
     } finally {
       setLoading(false);
     }
@@ -102,8 +102,8 @@ export default function AdminTiersDashboard() {
       await assignTierToOrg(assignOrgId, assignTierId);
       setSuccess("Tier assigned to organization");
       fetchData();
-    } catch (e) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An unknown error occurred');
     } finally {
       setLoading(false);
     }
@@ -115,8 +115,8 @@ export default function AdminTiersDashboard() {
       await revokeAdminRole(revokeUserId);
       setSuccess("Admin role revoked");
       fetchData();
-    } catch (e) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An unknown error occurred');
     } finally {
       setLoading(false);
     }
