@@ -6,3 +6,4 @@
 [build.environment]
   VITE_BACKEND_URL = "https://lexassist-backend.onrender.com"
   NPM_FLAGS = "--legacy-peer-deps"
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
