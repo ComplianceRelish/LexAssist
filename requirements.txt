@@ -1,4 +1,5 @@
 flask==2.0.1
+werkzeug==2.0.3
 supabase==0.5.8
 redis==4.3.4
 gunicorn==20.1.0
