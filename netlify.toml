@@ -1,7 +1,8 @@
 [build]
   base = "frontend"
-  command = "npm run build"
+  command = "npm install --include=dev && npm run build"
   publish = "dist"
 
 [build.environment]
   VITE_BACKEND_URL = "https://your-backend-url.com"
+  NPM_FLAGS = "--legacy-peer-deps"
