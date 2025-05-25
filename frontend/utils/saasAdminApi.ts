@@ -22,7 +22,8 @@ export interface UserProfile {
 }
 
 // Uses Vite env variable for backend URL. See Netlify/Vite docs for env setup.
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+// @ts-ignore: Vite-specific property
+const BASE_URL = import.meta.env?.VITE_BACKEND_URL || 'http://localhost:5000';
 
 // --- Admin API helpers ---
 export async function getAllTiers(): Promise<Tier[]> {
