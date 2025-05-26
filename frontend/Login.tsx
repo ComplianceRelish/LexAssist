@@ -1,8 +1,15 @@
 import React, { useState } from 'react';
-import { sendOtp, verifyOtp } from './utils/api';
+import { useNavigate } from 'react-router-dom';
+import { createClient } from '@supabase/supabase-js';
 import './Login.css';
 
+// Initialize Supabase client
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const Login: React.FC = () => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -26,46 +33,7 @@ const Login: React.FC = () => {
     setError(null);
   };
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email && !phone) {
-      setError('Please enter either email or phone number');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      await sendOtp({ email: email || undefined, phone: phone || undefined });
-      setOtpSent(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!otp) {
-      setError('Please enter the OTP');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      await verifyOtp({
-        email: email || undefined,
-        phone: phone || undefined,
-        token: otp,
-        type: email ? 'email' : 'sms',
-      });
-      setVerified(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to verify OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,7 +199,7 @@ const Login: React.FC = () => {
           <p>Don't have an account?</p>
           <button
             className="register-button"
-            // onClick={handleRegisterClick}
+            onClick={handleRegisterClick}
             disabled={loading}
           >
             Register
