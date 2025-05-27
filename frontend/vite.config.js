@@ -1,24 +1,24 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  return {
   plugins: [react()],
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, './src')
-    }
+  css: {
+    postcss: './postcss.config.js'
   },
-  base: '/', // Changed back to root-relative path
+  base: './',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    assetsDir: 'assets',
+    sourcemap: true,
     rollupOptions: {
       output: {
         assetFileNames: 'assets/[name].[hash][extname]',
-        entryFileNames: 'assets/[name].[hash].js',
-        chunkFileNames: 'assets/[name].[hash].js'
+        chunkFileNames: 'assets/[name].[hash].js',
+        entryFileNames: 'assets/[name].[hash].js'
       }
     }
   },
@@ -26,5 +26,10 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: true
+  },
+  define: {
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY)
   }
+  };
 });

@@ -7,13 +7,13 @@ const LandingPage: React.FC = () => {
       <div className="landing-hero">
         <div className="logo-container">
           <img 
-            src="/images/logo.png" 
+            src="./images/logo.png" 
             alt="LexAssist Logo" 
             className="landing-logo"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.onerror = null;
-              target.src = '/favicon.png';
+              target.src = './favicon.png';
             }}
           />
         </div>
@@ -21,8 +21,8 @@ const LandingPage: React.FC = () => {
         <p className="tagline">AI-powered legal research for Indian lawyers</p>
         
         <div className="cta-buttons">
-          <Link to="/login" className="primary-button">Log In</Link>
-          <Link to="/register" className="secondary-button">Create Account</Link>
+          <Link to="./login" className="primary-button">Log In</Link>
+          <Link to="./register" className="secondary-button">Create Account</Link>
         </div>
       </div>
       
@@ -76,29 +76,29 @@ const LandingPage: React.FC = () => {
         <div className="footer-links">
           <div className="footer-column">
             <h4>Product</h4>
-            <Link to="/features">Features</Link>
-            <Link to="/pricing">Pricing</Link>
-            <Link to="/case-studies">Case Studies</Link>
+            <Link to="./features">Features</Link>
+            <Link to="./pricing">Pricing</Link>
+            <Link to="./case-studies">Case Studies</Link>
           </div>
           
           <div className="footer-column">
             <h4>Company</h4>
-            <Link to="/about">About Us</Link>
-            <Link to="/careers">Careers</Link>
-            <Link to="/contact">Contact</Link>
+            <Link to="./about">About Us</Link>
+            <Link to="./careers">Careers</Link>
+            <Link to="./contact">Contact</Link>
           </div>
           
           <div className="footer-column">
             <h4>Resources</h4>
-            <Link to="/blog">Blog</Link>
-            <Link to="/help">Help Center</Link>
-            <Link to="/api">API</Link>
+            <Link to="./blog">Blog</Link>
+            <Link to="./help">Help Center</Link>
+            <Link to="./api">API</Link>
           </div>
           
           <div className="footer-column">
             <h4>Legal</h4>
-            <Link to="/terms">Terms of Service</Link>
-            <Link to="/privacy">Privacy Policy</Link>
+            <Link to="./terms">Terms of Service</Link>
+            <Link to="./privacy">Privacy Policy</Link>
           </div>
         </div>
         

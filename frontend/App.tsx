@@ -46,18 +46,21 @@ declare global {
     readonly VITE_SUPABASE_ANON_KEY: string;
     readonly VITE_BACKEND_URL: string;
     readonly BASE_URL: string;
+    readonly MODE: string;
   }
 }
 
-// Initialize Supabase client with environment variables or fallback to hardcoded values for development
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://meuyiktpkeomskqornnu.supabase.co';
-// Use only the correct environment variable name to avoid TypeScript errors
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU';
-console.log('Using Supabase URL:', supabaseUrl.substring(0, 10) + '...');
-console.log('Supabase Key defined:', !!supabaseKey);
+// Initialize Supabase client with environment variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Create Supabase client with proper typing
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error(
+    'Supabase URL and Key must be defined in environment variables'
+  );
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Define TypeScript interfaces
 interface SubscriptionTier {
@@ -84,6 +87,11 @@ function App() {
   // Check for authenticated user on load
   useEffect(() => {
     const checkUser = async () => {
+      if (!supabase) {
+        setLoading(false);
+        return;
+      }
+      
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
@@ -98,18 +106,24 @@ function App() {
     checkUser();
     
     // Set up auth state change listener
-    const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(
-      async (event: string, session: Session | null) => {
-        if (session) {
-          setUser(session.user);
-          fetchUserDetails(session.user.id);
-        } else {
-          setUser(null);
-          setSubscription(null);
-          setUserRole(null);
+    let authListener: { unsubscribe: () => void } | undefined;
+    
+    if (supabase) {
+      const { data } = supabase.auth.onAuthStateChange(
+        async (event: string, session: Session | null) => {
+          if (session) {
+            setUser(session.user);
+            fetchUserDetails(session.user.id);
+          } else {
+            setUser(null);
+            setSubscription(null);
+            setUserRole(null);
+          }
         }
-      }
-    );
+      );
+      
+      authListener = data.subscription;
+    }
     
     return () => {
       authListener?.unsubscribe();
@@ -118,6 +132,11 @@ function App() {
   
   // Fetch user's subscription and role
   const fetchUserDetails = async (userId: string) => {
+    if (!supabase) {
+      console.warn('Supabase client not initialized. Cannot fetch user details.');
+      return;
+    }
+    
     try {
       // Fetch subscription
       const { data: subscriptionData, error: subscriptionError } = await supabase
@@ -167,32 +186,32 @@ function App() {
   }
   
   return (
-    <Router basename={import.meta.env.BASE_URL || '/'}>
+    <Router basename={import.meta.env.BASE_URL || './'}>
       <div className="app">
         <header className="header">
           <div className="logo">
-            <img src="/images/logo.png" alt="Lex Assist Logo" onError={(e) => {
+            <img src="./images/logo.png" alt="Lex Assist Logo" onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.onerror = null;
-              target.src = '/favicon.png';
+              target.src = './favicon.png';
             }} />
           </div>
           <nav className="nav">
             {user ? (
               <>
-                <button onClick={() => supabase.auth.signOut()}>Sign Out</button>
+                <button onClick={() => supabase?.auth.signOut()}>Sign Out</button>
               </>
             ) : (
               <>
-                <Link to="/login">Login</Link>
+                <Link to="./login">Login</Link>
               </>
             )}
           </nav>
         </header>
         
         <Routes>
-          <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
-          <Route path="/dashboard" element={
+          <Route path="./login" element={!user ? <Login /> : <Navigate to="./" />} />
+          <Route path="./dashboard" element={
             user ? (
               <main className="main-content">
                 <h1>Welcome to Lex Assist</h1>
@@ -203,9 +222,9 @@ function App() {
                   <p>Subscription: {subscription?.tier || 'Free'}</p>
                 </div>
               </main>
-            ) : <Navigate to="/login" />
+            ) : <Navigate to="./login" />
           } />
-          <Route path="/" element={<LandingPage />} />
+          <Route path="./" element={<LandingPage />} />
         </Routes>
         
         <footer className="footer">
