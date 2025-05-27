@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { createClient, User, Session } from '@supabase/supabase-js';
+import { createClient, User, Session, SupabaseClient } from '@supabase/supabase-js';
 import Login from './Login';
 import LandingPage from './LandingPage';
 import './App.css';
@@ -39,23 +39,25 @@ const ErrorBoundary = ({children}: {children: React.ReactNode}) => {
   return <>{children}</>;
 };
 
+// Add TypeScript declaration for env variables
+declare global {
+  interface ImportMetaEnv {
+    readonly VITE_SUPABASE_URL: string;
+    readonly VITE_SUPABASE_ANON_KEY: string;
+    readonly VITE_BACKEND_URL: string;
+    readonly BASE_URL: string;
+  }
+}
+
 // Initialize Supabase client with environment variables or fallback to hardcoded values for development
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://meuyiktpkeomskqornnu.supabase.co';
-// Fix to match the exact environment variable name in Vercel
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_PUBLIC_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU';
+// Use only the correct environment variable name to avoid TypeScript errors
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU';
 console.log('Using Supabase URL:', supabaseUrl.substring(0, 10) + '...');
 console.log('Supabase Key defined:', !!supabaseKey);
 
-// Create Supabase client
-let supabase;
-try {
-  supabase = createClient(supabaseUrl, supabaseKey);
-  console.log('Supabase client created successfully');
-} catch (error) {
-  console.error('Error creating Supabase client:', error);
-  // Provide a dummy client to prevent crashes
-  supabase = { auth: { getSession: () => ({ data: { session: null }}), onAuthStateChange: () => ({ data: { subscription: null }}) } } as any;
-}
+// Create Supabase client with proper typing
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
 
 // Define TypeScript interfaces
 interface SubscriptionTier {
@@ -97,7 +99,7 @@ function App() {
     
     // Set up auth state change listener
     const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event: string, session: Session | null) => {
         if (session) {
           setUser(session.user);
           fetchUserDetails(session.user.id);
@@ -165,7 +167,7 @@ function App() {
   }
   
   return (
-    <Router>
+    <Router basename={import.meta.env.BASE_URL || '/'}>
       <div className="app">
         <header className="header">
           <div className="logo">

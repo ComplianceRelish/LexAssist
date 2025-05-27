@@ -1,20 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0a2e5c" />
-    <meta
-      name="description"
-      content="Lex Assist - AI-powered legal research and case drafting for Indian lawyers"
-    />
-    <link rel="apple-touch-icon" href="/favicon.png" />
+    <meta charset="UTF-8" />
+    <base href="/" /> <!-- Changed back to root-relative path -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lex Assist | Legal Research & Case Drafting</title>
+    <link rel="icon" href="/favicon.png" />
+    <meta name="description" content="Lex Assist - AI-powered legal research and case drafting for Indian lawyers" />
+    <meta name="theme-color" content="#0a2e5c" />
+    <!-- Preload critical assets -->
+    <link rel="preload" href="/assets/index.css" as="style" />
+    <link rel="stylesheet" href="/index.css" /> <!-- Added this line -->
+    <link rel="apple-touch-icon" href="/favicon.png" />
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
-    <script type="module" src="/main.tsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
