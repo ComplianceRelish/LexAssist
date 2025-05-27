@@ -1,0 +1,13 @@
+{
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "env": {
+    "VITE_BACKEND_URL": "https://lexassist-backend.onrender.com",
+    "VITE_SUPABASE_URL": "https://meuyiktpkeomskqornnu.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU"
+  }
+}
