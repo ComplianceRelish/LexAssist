@@ -1,29 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
-import Header from './components/Header';
-import BriefInput from './components/BriefInput';
-import ResponseTabs from './components/ResponseTabs';
-import DownloadShareFeature from './components/DownloadShareFeature';
-import Login from './components/auth/Login';
-import Register from './components/auth/Register';
-import SubscriptionPlans from './components/subscription/SubscriptionPlans';
-import AdminDashboard from './components/admin/AdminDashboard';
-import UserProfile from './components/user/UserProfile';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { createClient, User, Session } from '@supabase/supabase-js';
+import Login from './Login';
 import './App.css';
 
-// Initialize Supabase client
-const supabaseUrl = 'https://meuyiktpkeomskqornnu.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU';
+// Initialize Supabase client with environment variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Define TypeScript interfaces
+interface SubscriptionTier {
+  tier: 'free' | 'pro' | 'enterprise';
+  id?: string;
+  user_id?: string;
+  status?: string;
+  created_at?: string;
+}
+
+interface UserRole {
+  role: 'user' | 'admin' | 'super_admin';
+}
+
 function App() {
-  const [user, setUser] = useState(null);
-  const [subscription, setSubscription] = useState(null);
-  const [userRole, setUserRole] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionTier | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [brief, setBrief] = useState('');
-  const [analysisResults, setAnalysisResults] = useState(null);
+  const [analysisResults, setAnalysisResults] = useState<any | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Check for authenticated user on load
@@ -62,7 +67,7 @@ function App() {
   }, []);
   
   // Fetch user's subscription and role
-  const fetchUserDetails = async (userId) => {
+  const fetchUserDetails = async (userId: string) => {
     try {
       // Fetch subscription
       const { data: subscriptionData, error: subscriptionError } = await supabase
@@ -81,14 +86,14 @@ function App() {
       // Fetch user role
       const { data: roleData, error: roleError } = await supabase
         .from('user_roles')
-        .select('roles:role_id(name)')
+        .select('*')
         .eq('user_id', userId)
         .single();
       
       if (roleError && roleError.code !== 'PGRST116') {
         console.error('Error fetching user role:', roleError);
-      } else if (roleData) {
-        setUserRole(roleData.roles.name);
+      } else if (roleData && roleData.role) {
+        setUserRole(roleData.role);
       } else {
         setUserRole('user'); // Default role
       }
@@ -97,136 +102,13 @@ function App() {
     }
   };
   
-  // Handle brief submission
-  const handleBriefSubmit = async (briefText) => {
-    setBrief(briefText);
-    setIsAnalyzing(true);
-    
-    try {
-      // Check usage limits based on subscription tier
-      if (subscription) {
-        const { data: usageLimits } = await supabase
-          .from('usage_limits')
-          .select('*')
-          .eq('tier', subscription.tier)
-          .single();
-        
-        // Track usage
-        await supabase
-          .from('usage_tracking')
-          .insert({
-            user_id: user.id,
-            action_type: 'analyze_brief',
-            action_details: { brief_length: briefText.length }
-          });
-        
-        // Call API to analyze brief
-        const response = await fetch('/api/analyze-brief', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            brief: briefText,
-            options: {
-              include_law_sections: true,
-              include_case_histories: true,
-              include_analysis: true
-            },
-            user_id: user.id,
-            save_results: true
-          }),
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to analyze brief');
-        }
-        
-        const results = await response.json();
-        
-        // Apply subscription limits to results
-        if (usageLimits) {
-          if (results.lawSections && results.lawSections.length > usageLimits.max_law_sections) {
-            results.lawSections = results.lawSections.slice(0, usageLimits.max_law_sections);
-          }
-          
-          if (results.caseHistories && results.caseHistories.length > usageLimits.max_case_histories) {
-            results.caseHistories = results.caseHistories.slice(0, usageLimits.max_case_histories);
-          }
-        }
-        
-        setAnalysisResults(results);
-      } else {
-        // Handle unauthenticated or no subscription case
-        // Use default free tier limits
-        const response = await fetch('/api/analyze-brief', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            brief: briefText,
-            options: {
-              include_law_sections: true,
-              include_case_histories: true,
-              include_analysis: true
-            }
-          }),
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to analyze brief');
-        }
-        
-        const results = await response.json();
-        
-        // Apply free tier limits
-        if (results.lawSections && results.lawSections.length > 5) {
-          results.lawSections = results.lawSections.slice(0, 5);
-        }
-        
-        if (results.caseHistories && results.caseHistories.length > 5) {
-          results.caseHistories = results.caseHistories.slice(0, 5);
-        }
-        
-        setAnalysisResults(results);
-      }
-    } catch (error) {
-      console.error('Error analyzing brief:', error);
-      // Handle error state
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-  
-  // Check if user has access to a feature based on subscription tier
-  const hasAccess = (feature) => {
-    if (!subscription) return false;
-    
-    switch (feature) {
-      case 'pdf_download':
-        return true; // Available on all tiers
-      case 'docx_download':
-      case 'txt_download':
-        return ['pro', 'enterprise'].includes(subscription.tier);
-      case 'case_file_drafting':
-        return ['pro', 'enterprise'].includes(subscription.tier);
-      case 'advanced_case_file_drafting':
-        return subscription.tier === 'enterprise';
-      case 'sharing':
-        return ['pro', 'enterprise'].includes(subscription.tier);
-      default:
-        return false;
-    }
-  };
-  
   // Check if user is admin or super admin
-  const isAdmin = () => {
-    return ['admin', 'super_admin'].includes(userRole);
+  const isAdmin = (): boolean => {
+    return userRole === 'admin' || userRole === 'super_admin';
   };
   
   // Check if user is super admin
-  const isSuperAdmin = () => {
+  const isSuperAdmin = (): boolean => {
     return userRole === 'super_admin';
   };
   
@@ -237,50 +119,46 @@ function App() {
   return (
     <Router>
       <div className="app">
-        <Header user={user} userRole={userRole} />
+        <header className="header">
+          <div className="logo">
+            <img src="/images/logo.png" alt="Lex Assist Logo" />
+          </div>
+          <nav className="nav">
+            {user ? (
+              <>
+                <button onClick={() => supabase.auth.signOut()}>Sign Out</button>
+              </>
+            ) : (
+              <>
+                <Link to="/login">Login</Link>
+              </>
+            )}
+          </nav>
+        </header>
         
         <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={!user ? <Login supabase={supabase} /> : <Navigate to="/" />} />
-          <Route path="/register" element={!user ? <Register supabase={supabase} /> : <Navigate to="/" />} />
-          <Route path="/subscription" element={user ? <SubscriptionPlans subscription={subscription} /> : <Navigate to="/login" />} />
-          
-          {/* Protected routes */}
-          <Route path="/profile" element={user ? <UserProfile user={user} subscription={subscription} /> : <Navigate to="/login" />} />
-          
-          {/* Admin routes */}
-          <Route path="/admin/*" element={user && isAdmin() ? <AdminDashboard isSuperAdmin={isSuperAdmin()} /> : <Navigate to="/" />} />
-          
-          {/* Main application */}
+          <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
           <Route path="/" element={
             <main className="main-content">
-              <BriefInput onSubmit={handleBriefSubmit} isAnalyzing={isAnalyzing} />
-              
-              {analysisResults && (
-                <>
-                  <ResponseTabs 
-                    lawSections={analysisResults.lawSections || []}
-                    caseHistories={analysisResults.caseHistories || []}
-                    analysis={analysisResults.analysis || {}}
-                    subscription={subscription}
-                  />
-                  
-                  <DownloadShareFeature 
-                    brief={brief}
-                    analysisResults={analysisResults}
-                    hasAccess={hasAccess}
-                    subscription={subscription}
-                  />
-                </>
+              <h1>Welcome to Lex Assist</h1>
+              <p>Your AI-powered legal research assistant</p>
+              {user ? (
+                <div className="dashboard">
+                  <h2>Dashboard</h2>
+                  <p>Hello, {user.email}</p>
+                  <p>Subscription: {subscription?.tier || 'Free'}</p>
+                </div>
+              ) : (
+                <div className="cta">
+                  <p>Sign in to get started with your legal research</p>
+                  <Link to="/login" className="cta-button">Sign In</Link>
+                </div>
               )}
             </main>
           } />
         </Routes>
         
         <footer className="footer">
-          <div className="footer-logo">
-            <img src="/images/logo.png" alt="Lex Assist Logo" className="logo-image" />
-          </div>
           <div className="footer-text">
             <p>&copy; {new Date().getFullYear()} Lex Assist. All rights reserved.</p>
           </div>
