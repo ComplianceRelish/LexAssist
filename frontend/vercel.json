@@ -1,38 +1,7 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist",
-        "cleanUrls": true
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/assets/(.*)",
-      "headers": {
-        "Cache-Control": "public, max-age=31536000, immutable"
-      }
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html",
-      "headers": {
-        "Cache-Control": "no-cache"
-      }
-    }
-  ],
+  "framework": "vite",
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "https://lexassist-backend.onrender.com/api/$1"
-    },
-    {
-      "source": "/images/(.*)",
-      "destination": "/public/images/$1"
-    }
+    { "source": "/api/(.*)", "destination": "https://lexassist-backend.onrender.com/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
