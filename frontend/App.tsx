@@ -121,7 +121,11 @@ function App() {
       <div className="app">
         <header className="header">
           <div className="logo">
-            <img src="/images/logo.png" alt="Lex Assist Logo" />
+            <img src="/images/logo.png" alt="Lex Assist Logo" onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.onerror = null;
+              target.src = '/favicon.png';
+            }} />
           </div>
           <nav className="nav">
             {user ? (
