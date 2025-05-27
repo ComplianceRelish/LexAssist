@@ -1,4 +1,4 @@
-from backend.services.indian_kanoon.py import IndianKanoonAPI
+from backend.services.indian_kanoon import IndianKanoonAPI
 from backend.utils.logger import setup_logger
 import nltk
 
