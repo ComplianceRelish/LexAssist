@@ -2,12 +2,60 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { createClient, User, Session } from '@supabase/supabase-js';
 import Login from './Login';
+import LandingPage from './LandingPage';
 import './App.css';
+import './LandingPage.css';
 
-// Initialize Supabase client with environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Debug function to expose errors that might be breaking the render
+const ErrorBoundary = ({children}: {children: React.ReactNode}) => {
+  const [hasError, setHasError] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('Runtime error caught by ErrorBoundary:', event.error);
+      setHasError(true);
+      setError(event.error);
+      event.preventDefault();
+    };
+
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
+  if (hasError) {
+    return (
+      <div style={{padding: '20px', color: 'red', backgroundColor: '#ffeeee', border: '1px solid red', margin: '20px'}}>
+        <h2>Something went wrong</h2>
+        <details>
+          <summary>Error Details</summary>
+          <pre>{error?.toString()}</pre>
+          <pre>{error?.stack}</pre>
+        </details>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
+// Initialize Supabase client with environment variables or fallback to hardcoded values for development
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://meuyiktpkeomskqornnu.supabase.co';
+// Fix to match the exact environment variable name in Vercel
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_PUBLIC_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU';
+console.log('Using Supabase URL:', supabaseUrl.substring(0, 10) + '...');
+console.log('Supabase Key defined:', !!supabaseKey);
+
+// Create Supabase client
+let supabase;
+try {
+  supabase = createClient(supabaseUrl, supabaseKey);
+  console.log('Supabase client created successfully');
+} catch (error) {
+  console.error('Error creating Supabase client:', error);
+  // Provide a dummy client to prevent crashes
+  supabase = { auth: { getSession: () => ({ data: { session: null }}), onAuthStateChange: () => ({ data: { subscription: null }}) } } as any;
+}
 
 // Define TypeScript interfaces
 interface SubscriptionTier {
@@ -142,24 +190,20 @@ function App() {
         
         <Routes>
           <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
-          <Route path="/" element={
-            <main className="main-content">
-              <h1>Welcome to Lex Assist</h1>
-              <p>Your AI-powered legal research assistant</p>
-              {user ? (
+          <Route path="/dashboard" element={
+            user ? (
+              <main className="main-content">
+                <h1>Welcome to Lex Assist</h1>
+                <p>Your AI-powered legal research assistant</p>
                 <div className="dashboard">
                   <h2>Dashboard</h2>
                   <p>Hello, {user.email}</p>
                   <p>Subscription: {subscription?.tier || 'Free'}</p>
                 </div>
-              ) : (
-                <div className="cta">
-                  <p>Sign in to get started with your legal research</p>
-                  <Link to="/login" className="cta-button">Sign In</Link>
-                </div>
-              )}
-            </main>
+              </main>
+            ) : <Navigate to="/login" />
           } />
+          <Route path="/" element={<LandingPage />} />
         </Routes>
         
         <footer className="footer">
@@ -172,4 +216,11 @@ function App() {
   );
 }
 
-export default App;
+// Wrap App in ErrorBoundary before exporting
+export default function AppWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
