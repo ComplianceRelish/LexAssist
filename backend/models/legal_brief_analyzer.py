@@ -1,4 +1,5 @@
-# Correct import for IndianKanoonAPI without .py extension
+# IMPORTANT: Do not include .py in import paths
+# The correct format is: from package.module import Class
 from backend.services.indian_kanoon import IndianKanoonAPI
 from backend.utils.logger import setup_logger
 import nltk

@@ -1,13 +1,35 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase credentials are missing. Please check your environment variables.');
+// Add TypeScript declarations for Vite environment variables
+interface ImportMetaEnv {
+  readonly VITE_SUPABASE_URL: string;
+  readonly VITE_SUPABASE_ANON_KEY: string;
 }
 
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
+// Fallback values (keep these as a last resort)
+const FALLBACK_SUPABASE_URL = 'https://meuyiktpkeomskqornnu.supabase.co';
+const FALLBACK_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU';
+
+// Get values from environment with type assertions
+const env = (import.meta as any).env;
+const supabaseUrl = (env?.VITE_SUPABASE_URL as string) || FALLBACK_SUPABASE_URL;
+const supabaseAnonKey = (env?.VITE_SUPABASE_ANON_KEY as string) || FALLBACK_SUPABASE_KEY;
+
+// Validate credentials
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(`
+    Supabase credentials are missing. 
+    Received:
+    - VITE_SUPABASE_URL: ${supabaseUrl ? 'set' : 'missing'}
+    - VITE_SUPABASE_ANON_KEY: ${supabaseAnonKey ? 'set' : 'missing'}
+  `);
+}
+
+// Create and export Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Authentication functions

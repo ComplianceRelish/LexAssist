@@ -1,244 +1,132 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { createClient, User, Session, SupabaseClient } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js';
+import { authService, supabase } from './supabase';
 import Login from './Login';
 import LandingPage from './LandingPage';
 import './App.css';
 import './LandingPage.css';
 
-// Debug function to expose errors that might be breaking the render
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: Error | null}> {
-  constructor(props: {children: React.ReactNode}) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+// Error Boundary Component
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: any}> {
+  state = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Runtime error caught by ErrorBoundary:', error);
+  componentDidCatch(error: Error) {
+    console.error('App Error:', error);
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{padding: '20px', color: 'red', backgroundColor: '#ffeeee', border: '1px solid red', margin: '20px'}}>
+        <div className="error-container">
           <h2>Something went wrong</h2>
           <details>
             <summary>Error Details</summary>
-            <pre>{this.state.error?.toString()}</pre>
-            <pre>{this.state.error?.stack}</pre>
+            <pre>{this.state.error ? String(this.state.error) : 'Unknown error'}</pre>
           </details>
         </div>
       );
     }
-
     return this.props.children;
   }
 }
 
-// Add TypeScript declaration for env variables
-declare global {
-  interface ImportMetaEnv {
-    readonly VITE_SUPABASE_URL: string;
-    readonly VITE_SUPABASE_ANON_KEY: string;
-    readonly VITE_BACKEND_URL: string;
-    readonly BASE_URL: string;
-    readonly MODE: string;
-  }
-}
-
-// Initialize Supabase client with environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error(
-    'Supabase URL and Key must be defined in environment variables'
-  );
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Define TypeScript interfaces
-interface SubscriptionTier {
-  tier: 'free' | 'pro' | 'enterprise';
-  id?: string;
-  user_id?: string;
-  status?: string;
-  created_at?: string;
-}
-
-interface UserRole {
-  role: 'user' | 'admin' | 'super_admin';
-}
-
+// Main App Component
 function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [subscription, setSubscription] = useState<SubscriptionTier | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [brief, setBrief] = useState('');
-  const [analysisResults, setAnalysisResults] = useState<any | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Check for authenticated user on load
+  // Check auth state on mount
   useEffect(() => {
-    const checkUser = async () => {
-      if (!supabase) {
-        setLoading(false);
-        return;
+    const checkAuth = async () => {
+      const result = await authService.getSession();
+      // Handle potential error case
+      if ('error' in result) {
+        console.error('Session error:', result.error);
+        setUser(null);
+      } else {
+        setUser(result.data?.session?.user || null);
       }
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        setUser(session.user);
-        // Fetch user's subscription and role
-        fetchUserDetails(session.user.id);
-      }
-      
       setLoading(false);
     };
-    
-    checkUser();
-    
-    // Set up auth state change listener
-    let authListener: { unsubscribe: () => void } | undefined;
-    
-    if (supabase) {
-      const { data } = supabase.auth.onAuthStateChange(
-        async (event: string, session: Session | null) => {
-          if (session) {
-            setUser(session.user);
-            fetchUserDetails(session.user.id);
-          } else {
-            setUser(null);
-            setSubscription(null);
-            setUserRole(null);
-          }
-        }
-      );
-      
-      authListener = data.subscription;
-    }
-    
-    return () => {
-      authListener?.unsubscribe();
-    };
+
+    checkAuth();
+
+    // Set up auth listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event: string, session: Session | null) => {
+        setUser(session?.user || null);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
-  
-  // Fetch user's subscription and role
-  const fetchUserDetails = async (userId: string) => {
-    if (!supabase) {
-      console.warn('Supabase client not initialized. Cannot fetch user details.');
-      return;
-    }
-    
-    try {
-      // Fetch subscription
-      const { data: subscriptionData, error: subscriptionError } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .single();
-      
-      if (subscriptionError && subscriptionError.code !== 'PGRST116') {
-        console.error('Error fetching subscription:', subscriptionError);
-      } else {
-        setSubscription(subscriptionData || { tier: 'free' });
-      }
-      
-      // Fetch user role
-      const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-      
-      if (roleError && roleError.code !== 'PGRST116') {
-        console.error('Error fetching user role:', roleError);
-      } else if (roleData && roleData.role) {
-        setUserRole(roleData.role);
-      } else {
-        setUserRole('user'); // Default role
-      }
-    } catch (error) {
-      console.error('Error fetching user details:', error);
-    }
-  };
-  
-  // Check if user is admin or super admin
-  const isAdmin = (): boolean => {
-    return userRole === 'admin' || userRole === 'super_admin';
-  };
-  
-  // Check if user is super admin
-  const isSuperAdmin = (): boolean => {
-    return userRole === 'super_admin';
-  };
-  
+
   if (loading) {
-    return <div className="loading">Loading...</div>;
+    return <div className="loading-screen">Loading...</div>;
   }
-  
+
   return (
-    <Router basename={import.meta.env.BASE_URL || './'}>
-      <div className="app">
-        <header className="header">
-          <div className="logo">
-            <img src="./images/logo.png" alt="Lex Assist Logo" onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.onerror = null;
-              target.src = './favicon.png';
-            }} />
+    <Router>
+      <div className="app-container">
+        <header className="app-header">
+          <div className="logo-container">
+            <img 
+              src="/logo.png" 
+              alt="App Logo" 
+              onError={(e) => {
+                const img = e.target as HTMLImageElement;
+                img.onerror = null;
+                img.src = '/favicon.png';
+              }}
+            />
           </div>
-          <nav className="nav">
+          <nav className="nav-menu">
             {user ? (
-              <>
-                <button onClick={() => supabase?.auth.signOut()}>Sign Out</button>
-              </>
+              <button 
+                className="sign-out-btn"
+                onClick={() => authService.signOut()}
+              >
+                Sign Out
+              </button>
             ) : (
-              <>
-                <Link to="./login">Login</Link>
-              </>
+              <Link to="/login" className="login-link">Login</Link>
             )}
           </nav>
         </header>
-        
-        <Routes>
-          <Route path="./login" element={!user ? <Login /> : <Navigate to="./" />} />
-          <Route path="./dashboard" element={
-            user ? (
-              <main className="main-content">
-                <h1>Welcome to Lex Assist</h1>
-                <p>Your AI-powered legal research assistant</p>
-                <div className="dashboard">
-                  <h2>Dashboard</h2>
-                  <p>Hello, {user.email}</p>
-                  <p>Subscription: {subscription?.tier || 'Free'}</p>
-                </div>
-              </main>
-            ) : <Navigate to="./login" />
-          } />
-          <Route path="./" element={<LandingPage />} />
-        </Routes>
-        
-        <footer className="footer">
-          <div className="footer-text">
-            <p>&copy; {new Date().getFullYear()} Lex Assist. All rights reserved.</p>
-          </div>
+
+        <main className="main-content">
+          <Routes>
+            <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
+            <Route 
+              path="/dashboard" 
+              element={
+                user ? (
+                  <div className="dashboard">
+                    <h1>Welcome back, {user.email}</h1>
+                    {/* Dashboard content */}
+                  </div>
+                ) : <Navigate to="/login" />
+              } 
+            />
+            <Route path="/" element={<LandingPage />} />
+          </Routes>
+        </main>
+
+        <footer className="app-footer">
+          <p>&copy; {new Date().getFullYear()} My App. All rights reserved.</p>
         </footer>
       </div>
     </Router>
   );
 }
 
-// Wrap App in ErrorBoundary before exporting
-export default function AppWithErrorBoundary() {
+// App Wrapper with Error Boundary
+export default function AppWrapper() {
   return (
     <ErrorBoundary>
       <App />
