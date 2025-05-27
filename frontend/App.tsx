@@ -1,51 +1,24 @@
-import React from 'react';
-import { BrowserRouter as Router } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { createClient, User, Session, SupabaseClient } from '@supabase/supabase-js';
+import Login from './Login';
+import LandingPage from './LandingPage';
 import './App.css';
+import './LandingPage.css';
 
-// Simple component to test if rendering works
-const TestComponent: React.FC = () => {
-  return (
-    <div style={{ 
-      padding: '20px', 
-      backgroundColor: '#f0f4f8', 
-      borderRadius: '8px',
-      margin: '40px auto',
-      maxWidth: '600px',
-      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-      fontFamily: 'sans-serif'
-    }}>
-      <h1 style={{ color: '#0a2e5c' }}>LexAssist Test Page</h1>
-      <p>If you can see this content, React is working correctly!</p>
-      <p>This is a minimal test component to verify rendering.</p>
-      <div style={{ marginTop: '20px' }}>
-        <button style={{ 
-          padding: '8px 16px', 
-          backgroundColor: '#0a2e5c', 
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer'
-        }}>
-          Test Button
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// Simple class-based error boundary
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+// Debug function to expose errors that might be breaking the render
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: Error | null}> {
   constructor(props: {children: React.ReactNode}) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error: Error) {
-    return { hasError: true };
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Error caught by ErrorBoundary:', error, errorInfo);
+    console.error('Runtime error caught by ErrorBoundary:', error);
   }
 
   render() {
@@ -53,7 +26,11 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
       return (
         <div style={{padding: '20px', color: 'red', backgroundColor: '#ffeeee', border: '1px solid red', margin: '20px'}}>
           <h2>Something went wrong</h2>
-          <p>There was an error rendering the application.</p>
+          <details>
+            <summary>Error Details</summary>
+            <pre>{this.state.error?.toString()}</pre>
+            <pre>{this.state.error?.stack}</pre>
+          </details>
         </div>
       );
     }
@@ -62,12 +39,180 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
   }
 }
 
-// Simple App component
+// Add TypeScript declaration for env variables
+declare global {
+  interface ImportMetaEnv {
+    readonly VITE_SUPABASE_URL: string;
+    readonly VITE_SUPABASE_ANON_KEY: string;
+    readonly VITE_BACKEND_URL: string;
+    readonly BASE_URL: string;
+  }
+}
+
+// Initialize Supabase client with environment variables or fallback to hardcoded values for development
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://meuyiktpkeomskqornnu.supabase.co';
+// Use only the correct environment variable name to avoid TypeScript errors
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU';
+console.log('Using Supabase URL:', supabaseUrl.substring(0, 10) + '...');
+console.log('Supabase Key defined:', !!supabaseKey);
+
+// Create Supabase client with proper typing
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+
+// Define TypeScript interfaces
+interface SubscriptionTier {
+  tier: 'free' | 'pro' | 'enterprise';
+  id?: string;
+  user_id?: string;
+  status?: string;
+  created_at?: string;
+}
+
+interface UserRole {
+  role: 'user' | 'admin' | 'super_admin';
+}
+
 function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionTier | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [brief, setBrief] = useState('');
+  const [analysisResults, setAnalysisResults] = useState<any | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Check for authenticated user on load
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        setUser(session.user);
+        // Fetch user's subscription and role
+        fetchUserDetails(session.user.id);
+      }
+      
+      setLoading(false);
+    };
+    
+    checkUser();
+    
+    // Set up auth state change listener
+    const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(
+      async (event: string, session: Session | null) => {
+        if (session) {
+          setUser(session.user);
+          fetchUserDetails(session.user.id);
+        } else {
+          setUser(null);
+          setSubscription(null);
+          setUserRole(null);
+        }
+      }
+    );
+    
+    return () => {
+      authListener?.unsubscribe();
+    };
+  }, []);
+  
+  // Fetch user's subscription and role
+  const fetchUserDetails = async (userId: string) => {
+    try {
+      // Fetch subscription
+      const { data: subscriptionData, error: subscriptionError } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .single();
+      
+      if (subscriptionError && subscriptionError.code !== 'PGRST116') {
+        console.error('Error fetching subscription:', subscriptionError);
+      } else {
+        setSubscription(subscriptionData || { tier: 'free' });
+      }
+      
+      // Fetch user role
+      const { data: roleData, error: roleError } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      
+      if (roleError && roleError.code !== 'PGRST116') {
+        console.error('Error fetching user role:', roleError);
+      } else if (roleData && roleData.role) {
+        setUserRole(roleData.role);
+      } else {
+        setUserRole('user'); // Default role
+      }
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+    }
+  };
+  
+  // Check if user is admin or super admin
+  const isAdmin = (): boolean => {
+    return userRole === 'admin' || userRole === 'super_admin';
+  };
+  
+  // Check if user is super admin
+  const isSuperAdmin = (): boolean => {
+    return userRole === 'super_admin';
+  };
+  
+  if (loading) {
+    return <div className="loading">Loading...</div>;
+  }
+  
   return (
-    <Router>
+    <Router basename={import.meta.env.BASE_URL || '/'}>
       <div className="app">
-        <TestComponent />
+        <header className="header">
+          <div className="logo">
+            <img src="/images/logo.png" alt="Lex Assist Logo" onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.onerror = null;
+              target.src = '/favicon.png';
+            }} />
+          </div>
+          <nav className="nav">
+            {user ? (
+              <>
+                <button onClick={() => supabase.auth.signOut()}>Sign Out</button>
+              </>
+            ) : (
+              <>
+                <Link to="/login">Login</Link>
+              </>
+            )}
+          </nav>
+        </header>
+        
+        <Routes>
+          <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
+          <Route path="/dashboard" element={
+            user ? (
+              <main className="main-content">
+                <h1>Welcome to Lex Assist</h1>
+                <p>Your AI-powered legal research assistant</p>
+                <div className="dashboard">
+                  <h2>Dashboard</h2>
+                  <p>Hello, {user.email}</p>
+                  <p>Subscription: {subscription?.tier || 'Free'}</p>
+                </div>
+              </main>
+            ) : <Navigate to="/login" />
+          } />
+          <Route path="/" element={<LandingPage />} />
+        </Routes>
+        
+        <footer className="footer">
+          <div className="footer-text">
+            <p>&copy; {new Date().getFullYear()} Lex Assist. All rights reserved.</p>
+          </div>
+        </footer>
       </div>
     </Router>
   );
