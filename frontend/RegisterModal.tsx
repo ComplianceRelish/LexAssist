@@ -1,6 +1,37 @@
 import React, { useState } from 'react';
 import { registerUser, sendOtp, verifyOtp } from './utils/api';
+import { createClient } from '@supabase/supabase-js';
 import './RegisterModal.css';
+
+// Initialize Supabase client
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// User profile function
+async function updateUserProfile(profile: {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  age?: string;
+}): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+    
+    // Update profile in profiles table
+    const { error } = await supabase
+      .from('profiles')
+      .update(profile)
+      .eq('id', user.id);
+      
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    throw new Error('Failed to update profile');
+  }
+}
 
 interface RegisterModalProps {
   isOpen: boolean;

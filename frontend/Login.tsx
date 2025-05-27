@@ -1,7 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, AuthError, User, Session } from '@supabase/supabase-js';
 import './Login.css';
+
+// Add TypeScript declaration for env variables
+declare global {
+  interface ImportMetaEnv {
+    readonly VITE_SUPABASE_URL: string;
+    readonly VITE_SUPABASE_ANON_KEY: string;
+    readonly VITE_BACKEND_URL: string;
+  }
+}
 
 // Initialize Supabase client
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -47,18 +56,20 @@ const Login: React.FC = () => {
     setError(null);
     
     try {
-      let { error } = { error: null };
+      let error: AuthError | null = null;
       
       if (email) {
         // Send OTP to email
-        ({ error } = await supabase.auth.signInWithOtp({
+        const response = await supabase.auth.signInWithOtp({
           email
-        }));
+        });
+        error = response.error;
       } else if (phone) {
         // Send OTP to phone
-        ({ error } = await supabase.auth.signInWithOtp({
+        const response = await supabase.auth.signInWithOtp({
           phone
-        }));
+        });
+        error = response.error;
       }
       
       if (error) {
@@ -85,22 +96,27 @@ const Login: React.FC = () => {
     setError(null);
     
     try {
-      let { data, error } = { data: null, error: null };
+      let data: { user: User | null; session: Session | null } | null = null;
+      let error: AuthError | null = null;
       
       if (email) {
         // Verify email OTP
-        ({ data, error } = await supabase.auth.verifyOtp({
+        const response = await supabase.auth.verifyOtp({
           email,
           token: otp,
           type: 'email'
-        }));
+        });
+        data = response.data;
+        error = response.error;
       } else if (phone) {
         // Verify phone OTP
-        ({ data, error } = await supabase.auth.verifyOtp({
+        const response = await supabase.auth.verifyOtp({
           phone,
           token: otp,
           type: 'sms'
-        }));
+        });
+        data = response.data;
+        error = response.error;
       }
       
       if (error) {

@@ -1,6 +1,49 @@
 import React, { useEffect, useState } from 'react';
-import { getCurrentUser } from './utils/api';
+import { createClient } from '@supabase/supabase-js';
 import './ProfileModal.css';
+
+// Initialize Supabase client
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// User profile functions
+async function fetchUserProfile(): Promise<UserProfile | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    
+    // Get profile from profiles table
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+      
+    return data as UserProfile;
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return null;
+  }
+}
+
+async function updateUserProfile(profile: UserProfile): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+    
+    // Update profile in profiles table
+    const { error } = await supabase
+      .from('profiles')
+      .update(profile)
+      .eq('id', user.id);
+      
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    throw new Error('Failed to update profile');
+  }
+}
 
 interface ProfileModalProps {
   isOpen: boolean;
