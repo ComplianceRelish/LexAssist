@@ -27,42 +27,43 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="landing-container">
-      {/* Hero Section - Entry Page */}
+      {/* Hero Section - Full Screen */}
       <section className="hero-section">
         <div className="hero-content">
           <div className="logo-wrapper">
-          <img
-  src="/logo.png"
-  alt="LexAssist Logo"
-  className="hero-logo"
-  onError={(e) => {
-    // This critical line prevents infinite loops
-    const target = e.target as HTMLImageElement;
-    target.onerror = null;
-    
-    // Instead of trying another image, use a code-based fallback
-    console.error("Logo failed to load");
-    
-    // Create a text-based logo as fallback
-    const wrapper = target.parentElement;
-    if (wrapper) {
-      // Hide the broken image
-      target.style.display = 'none';
-      
-      // Create text alternative
-      const textLogo = document.createElement('div');
-      textLogo.textContent = 'LexAssist';
-      textLogo.style.fontSize = '24px';
-      textLogo.style.fontWeight = 'bold';
-      textLogo.style.color = '#1E293B';
-      wrapper.appendChild(textLogo);
-    }
-  }}
-/>
+            <img
+              src="/logo.png"
+              alt="LexAssist Logo"
+              className="hero-logo"
+              onLoad={() => console.log("Logo successfully loaded")}
+              onError={(e) => {
+                // This critical line prevents infinite loops
+                const target = e.target as HTMLImageElement;
+                target.onerror = null;
+                
+                // Log the error with the source for debugging
+                console.error("Logo failed to load", target.src);
+                
+                // Create a text-based logo as fallback
+                const wrapper = target.parentElement;
+                if (wrapper) {
+                  // Hide the broken image
+                  target.style.display = 'none';
+                  
+                  // Create text alternative
+                  const textLogo = document.createElement('div');
+                  textLogo.textContent = 'LexAssist';
+                  textLogo.style.fontSize = '24px';
+                  textLogo.style.fontWeight = 'bold';
+                  textLogo.style.color = '#ffffff'; // White text to match hero theme
+                  wrapper.appendChild(textLogo);
+                }
+              }}
+            />
           </div>
           <div className="hero-text">
             <h1>Welcome to <span className="brand-name">LexAssist</span></h1>
-            <p className="tagline">Your AI-powered legal Assistant</p>
+            <p className="tagline">Your AI-powered Legal Assistant</p>
           </div>
           <div className="hero-actions">
             <Link to="/login" className="btn-primary">Log In</Link>
