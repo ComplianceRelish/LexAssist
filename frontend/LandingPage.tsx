@@ -31,14 +31,32 @@ const LandingPage: React.FC = () => {
       <section className="hero-section">
         <div className="hero-content">
           <div className="logo-wrapper">
-          <img 
-  src="/logo.png" 
+          <img
+  src="/logo.png"
   alt="LexAssist Logo"
   className="hero-logo"
   onError={(e) => {
+    // This critical line prevents infinite loops
     const target = e.target as HTMLImageElement;
     target.onerror = null;
-    target.src = '/favicon.png';
+    
+    // Instead of trying another image, use a code-based fallback
+    console.error("Logo failed to load");
+    
+    // Create a text-based logo as fallback
+    const wrapper = target.parentElement;
+    if (wrapper) {
+      // Hide the broken image
+      target.style.display = 'none';
+      
+      // Create text alternative
+      const textLogo = document.createElement('div');
+      textLogo.textContent = 'LexAssist';
+      textLogo.style.fontSize = '24px';
+      textLogo.style.fontWeight = 'bold';
+      textLogo.style.color = '#1E293B';
+      wrapper.appendChild(textLogo);
+    }
   }}
 />
           </div>
