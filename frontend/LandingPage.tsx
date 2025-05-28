@@ -31,16 +31,21 @@ const LandingPage: React.FC = () => {
       <section className="hero-section">
         <div className="hero-content">
           <div className="logo-wrapper">
-            {/* Remove the error handler completely since it's causing problems */}
+            {/* Correct the image path to match the actual location */}
             <img
-              src="/logo.png" 
+              src="/images/logo.png" 
               alt="LexAssist Logo"
               className="hero-logo"
+              onError={(e) => {
+                console.log("Logo failed to load");
+                // Try fallback image if primary fails
+                e.currentTarget.src = "/logo.png";
+              }}
             />
           </div>
           <div className="hero-text">
             <h1>Welcome to <span className="brand-name">LexAssist</span></h1>
-            <p className="tagline">Your AI-powered legal Assistant</p>
+            <p className="tagline">Your AI-powered Legal Assistant</p>
           </div>
           <div className="hero-actions">
             <Link to="/login" className="btn-primary">Log In</Link>
@@ -56,8 +61,8 @@ const LandingPage: React.FC = () => {
         onSuccess={handleRegistrationSuccess}
       />
 
-         {/* Features Section */}
-         <section className="features-section">
+      {/* Features Section */}
+      <section className="features-section">
         <h2 className="section-title">Why Choose LexAssist?</h2>
         <div className="features-grid">
           {features.map((feature, index) => (
