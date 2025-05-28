@@ -32,7 +32,7 @@ const LandingPage: React.FC = () => {
         <div className="hero-content">
           <div className="logo-wrapper">
             <img 
-              src="/images/logo.png" 
+              src="./images/logo.png" 
               alt="LexAssist Logo"
               className="hero-logo"
               onError={(e) => {
