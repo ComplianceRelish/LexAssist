@@ -5,6 +5,7 @@ import './LandingPage.css';
 
 const LandingPage: React.FC = () => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [logoLoaded, setLogoLoaded] = useState(false);
   const location = useLocation();
   const pageLoaded = useRef(false);
 
@@ -25,9 +26,13 @@ const LandingPage: React.FC = () => {
     setShowRegisterModal(true);
   };
 
-  const handleRegistrationSuccess = () => {
-    // Handle successful registration
-    console.log("Registration successful!");
+  const handleLogoLoad = () => {
+    setLogoLoaded(true);
+  };
+
+  const handleLogoError = () => {
+    console.error("Logo failed to load");
+    setLogoLoaded(false);
   };
 
   return (
@@ -36,18 +41,25 @@ const LandingPage: React.FC = () => {
       <section className="hero-section">
         <div className="hero-card">
           <div className="logo-container">
-            {/* Use a simple icon shape without text */}
-            <svg 
-              className="logo-placeholder" 
-              width="80" 
-              height="80" 
-              viewBox="0 0 80 80" 
-              fill="none" 
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M40 15L60 40L40 65L20 40L40 15Z" fill="#FFCC33"/>
-              <circle cx="40" cy="40" r="10" fill="#1a439b" stroke="#FFCC33" strokeWidth="2"/>
-            </svg>
+            {/* Try both possible paths for the logo */}
+            <img
+              src="/images/logo.png"
+              alt="LexAssist Logo"
+              className={`hero-logo ${logoLoaded ? 'loaded' : ''}`}
+              onLoad={handleLogoLoad}
+              onError={handleLogoError}
+            />
+            
+            {/* Fallback if the first attempt fails */}
+            {!logoLoaded && (
+              <img
+                src="/logo.png"
+                alt="LexAssist Logo"
+                className="hero-logo"
+                onLoad={handleLogoLoad}
+                onError={handleLogoError}
+              />
+            )}
           </div>
           
           <div className="hero-content">
@@ -66,7 +78,7 @@ const LandingPage: React.FC = () => {
       <RegisterModal 
         isOpen={showRegisterModal}
         onClose={() => setShowRegisterModal(false)}
-        onSuccess={handleRegistrationSuccess}
+        onSuccess={() => console.log("Registration successful!")}
       />
 
       {/* Features Section */}
