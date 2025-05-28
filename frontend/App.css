@@ -21,7 +21,7 @@ body {
 }
 
 /* Header styles */
-.header {
+.header, .app-header {
   background-color: #0a2e5c;
   color: white;
   padding: 1rem 2rem;
@@ -29,6 +29,33 @@ body {
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* App header specific styles */
+.app-header {
+  background-color: white;
+  color: #333;
+  border-bottom: 1px solid #eee;
+}
+
+/* Logo container */
+.logo-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 1rem 0;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.logo-container img {
+  max-height: 450px; /* 300% bigger than previous 150px */
+  width: auto; /* Let width adjust automatically */
+  object-fit: contain; /* Preserve aspect ratio */
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+  transition: transform 0.3s ease;
+  margin: 0 auto; /* Additional centering */
 }
 
 .logo {

@@ -1,8 +1,11 @@
 /* Brand-consistent modal overlay */
 .modal-overlay {
   position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(15, 23, 42, 0.7); /* dark overlay */
+  top: 0; 
+  left: 0; 
+  right: 0; 
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.7); /* dark overlay matching brand */
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -11,6 +14,7 @@
   pointer-events: none;
   transition: opacity 0.3s;
 }
+
 .modal-overlay.open {
   opacity: 1;
   pointer-events: auto;
@@ -22,85 +26,256 @@
   box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   padding: 2.5rem 2rem 2rem 2rem;
   min-width: 340px;
-  max-width: 95vw;
+  max-width: 480px;
+  width: 90%;
   position: relative;
   transform: translateY(-40px);
   opacity: 0;
   transition: all 0.35s cubic-bezier(.6,1.2,.4,1);
 }
+
 .modal-overlay.open .modal-content {
   transform: translateY(0);
   opacity: 1;
 }
+
 .slide-in {
-  animation: slideIn 0.35s cubic-bezier(.6,1.2,.4,1);
+  animation: slideIn 0.35s cubic-bezier(.6,1.2,.4,1) forwards;
 }
+
 @keyframes slideIn {
-  from { opacity: 0; transform: translateY(-40px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    transform: translateY(-40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
+
 .modal-close {
   position: absolute;
-  top: 18px;
-  right: 18px;
+  top: 1rem;
+  right: 1rem;
   background: none;
   border: none;
   font-size: 1.5rem;
-  color: #64748b;
   cursor: pointer;
+  color: #64748B;
   transition: color 0.2s;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
 }
+
 .modal-close:hover {
-  color: #1e293b;
+  color: #334155;
+  background-color: #f1f5f9;
 }
+
 .modal-title {
-  text-align: center;
-  margin-bottom: 1.1rem;
-  color: #1e293b;
-  font-weight: 700;
-}
-.register-form .form-group {
-  margin-bottom: 1.05rem;
-}
-.register-form input {
-  width: 100%;
-  padding: 0.6rem 0.8rem;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  font-size: 1rem;
-  background: #f8fafc;
-  transition: border 0.2s;
-}
-.register-form input:focus {
-  outline: none;
-  border: 1.5px solid #2563eb;
-}
-.register-button {
-  width: 100%;
-  padding: 0.7rem 0;
-  border-radius: 8px;
-  background: linear-gradient(90deg,#2563eb 0,#1e293b 100%);
-  color: #fff;
+  font-size: 1.8rem;
   font-weight: 600;
-  font-size: 1.08rem;
+  color: #1E293B;
+  margin: 0 0 0.5rem 0;
+  text-align: center;
+}
+
+.modal-subtitle {
+  font-size: 1rem;
+  color: #64748B;
+  margin: 0 0 2rem 0;
+  text-align: center;
+}
+
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #475569;
+  font-size: 0.95rem;
+}
+
+.form-group input {
+  padding: 0.75rem 1rem;
+  border: 1px solid #CBD5E1;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #1a439b; /* Brand blue */
+  box-shadow: 0 0 0 3px rgba(26, 67, 155, 0.15);
+}
+
+.register-button {
+  margin-top: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: #1a439b; /* Brand blue */
+  color: white;
   border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 1rem;
   cursor: pointer;
-  margin-top: 0.3rem;
   transition: background 0.2s;
 }
+
+.register-button:hover {
+  background: #153378; /* Darker brand blue */
+}
+
 .register-button:disabled {
-  background: #cbd5e1;
+  background: #94A3B8;
   cursor: not-allowed;
 }
-.success-message {
-  color: #22c55e;
-  text-align: center;
-  margin: 1.3rem 0 0.5rem 0;
-  font-weight: 600;
-}
+
 .error-message {
-  color: #ef4444;
+  color: #EF4444;
+  font-size: 0.95rem;
+  margin: 0.5rem 0;
   text-align: center;
-  margin-bottom: 0.7rem;
+  padding: 0.6rem;
+  border-radius: 0.5rem;
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.success-message {
+  color: #10B981;
+  font-size: 1.1rem;
+  text-align: center;
+  margin: 2rem 0;
+  padding: 1rem;
+  background-color: rgba(16, 185, 129, 0.1);
+  border-radius: 0.5rem;
   font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.success-icon {
+  margin-bottom: 1rem;
+  font-size: 2.5rem;
+}
+
+/* OTP field styling */
+.otp-field {
+  margin: 1rem 0;
+}
+
+.otp-field input {
+  letter-spacing: 0.5rem;
+  text-align: center;
+  font-size: 1.3rem;
+  padding: 0.75rem 1rem;
+}
+
+.otp-sent-to {
+  font-size: 0.9rem;
+  color: #64748B;
+  margin-bottom: 0.8rem;
+  text-align: center;
+}
+
+.text-button {
+  background: transparent;
+  border: none;
+  color: #1a439b; /* Brand blue */
+  cursor: pointer;
+  margin-top: 1rem;
+  font-size: 0.95rem;
+  text-align: center;
+  width: 100%;
+  padding: 0.5rem;
+  transition: background 0.2s;
+  border-radius: 0.5rem;
+}
+
+.text-button:hover {
+  background-color: #f1f5f9;
+  text-decoration: underline;
+}
+
+.text-button:disabled {
+  color: #94A3B8;
+  cursor: not-allowed;
+}
+
+.form-divider {
+  display: flex;
+  align-items: center;
+  margin: 1.2rem 0;
+  color: #94A3B8;
+  font-size: 0.9rem;
+}
+
+.form-divider::before,
+.form-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background-color: #E2E8F0;
+}
+
+.form-divider::before {
+  margin-right: 1rem;
+}
+
+.form-divider::after {
+  margin-left: 1rem;
+}
+
+.login-link {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+  color: #64748B;
+}
+
+.login-link a {
+  color: #1a439b; /* Brand blue */
+  text-decoration: none;
+  font-weight: 500;
+  margin-left: 0.3rem;
+}
+
+.login-link a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive adjustments */
+@media (max-width: 576px) {
+  .modal-content {
+    padding: 2rem 1.5rem 1.5rem 1.5rem;
+    width: 95%;
+  }
+  
+  .modal-title {
+    font-size: 1.6rem;
+  }
+  
+  .form-group label {
+    font-size: 0.9rem;
+  }
+  
+  .form-group input {
+    padding: 0.7rem 0.9rem;
+  }
 }

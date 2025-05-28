@@ -1,21 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createClient, AuthError, User, Session } from '@supabase/supabase-js';
 import './Login.css';
-
-// Add TypeScript declaration for env variables
-declare global {
-  interface ImportMetaEnv {
-    readonly VITE_SUPABASE_URL: string;
-    readonly VITE_SUPABASE_ANON_KEY: string;
-    readonly VITE_BACKEND_URL: string;
-  }
-}
-
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -29,11 +14,13 @@ const Login: React.FC = () => {
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEmail(e.target.value);
+    setPhone(''); // Clear phone when typing email
     setError(null);
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPhone(e.target.value);
+    setEmail(''); // Clear email when typing phone
     setError(null);
   };
 
@@ -42,43 +29,53 @@ const Login: React.FC = () => {
     setError(null);
   };
 
-
+  const validateLoginForm = () => {
+    if (!email && !phone) {
+      setError('Please enter either email or phone number');
+      return false;
+    }
+    
+    if (email && !email.includes('@')) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+    
+    if (phone && !/^\+?[0-9]{10,15}$/.test(phone)) {
+      setError('Please enter a valid phone number');
+      return false;
+    }
+    
+    return true;
+  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email && !phone) {
-      setError('Please enter either email or phone number');
-      return;
-    }
+    if (!validateLoginForm()) return;
     
     setLoading(true);
     setError(null);
     
     try {
-      let error: AuthError | null = null;
+      // Send OTP via backend
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: email || undefined, 
+          phone: phone || undefined 
+        }),
+        credentials: 'include'
+      });
       
-      if (email) {
-        // Send OTP to email
-        const response = await supabase.auth.signInWithOtp({
-          email
-        });
-        error = response.error;
-      } else if (phone) {
-        // Send OTP to phone
-        const response = await supabase.auth.signInWithOtp({
-          phone
-        });
-        error = response.error;
-      }
-      
-      if (error) {
-        throw error;
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'An error occurred while sending OTP');
       }
       
       setOtpSent(true);
-    } catch (error: any) {
-      setError(error.message || 'An error occurred while sending OTP');
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while sending OTP');
     } finally {
       setLoading(false);
     }
@@ -96,37 +93,32 @@ const Login: React.FC = () => {
     setError(null);
     
     try {
-      let data: { user: User | null; session: Session | null } | null = null;
-      let error: AuthError | null = null;
+      // Verify OTP via backend
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email || undefined,
+          phone: phone || undefined,
+          token: otp,
+          type: email ? 'email' : 'sms'
+        }),
+        credentials: 'include'
+      });
       
-      if (email) {
-        // Verify email OTP
-        const response = await supabase.auth.verifyOtp({
-          email,
-          token: otp,
-          type: 'email'
-        });
-        data = response.data;
-        error = response.error;
-      } else if (phone) {
-        // Verify phone OTP
-        const response = await supabase.auth.verifyOtp({
-          phone,
-          token: otp,
-          type: 'sms'
-        });
-        data = response.data;
-        error = response.error;
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'An error occurred while verifying OTP');
       }
       
-      if (error) {
-        throw error;
-      }
+      setVerified(true);
       
       // Redirect to home page on successful login
-      navigate('/');
-    } catch (error: any) {
-      setError(error.message || 'An error occurred while verifying OTP');
+      setTimeout(() => {
+        navigate('/');
+      }, 1000);
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while verifying OTP');
     } finally {
       setLoading(false);
     }
@@ -140,9 +132,19 @@ const Login: React.FC = () => {
     <div className="login-container">
       <div className="login-card">
         <div className="login-logo">
-          <img src="/images/logo.png" alt="Lex Assist Logo" />
+          <img 
+            src="/images/logo.png" 
+            alt="Lex Assist Logo"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.onerror = null;
+              target.src = '/favicon.png';
+            }}
+          />
         </div>
+        
         <h1 className="login-title">Welcome to Lex Assist</h1>
+        
         {!otpSent && !verified && (
           <form className="login-form" onSubmit={handleSendOtp}>
             <div className="form-group">
@@ -156,6 +158,7 @@ const Login: React.FC = () => {
                 disabled={loading}
               />
             </div>
+            
             <div className="form-group">
               <label htmlFor="phone">OR Phone Number</label>
               <input
@@ -167,7 +170,9 @@ const Login: React.FC = () => {
                 disabled={loading}
               />
             </div>
+            
             {error && <div className="error-message">{error}</div>}
+            
             <button
               type="submit"
               className="login-button"
@@ -177,10 +182,14 @@ const Login: React.FC = () => {
             </button>
           </form>
         )}
+        
         {otpSent && !verified && (
           <form className="login-form" onSubmit={handleVerifyOtp}>
             <div className="form-group">
               <label htmlFor="otp">Enter OTP</label>
+              <p className="otp-sent-to">
+                OTP sent to {email || phone}
+              </p>
               <input
                 type="text"
                 id="otp"
@@ -188,9 +197,13 @@ const Login: React.FC = () => {
                 onChange={handleOtpChange}
                 placeholder="Enter the OTP"
                 disabled={loading}
+                maxLength={6}
+                className="otp-input"
               />
             </div>
+            
             {error && <div className="error-message">{error}</div>}
+            
             <button
               type="submit"
               className="login-button"
@@ -198,6 +211,7 @@ const Login: React.FC = () => {
             >
               {loading ? 'Verifying...' : 'Verify OTP'}
             </button>
+            
             <button
               type="button"
               className="text-button"
@@ -208,9 +222,11 @@ const Login: React.FC = () => {
             </button>
           </form>
         )}
+        
         {verified && (
-          <div className="success-message">Login successful!</div>
+          <div className="success-message">Login successful! Redirecting...</div>
         )}
+        
         <div className="login-footer">
           <p>Don't have an account?</p>
           <button

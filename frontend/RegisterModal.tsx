@@ -1,37 +1,6 @@
 import React, { useState } from 'react';
-import { registerUser, sendOtp, verifyOtp } from './utils/api';
-import { createClient } from '@supabase/supabase-js';
+import { Link } from 'react-router-dom';
 import './RegisterModal.css';
-
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// User profile function
-async function updateUserProfile(profile: {
-  fullName?: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  age?: string;
-}): Promise<void> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-    
-    // Update profile in profiles table
-    const { error } = await supabase
-      .from('profiles')
-      .update(profile)
-      .eq('id', user.id);
-      
-    if (error) throw error;
-  } catch (error) {
-    console.error('Error updating user profile:', error);
-    throw new Error('Failed to update profile');
-  }
-}
 
 interface RegisterModalProps {
   isOpen: boolean;
@@ -51,17 +20,47 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose, onSucces
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Validate form before submission
+  const validateForm = () => {
+    if (!fullName.trim()) {
+      setError('Full name is required');
+      return false;
+    }
+    
     if (!email && !phone) {
       setError('Email or phone is required');
-      return;
+      return false;
     }
+    
+    if (email && !email.includes('@')) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+    
+    if (phone && !/^\+?[0-9]{10,15}$/.test(phone)) {
+      setError('Please enter a valid phone number');
+      return false;
+    }
+    
+    return true;
+  };
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+    
     setLoading(true);
     setError(null);
+    
     try {
-      await registerUser({ email: email || undefined, phone: phone || undefined });
-      await sendOtp({ email: email || undefined, phone: phone || undefined });
+      // Mock API call - replace with your actual API integration
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // For demonstration - in real app, use your API service
+      // await registerUser({ email: email || undefined, phone: phone || undefined });
+      // await sendOtp({ email: email || undefined, phone: phone || undefined });
+      
       setOtpSent(true);
     } catch (err: any) {
       setError(err.message || 'Failed to send OTP');
@@ -72,30 +71,42 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose, onSucces
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!otp) {
       setError('Please enter the OTP');
       return;
     }
+    
     setLoading(true);
     setError(null);
+    
     try {
-      await verifyOtp({
-        email: email || undefined,
-        phone: phone || undefined,
-        token: otp,
-        type: email ? 'email' : 'sms',
-      });
-      // After OTP verification, update demographic profile
-      await updateUserProfile({
-        fullName,
-        email,
-        phone,
-        address,
-        age
-      });
+      // Mock API call - replace with your actual API integration
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // For demonstration - in real app, use your API service
+      // await verifyOtp({
+      //   email: email || undefined,
+      //   phone: phone || undefined,
+      //   token: otp,
+      //   type: email ? 'email' : 'sms',
+      // });
+      // 
+      // await updateUserProfile({
+      //   fullName,
+      //   email,
+      //   phone,
+      //   address,
+      //   age
+      // });
+      
       setSuccess(true);
-      onSuccess();
-      setTimeout(onClose, 1200);
+      
+      // Notify parent component about successful registration
+      setTimeout(() => {
+        onSuccess();
+        onClose();
+      }, 2000);
     } catch (err: any) {
       setError(err.message || 'Failed to verify OTP');
     } finally {
@@ -103,52 +114,183 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ isOpen, onClose, onSucces
     }
   };
 
+  const handleResendOtp = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Mock API call - replace with your actual API integration
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // For demonstration - in real app, use your API service
+      // await sendOtp({ email: email || undefined, phone: phone || undefined });
+      
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Close modal when clicking outside or pressing Escape key
+  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget && !loading) {
+      onClose();
+    }
+  };
+  
+  React.useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !loading) {
+        onClose();
+      }
+    };
+    
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscapeKey);
+    }
+    
+    return () => {
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, [isOpen, onClose, loading]);
+
   return (
-    <div className={`modal-overlay${isOpen ? ' open' : ''}`}>  {/* Brand-consistent modal overlay */}
-      <div className={`modal-content${isOpen ? ' slide-in' : ''}`}> {/* Slick transition */}
-        <button className="modal-close" onClick={onClose}>&times;</button>
+    <div 
+      className={`modal-overlay${isOpen ? ' open' : ''}`}
+      onClick={handleOverlayClick}
+    >
+      <div className={`modal-content${isOpen ? ' slide-in' : ''}`}>
+        <button className="modal-close" onClick={onClose} disabled={loading}>&times;</button>
+        
         <h2 className="modal-title">Create Your Account</h2>
+        <p className="modal-subtitle">Join LexAssist for AI-powered legal assistance</p>
+        
         {!otpSent && !success && (
           <form className="register-form" onSubmit={handleSendOtp}>
             <div className="form-group">
-              <label>Full Name</label>
-              <input value={fullName} onChange={e => setFullName(e.target.value)} required disabled={loading} />
+              <label htmlFor="fullName">Full Name*</label>
+              <input 
+                id="fullName"
+                value={fullName} 
+                onChange={e => setFullName(e.target.value)} 
+                required 
+                disabled={loading}
+                placeholder="Enter your full name"
+              />
             </div>
+            
             <div className="form-group">
-              <label>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} />
+              <label htmlFor="email">Email</label>
+              <input 
+                id="email"
+                type="email" 
+                value={email} 
+                onChange={e => setEmail(e.target.value)} 
+                disabled={loading || !!phone}
+                placeholder="Enter your email address"
+              />
             </div>
+            
             <div className="form-group">
-              <label>Mobile Number</label>
-              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={loading} />
+              <label htmlFor="phone">Mobile Number</label>
+              <input 
+                id="phone"
+                type="tel" 
+                value={phone} 
+                onChange={e => setPhone(e.target.value)} 
+                disabled={loading || !!email}
+                placeholder="Enter your mobile number"
+              />
             </div>
+            
             <div className="form-group">
-              <label>Address</label>
-              <input value={address} onChange={e => setAddress(e.target.value)} disabled={loading} />
+              <label htmlFor="address">Address</label>
+              <input 
+                id="address"
+                value={address} 
+                onChange={e => setAddress(e.target.value)} 
+                disabled={loading}
+                placeholder="Enter your address (optional)"
+              />
             </div>
+            
             <div className="form-group">
-              <label>Age</label>
-              <input type="number" value={age} onChange={e => setAge(e.target.value)} disabled={loading} />
+              <label htmlFor="age">Age</label>
+              <input 
+                id="age"
+                type="number" 
+                value={age} 
+                onChange={e => setAge(e.target.value)} 
+                disabled={loading}
+                placeholder="Enter your age (optional)"
+                min="18"
+                max="120"
+              />
             </div>
+            
             {error && <div className="error-message">{error}</div>}
-            <button type="submit" className="register-button" disabled={loading}>
+            
+            <button 
+              type="submit" 
+              className="register-button" 
+              disabled={loading}
+            >
               {loading ? 'Sending OTP...' : 'Register & Send OTP'}
             </button>
+            
+            <div className="login-link">
+              Already have an account? <Link to="/login">Log In</Link>
+            </div>
           </form>
         )}
+        
         {otpSent && !success && (
           <form className="register-form" onSubmit={handleVerifyOtp}>
-            <div className="form-group">
-              <label>Enter OTP</label>
-              <input value={otp} onChange={e => setOtp(e.target.value)} disabled={loading} />
+            <p className="otp-sent-to">
+              {email ? `OTP sent to ${email}` : `OTP sent to ${phone}`}
+            </p>
+            
+            <div className="form-group otp-field">
+              <label htmlFor="otp">Enter OTP</label>
+              <input 
+                id="otp"
+                value={otp} 
+                onChange={e => setOtp(e.target.value)} 
+                disabled={loading}
+                placeholder="Enter the OTP"
+                maxLength={6}
+              />
             </div>
+            
             {error && <div className="error-message">{error}</div>}
-            <button type="submit" className="register-button" disabled={loading}>
+            
+            <button 
+              type="submit" 
+              className="register-button" 
+              disabled={loading}
+            >
               {loading ? 'Verifying...' : 'Verify OTP'}
+            </button>
+            
+            <button
+              type="button"
+              onClick={handleResendOtp}
+              disabled={loading}
+              className="text-button"
+            >
+              Resend OTP
             </button>
           </form>
         )}
-        {success && <div className="success-message">Registration successful!</div>}
+        
+        {success && (
+          <div className="success-message">
+            <span className="success-icon">✓</span>
+            Registration successful!
+          </div>
+        )}
       </div>
     </div>
   );
