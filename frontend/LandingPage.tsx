@@ -31,16 +31,16 @@ const LandingPage: React.FC = () => {
       <section className="hero-section">
         <div className="hero-content">
           <div className="logo-wrapper">
-            <img 
-              src="./images/logo.png" 
-              alt="LexAssist Logo"
-              className="hero-logo"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.onerror = null;
-                target.src = '/favicon.png';
-              }}
-            />
+          <img 
+  src="/logo.png" 
+  alt="LexAssist Logo"
+  className="hero-logo"
+  onError={(e) => {
+    const target = e.target as HTMLImageElement;
+    target.onerror = null;
+    target.src = '/favicon.png';
+  }}
+/>
           </div>
           <div className="hero-text">
             <h1>Welcome to <span className="brand-name">LexAssist</span></h1>
