@@ -1,3 +1,30 @@
+/* Reset styles for all elements */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* HTML and body base styles */
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  width: 100%;
+  height: 100%;
+  background-color: #1a439b; /* Match hero background to avoid white flicker */
+}
+
+/* Root container must be full width */
+#root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Main container */
 .landing-container {
   font-family: 'Inter', -apple-system, system-ui, sans-serif;
@@ -9,24 +36,26 @@
   width: 100%;
   margin: 0;
   padding: 0;
+  position: relative;
 }
 
 /* Hero Section - Full screen with no borders */
 .hero-section {
   background-color: #1a439b; /* Lighter pastel blue */
-  height: 100vh; /* Full viewport height */
-  min-height: 500px;
-  max-height: none; /* Remove max height limitation to ensure full coverage */
+  min-height: 100vh; /* Full viewport height */
+  height: 100vh;
+  max-height: none; /* Remove max height limitation */
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
   position: relative;
   overflow: hidden;
-  width: 100%; /* Full width */
-  box-sizing: border-box;
-  margin: 0; /* Remove any margins */
-  border: none; /* Ensure no borders */
+  width: 100vw; /* Full viewport width */
+  margin: 0 -50vw; /* Compensate for vw overflow */
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  border: none;
+  padding: 0;
 }
 
 /* Logo & hero content positioning */
@@ -60,7 +89,8 @@
   width: 100%;
   height: auto;
   object-fit: contain;
-  max-height: none; /* Remove height restriction */
+  max-height: none;
+  display: block; /* Eliminate any spacing issues */
 }
 
 /* Text styling with proper spacing */
@@ -140,12 +170,13 @@
   transform: translateY(-2px);
 }
 
-/* Features Section - Styles remain the same */
+/* Features Section */
 .features-section {
   padding: clamp(3rem, 10vh, 5rem) clamp(1rem, 5vw, 2rem);
   background-color: #f8fafc;
   width: 100%;
   box-sizing: border-box;
+  position: relative; /* Ensure proper stacking */
 }
 
 .section-title {
@@ -197,14 +228,102 @@
   font-size: clamp(0.9rem, 2vw, 1rem);
 }
 
-/* Rest of the CSS remains the same */
+/* Testimonials Section */
+.testimonials-section {
+  padding: clamp(3rem, 10vh, 5rem) clamp(1rem, 5vw, 2rem);
+  background-color: #ffffff;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: clamp(1.5rem, 3vw, 2rem);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.testimonial-card {
+  padding: clamp(1.5rem, 4vw, 2rem);
+  border-radius: 1rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  background-color: #f8fafc;
+  height: 100%;
+}
+
+.testimonial-text {
+  font-style: italic;
+  color: #334155;
+  margin-bottom: 1.5rem;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  line-height: 1.6;
+}
+
+.testimonial-author {
+  color: #64748B;
+  font-weight: 500;
+  text-align: right;
+  font-size: clamp(0.9rem, 1.8vw, 1rem);
+}
+
+/* Footer */
+.landing-footer {
+  padding: clamp(3rem, 8vh, 4rem) clamp(1rem, 3vw, 2rem) clamp(1.5rem, 4vh, 2rem);
+  background-color: #1E293B;
+  color: #CBD5E1;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.footer-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: clamp(1.5rem, 3vw, 2rem);
+  max-width: 1200px;
+  margin: 0 auto clamp(2rem, 5vh, 3rem);
+  width: 100%;
+}
+
+.footer-column h4 {
+  color: #F8FAFC;
+  font-size: clamp(1rem, 2.2vw, 1.1rem);
+  margin-bottom: clamp(1rem, 3vh, 1.5rem);
+  font-weight: 600;
+}
+
+.footer-column a {
+  color: #CBD5E1;
+  display: block;
+  margin-bottom: clamp(0.6rem, 1.5vh, 0.8rem);
+  text-decoration: none;
+  transition: color 0.2s;
+  font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+}
+
+.footer-column a:hover, .footer-column a:focus {
+  color: #FFFFFF;
+}
+
+.footer-copyright {
+  text-align: center;
+  padding-top: clamp(1.5rem, 4vh, 2rem);
+  border-top: 1px solid rgba(203, 213, 225, 0.1);
+  color: #94A3B8;
+  font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+}
 
 /* Enhanced mobile styling */
 @media (max-width: 576px) {
   .hero-section {
     height: 100vh;
-    width: 100vw; /* Ensure full width on mobile */
-    min-height: -webkit-fill-available; /* iOS viewport height fix */
+    width: 100vw;
+    min-height: -webkit-fill-available;
+    left: 0;
+    right: 0;
+    margin: 0;
   }
   
   .hero-content {
@@ -228,6 +347,17 @@
   }
 }
 
+/* Tablet responsiveness */
+@media (min-width: 577px) and (max-width: 768px) {
+  .hero-section {
+    height: 100vh;
+  }
+  
+  .logo-wrapper {
+    max-width: 200px;
+  }
+}
+
 /* Fix iOS height issues */
 @supports (-webkit-touch-callout: none) {
   .hero-section {
@@ -236,13 +366,6 @@
 }
 
 /* Fix for mobile browsers that resize when using address bars */
-html, body {
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  height: 100%;
-}
-
 @media (max-width: 768px) {
   html, body {
     height: -webkit-fill-available;

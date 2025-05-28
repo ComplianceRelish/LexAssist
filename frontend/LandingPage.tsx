@@ -31,39 +31,16 @@ const LandingPage: React.FC = () => {
       <section className="hero-section">
         <div className="hero-content">
           <div className="logo-wrapper">
+            {/* Remove the error handler completely since it's causing problems */}
             <img
-              src="/logo.png"
+              src="/logo.png" 
               alt="LexAssist Logo"
               className="hero-logo"
-              onLoad={() => console.log("Logo successfully loaded")}
-              onError={(e) => {
-                // This critical line prevents infinite loops
-                const target = e.target as HTMLImageElement;
-                target.onerror = null;
-                
-                // Log the error with the source for debugging
-                console.error("Logo failed to load", target.src);
-                
-                // Create a text-based logo as fallback
-                const wrapper = target.parentElement;
-                if (wrapper) {
-                  // Hide the broken image
-                  target.style.display = 'none';
-                  
-                  // Create text alternative
-                  const textLogo = document.createElement('div');
-                  textLogo.textContent = 'LexAssist';
-                  textLogo.style.fontSize = '24px';
-                  textLogo.style.fontWeight = 'bold';
-                  textLogo.style.color = '#ffffff'; // White text to match hero theme
-                  wrapper.appendChild(textLogo);
-                }
-              }}
             />
           </div>
           <div className="hero-text">
             <h1>Welcome to <span className="brand-name">LexAssist</span></h1>
-            <p className="tagline">Your AI-powered Legal Assistant</p>
+            <p className="tagline">Your AI-powered legal Assistant</p>
           </div>
           <div className="hero-actions">
             <Link to="/login" className="btn-primary">Log In</Link>
@@ -79,8 +56,8 @@ const LandingPage: React.FC = () => {
         onSuccess={handleRegistrationSuccess}
       />
 
-      {/* Features Section */}
-      <section className="features-section">
+         {/* Features Section */}
+         <section className="features-section">
         <h2 className="section-title">Why Choose LexAssist?</h2>
         <div className="features-grid">
           {features.map((feature, index) => (
