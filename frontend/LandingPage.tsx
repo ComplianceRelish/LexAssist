@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import RegisterModal from './RegisterModal';
 import './LandingPage.css';
@@ -6,9 +6,14 @@ import './LandingPage.css';
 const LandingPage: React.FC = () => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const location = useLocation();
+  const pageLoaded = useRef(false);
 
   // Check if there's a register=true flag in URL when component mounts
   useEffect(() => {
+    // Prevent infinite loop by checking if component has already been mounted
+    if (pageLoaded.current) return;
+    pageLoaded.current = true;
+    
     const params = new URLSearchParams(location.search);
     if (params.get('register') === 'true') {
       setShowRegisterModal(true);
@@ -27,29 +32,32 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="landing-container">
-      {/* Hero Section - Full Screen */}
+      {/* Hero Section with Card Design */}
       <section className="hero-section">
-        <div className="hero-content">
-          <div className="logo-wrapper">
-            {/* Correct the image path to match the actual location */}
-            <img
-              src="/images/logo.png" 
-              alt="LexAssist Logo"
-              className="hero-logo"
-              onError={(e) => {
-                console.log("Logo failed to load");
-                // Try fallback image if primary fails
-                e.currentTarget.src = "/logo.png";
-              }}
-            />
+        <div className="hero-card">
+          <div className="logo-container">
+            {/* Use a simple icon shape without text */}
+            <svg 
+              className="logo-placeholder" 
+              width="80" 
+              height="80" 
+              viewBox="0 0 80 80" 
+              fill="none" 
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M40 15L60 40L40 65L20 40L40 15Z" fill="#FFCC33"/>
+              <circle cx="40" cy="40" r="10" fill="#1a439b" stroke="#FFCC33" strokeWidth="2"/>
+            </svg>
           </div>
-          <div className="hero-text">
+          
+          <div className="hero-content">
             <h1>Welcome to <span className="brand-name">LexAssist</span></h1>
             <p className="tagline">Your AI-powered Legal Assistant</p>
           </div>
+          
           <div className="hero-actions">
             <Link to="/login" className="btn-primary">Log In</Link>
-            <a href="#" onClick={handleRegisterClick} className="btn-secondary">Create Account</a>
+            <button onClick={handleRegisterClick} className="btn-secondary">Create Account</button>
           </div>
         </div>
       </section>
