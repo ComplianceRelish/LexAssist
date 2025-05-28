@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import RegisterModal from './RegisterModal';
+// Import the logo directly
+import logoImage from '../public/images/logo.png'; // Adjust path as needed
 import './LandingPage.css';
 
 const LandingPage: React.FC = () => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const [logoLoaded, setLogoLoaded] = useState(false);
   const location = useLocation();
   const pageLoaded = useRef(false);
 
@@ -26,40 +27,18 @@ const LandingPage: React.FC = () => {
     setShowRegisterModal(true);
   };
 
-  const handleLogoLoad = () => {
-    setLogoLoaded(true);
-  };
-
-  const handleLogoError = () => {
-    console.error("Logo failed to load");
-    setLogoLoaded(false);
-  };
-
   return (
     <div className="landing-container">
       {/* Hero Section with Card Design */}
       <section className="hero-section">
         <div className="hero-card">
           <div className="logo-container">
-            {/* Try both possible paths for the logo */}
+            {/* Use the imported logo image */}
             <img
-              src="/images/logo.png"
+              src={logoImage}
               alt="LexAssist Logo"
-              className={`hero-logo ${logoLoaded ? 'loaded' : ''}`}
-              onLoad={handleLogoLoad}
-              onError={handleLogoError}
+              className="hero-logo"
             />
-            
-            {/* Fallback if the first attempt fails */}
-            {!logoLoaded && (
-              <img
-                src="/logo.png"
-                alt="LexAssist Logo"
-                className="hero-logo"
-                onLoad={handleLogoLoad}
-                onError={handleLogoError}
-              />
-            )}
           </div>
           
           <div className="hero-content">
