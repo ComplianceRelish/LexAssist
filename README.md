@@ -1,0 +1,2 @@
+# LexAssist
+Legal Assistant App
