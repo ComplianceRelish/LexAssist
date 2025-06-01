@@ -1,30 +1,13 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "legal_app_frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "legal_app_frontend/dist/$1"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/.*",
-      "dest": "legal_app_frontend/dist/index.html"
-    }
-  ],
+  "rewrites": [{ "source": "/(.*)", "destination": "/" }],
+  "buildCommand": "cd legal_app_frontend && npm install --legacy-peer-deps && npm run build",
+  "outputDirectory": "legal_app_frontend/dist",
+  "framework": "vite",
   "env": {
-    "VITE_SUPABASE_URL": "@supabase_url",
-    "VITE_SUPABASE_ANON_KEY": "@supabase_anon_key"
+    "VITE_BACKEND_URL": "https://lexassist-backend.onrender.com",
+    "VITE_SUPABASE_URL": "https://meuyiktpkeomskqornnu.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU",
+    "VITE_INLEGALBERT_MODEL_PATH": "law-ai/InLegalBERT"
   },
   "github": {
     "enabled": true,
