@@ -1,0 +1,158 @@
+/* Button.module.css */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md, 0.5rem);
+  font-family: var(--font-body, 'Inter', sans-serif);
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Variants */
+.btn-primary {
+  background-color: var(--primary-main, #0D3B59);
+  color: var(--text-light, #FFFFFF);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--primary-dark, #092C43);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.btn-secondary {
+  background-color: var(--accent-main, #FFBB33);
+  color: var(--primary-dark, #092C43);
+  font-weight: 600;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--accent-dark, #E6A61F);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--primary-main, #0D3B59);
+  border: 2px solid var(--primary-main, #0D3B59);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background-color: var(--primary-main, #0D3B59);
+  color: var(--text-light, #FFFFFF);
+}
+
+/* Renamed this class to avoid conflicts */
+.btn-text-variant {
+  background-color: transparent;
+  color: var(--primary-main, #0D3B59);
+  padding: 0.5rem;
+  box-shadow: none;
+}
+
+.btn-text-variant:hover:not(:disabled) {
+  background-color: rgba(13, 59, 89, 0.05);
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-icon {
+  background-color: transparent;
+  color: var(--primary-main, #0D3B59);
+  border-radius: 50%;
+  padding: 0.5rem;
+  box-shadow: none;
+}
+
+.btn-icon:hover:not(:disabled) {
+  background-color: rgba(13, 59, 89, 0.05);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Sizes */
+.btn-small {
+  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+  min-height: 2rem;
+}
+
+.btn-medium {
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+  min-height: 2.5rem;
+}
+
+.btn-large {
+  font-size: 1.125rem;
+  padding: 1rem 2rem;
+  min-height: 3rem;
+}
+
+/* Width */
+.btn-full-width {
+  width: 100%;
+}
+
+/* Icon button styles */
+.btn-icon-only {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.btn-small.btn-icon-only {
+  width: 2rem;
+  height: 2rem;
+}
+
+.btn-large.btn-icon-only {
+  width: 4rem;
+  height: 4rem;
+}
+
+/* Icon within regular button */
+.btn-icon-container {
+  margin-right: 0.5rem;
+  display: flex;
+  align-items: center;
+}
+
+/* Button text container - renamed to avoid conflicts */
+.btn-text-content {
+  display: inline-block;
+  color: inherit;
+}
+
+/* Ensure login button text is visible */
+.loginButton {
+  color: white !important;
+  font-weight: 600 !important;
+}

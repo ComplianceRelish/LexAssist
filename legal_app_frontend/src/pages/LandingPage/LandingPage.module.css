@@ -1,0 +1,242 @@
+/* LandingPage.module.css */
+.landingPage {
+  min-height: 100vh;
+  background-color: var(--background-default);
+}
+
+.heroSection {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+  text-align: center;
+}
+
+.heroContent {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.logoContainer {
+  margin-bottom: 1.5rem;
+}
+
+.heroSubtitle {
+  margin: 1rem 0;
+  color: var(--primary-main);
+  font-size: 2rem;
+}
+
+.heroDescription {
+  margin-bottom: 2rem;
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.heroButtons {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+/* Fixed button height */
+.heroButtons button {
+  padding: 0.5rem 1.5rem !important;
+  height: auto !important;
+  color: #333 !important; /* Darker text color for the button */
+}
+
+.featuresSection {
+  padding: 4rem 2rem;
+  background-color: var(--background-dark);
+}
+
+.sectionTitle {
+  text-align: center;
+  margin-bottom: 3rem;
+  color: var(--primary-main);
+}
+
+.featuresGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.featureCard {
+  background-color: var(--background-paper);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 2rem;
+  text-align: center;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.featureCard:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-lg);
+}
+
+.featureIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.featureTitle {
+  margin-bottom: 1rem;
+  color: var(--primary-main);
+}
+
+.featureDescription {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Fixed modal styles */
+.modalBackdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  overflow-y: auto; /* Allow backdrop scrolling */
+}
+
+.modalContainer {
+  background-color: white;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 450px;
+  max-height: 90vh; /* Limit maximum height */
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  position: relative;
+  padding: 2rem;
+  margin: 1rem auto;
+  overflow-y: auto; /* Allow modal content scrolling */
+  animation: slideIn 0.3s ease;
+}
+
+.modalHeader {
+  text-align: center;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.modalHeader h2 {
+  margin-top: 1rem;
+  color: var(--primary-main);
+}
+
+.closeButton {
+  position: absolute;
+  top: -1rem;
+  right: -1rem;
+  background: var(--primary-main);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.closeButton:hover {
+  background: var(--primary-dark);
+}
+
+.loginForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.formGroup label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.formInput {
+  padding: 0.75rem;
+  border: 1px solid var(--border-main);
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  background-color: #f9f9f9;
+}
+
+.formInput:focus {
+  outline: none;
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 2px rgba(21, 90, 124, 0.1);
+}
+
+.errorMessage {
+  color: #e53e3e;
+  background-color: rgba(229, 62, 62, 0.1);
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.loginFooter {
+  margin-top: 1.5rem;
+}
+
+.previewNote {
+  background-color: #f7fafc;
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  border-left: 3px solid var(--accent-main);
+  line-height: 1.5;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .featuresGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .modalContainer {
+    padding: 1.5rem;
+    margin: 0;
+  }
+  
+  .closeButton {
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+}

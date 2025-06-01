@@ -1,0 +1,143 @@
+.documentUpload {
+  padding: 2rem;
+  min-height: 100vh;
+  background-color: var(--background-default);
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.title {
+  font-size: 2.5rem;
+  color: var(--primary-main);
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  margin-bottom: 3rem;
+}
+
+.uploadArea {
+  background-color: var(--background-paper);
+  border-radius: var(--border-radius-lg);
+  padding: 2rem;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 2rem;
+}
+
+.fileUploadContainer {
+  margin-bottom: 2rem;
+}
+
+.dropzone {
+  border: 2px dashed var(--border-main);
+  border-radius: var(--border-radius-md);
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition-default);
+  background-color: var(--background-default);
+}
+
+.dropzone:hover {
+  border-color: var(--primary-main);
+  background-color: rgba(13, 59, 89, 0.03);
+}
+
+.hasFile {
+  border-color: var(--primary-main);
+  background-color: rgba(13, 59, 89, 0.03);
+}
+
+.uploadIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.fileTypes {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+
+.fileInput {
+  display: none;
+}
+
+.fileInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fileName {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.fileSize {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.uploadActions {
+  margin-top: 1.5rem;
+}
+
+.errorMessage {
+  color: var(--status-error);
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background-color: rgba(244, 67, 54, 0.1);
+  border-radius: var(--border-radius-sm);
+  text-align: center;
+}
+
+.successMessage {
+  color: var(--status-success);
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background-color: rgba(76, 175, 80, 0.1);
+  border-radius: var(--border-radius-sm);
+  text-align: center;
+}
+
+.uploadTips {
+  background-color: var(--background-paper);
+  border-radius: var(--border-radius-lg);
+  padding: 1.5rem 2rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.uploadTips h3 {
+  color: var(--primary-main);
+  margin-bottom: 1rem;
+  font-size: 1.25rem;
+}
+
+.uploadTips ul {
+  padding-left: 1.5rem;
+}
+
+.uploadTips li {
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .uploadArea {
+    padding: 1.5rem;
+  }
+  
+  .dropzone {
+    padding: 2rem 1rem;
+  }
+}
