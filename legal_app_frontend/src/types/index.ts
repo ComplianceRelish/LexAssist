@@ -3,7 +3,12 @@ export interface User {
   id: string;
   email: string;
   name?: string;
-  role: 'free' | 'pro' | 'enterprise' | 'admin' | 'super_admin';
+  role: 'user' | 'admin' | 'super_admin';
+  subscription?: {
+    tier: 'free' | 'pro' | 'enterprise';
+    expiresAt: string;
+    features: string[];
+  };
 }
 
 // Component prop types
@@ -19,6 +24,10 @@ export interface ButtonProps {
 
 export interface AdminDashboardProps {
   user: User;
+}
+
+export interface LoginProps {
+  onLogin: (user: User) => void;
 }
 
 // Add other shared types here

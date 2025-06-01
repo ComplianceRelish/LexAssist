@@ -7,70 +7,69 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [activeTab, setActiveTab] = useState<string>('users');
   const navigate = useNavigate();
   
-  // Mock data for the preview
-  const mockUsers = [
-    {
-      id: '1',
-      name: 'Free User',
-      email: 'free@lexassist.com',
-      role: 'user',
-      subscription: 'free',
-      registeredDate: '2025-01-15'
-    },
-    {
-      id: '2',
-      name: 'Pro User',
-      email: 'pro@lexassist.com',
-      role: 'user',
-      subscription: 'pro',
-      registeredDate: '2025-02-20'
-    },
-    {
-      id: '3',
-      name: 'Enterprise User',
-      email: 'enterprise@lexassist.com',
-      role: 'user',
-      subscription: 'enterprise',
-      registeredDate: '2025-03-10'
-    },
-    {
-      id: '4',
-      name: 'Admin User',
-      email: 'admin@lexassist.com',
-      role: 'admin',
-      subscription: 'enterprise',
-      registeredDate: '2025-01-01'
-    }
-  ];
-  
-  const mockAnalytics = {
-    totalUsers: 42,
+  // State for users and analytics data
+  const [users, setUsers] = useState<any[]>([]);
+  const [analytics, setAnalytics] = useState<any>({
+    totalUsers: 0,
     activeSubscriptions: {
-      free: 25,
-      pro: 12,
-      enterprise: 5
+      free: 0,
+      pro: 0,
+      enterprise: 0
     },
-    monthlyRevenue: '₹68,988',
-    averageUsageTime: '45 minutes',
-    topFeatures: [
-      'Case Brief Analysis',
-      'Law Section Extraction',
-      'Document Generation'
-    ]
-  };
+    monthlyRevenue: '₹0',
+    averageUsageTime: '0 minutes',
+    topFeatures: []
+  });
   
-  const mockSettings = {
+  const [settings, setSettings] = useState<any>({
     apiKeys: {
-      indianKanoon: 'd053cb3e0082a68b58def9f16e1b43c7a497faf4',
-      supabase: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU'
+      indianKanoon: '',
+      supabase: ''
     },
     currencies: [
       { code: 'INR', symbol: '₹', name: 'Indian Rupee' }
     ],
     features: {
-      voiceInput: true,
-      caseFileDrafting: true,
-      judgmentPrediction: true
+      voiceInput: false,
+      caseFileDrafting: false,
+      judgmentPrediction: false
+    }
+  });
+  
+  // Fetch data when component mounts
+  React.useEffect(() => {
+    // In production, these would make API calls to fetch real data
+    fetchUsers();
+    fetchAnalytics();
+    fetchSettings();
+  }, []);
+  
+  // These functions would make real API calls in production
+  const fetchUsers = async () => {
+    try {
+      // const response = await apiClient.getAllUsers();
+      // setUsers(response);
+      setUsers([]);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+  
+  const fetchAnalytics = async () => {
+    try {
+      // const response = await apiClient.getAnalytics();
+      // setAnalytics(response);
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    }
+  };
+  
+  const fetchSettings = async () => {
+    try {
+      // const response = await apiClient.getSystemSettings();
+      // setSettings(response);
+    } catch (error) {
+      console.error('Error fetching settings:', error);
     }
   };
 
@@ -110,22 +109,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             </tr>
           </thead>
           <tbody>
-            {mockUsers.map(mockUser => (
-              <tr key={mockUser.id}>
-                <td>{mockUser.id}</td>
-                <td>{mockUser.name}</td>
-                <td>{mockUser.email}</td>
+            {users.map(user => (
+              <tr key={user.id}>
+                <td>{user.id}</td>
+                <td>{user.name}</td>
+                <td>{user.email}</td>
                 <td>
-                  <span className={`role-badge ${mockUser.role}`}>
-                    {mockUser.role}
+                  <span className={`role-badge ${user.role}`}>
+                    {user.role}
                   </span>
                 </td>
                 <td>
-                  <span className={`subscription-badge ${mockUser.subscription}`}>
-                    {mockUser.subscription}
+                  <span className={`subscription-badge ${user.subscription}`}>
+                    {user.subscription}
                   </span>
                 </td>
-                <td>{mockUser.registeredDate}</td>
+                <td>{user.registeredDate}</td>
                 <td className="action-buttons">
                   <button className="edit-button">Edit</button>
                   <button className="delete-button">Delete</button>
@@ -152,15 +151,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         <div className="analytics-cards">
           <div className="analytics-card">
             <h4>Total Users</h4>
-            <div className="analytics-value">{mockAnalytics.totalUsers}</div>
+            <div className="analytics-value">{analytics.totalUsers}</div>
           </div>
           <div className="analytics-card">
             <h4>Monthly Revenue</h4>
-            <div className="analytics-value">{mockAnalytics.monthlyRevenue}</div>
+            <div className="analytics-value">{analytics.monthlyRevenue}</div>
           </div>
           <div className="analytics-card">
             <h4>Avg. Usage Time</h4>
-            <div className="analytics-value">{mockAnalytics.averageUsageTime}</div>
+            <div className="analytics-value">{analytics.averageUsageTime}</div>
           </div>
         </div>
         
@@ -169,21 +168,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           <div className="subscription-chart">
             <div 
               className="chart-bar free" 
-              style={{ width: `${(mockAnalytics.activeSubscriptions.free / mockAnalytics.totalUsers) * 100}%` }}
+              style={{ width: `${(analytics.activeSubscriptions.free / analytics.totalUsers) * 100}%` }}
             >
-              Free: {mockAnalytics.activeSubscriptions.free}
+              Free: {analytics.activeSubscriptions.free}
             </div>
             <div 
               className="chart-bar pro" 
-              style={{ width: `${(mockAnalytics.activeSubscriptions.pro / mockAnalytics.totalUsers) * 100}%` }}
+              style={{ width: `${(analytics.activeSubscriptions.pro / analytics.totalUsers) * 100}%` }}
             >
-              Pro: {mockAnalytics.activeSubscriptions.pro}
+              Pro: {analytics.activeSubscriptions.pro}
             </div>
             <div 
               className="chart-bar enterprise" 
-              style={{ width: `${(mockAnalytics.activeSubscriptions.enterprise / mockAnalytics.totalUsers) * 100}%` }}
+              style={{ width: `${(analytics.activeSubscriptions.enterprise / analytics.totalUsers) * 100}%` }}
             >
-              Enterprise: {mockAnalytics.activeSubscriptions.enterprise}
+              Enterprise: {analytics.activeSubscriptions.enterprise}
             </div>
           </div>
         </div>
@@ -191,7 +190,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         <div className="analytics-section">
           <h4>Top Features Used</h4>
           <ul className="feature-list">
-            {mockAnalytics.topFeatures.map((feature, index) => (
+            {analytics.topFeatures.map((feature, index) => (
               <li key={index} className="feature-item">
                 {feature}
               </li>
@@ -214,7 +213,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               <span className="api-key-name">Indian Kanoon API:</span>
               <input 
                 type="password" 
-                value={mockSettings.apiKeys.indianKanoon} 
+                value={settings.apiKeys.indianKanoon} 
                 readOnly 
                 className="api-key-value" 
               />
@@ -225,7 +224,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               <span className="api-key-name">Supabase API:</span>
               <input 
                 type="password" 
-                value={mockSettings.apiKeys.supabase} 
+                value={settings.apiKeys.supabase} 
                 readOnly 
                 className="api-key-value" 
               />
@@ -247,7 +246,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               </tr>
             </thead>
             <tbody>
-              {mockSettings.currencies.map((currency, index) => (
+              {settings.currencies.map((currency, index) => (
                 <tr key={index}>
                   <td>{currency.code}</td>
                   <td>{currency.symbol}</td>
@@ -269,21 +268,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             <div className="feature-toggle">
               <span className="feature-name">Voice Input</span>
               <label className="toggle-switch">
-                <input type="checkbox" checked={mockSettings.features.voiceInput} />
+                <input type="checkbox" checked={settings.features.voiceInput} />
                 <span className="toggle-slider"></span>
               </label>
             </div>
             <div className="feature-toggle">
               <span className="feature-name">Case File Drafting</span>
               <label className="toggle-switch">
-                <input type="checkbox" checked={mockSettings.features.caseFileDrafting} />
+                <input type="checkbox" checked={settings.features.caseFileDrafting} />
                 <span className="toggle-slider"></span>
               </label>
             </div>
             <div className="feature-toggle">
               <span className="feature-name">Judgment Prediction</span>
               <label className="toggle-switch">
-                <input type="checkbox" checked={mockSettings.features.judgmentPrediction} />
+                <input type="checkbox" checked={settings.features.judgmentPrediction} />
                 <span className="toggle-slider"></span>
               </label>
             </div>
@@ -330,11 +329,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         {activeTab === 'settings' && renderSettingsTab()}
       </div>
       
-      <div className="admin-note">
-        <p>
-          <strong>Note:</strong> This is a preview version of the admin dashboard. In the production version, all actions would be fully functional.
-        </p>
-      </div>
+
     </div>
   );
 };

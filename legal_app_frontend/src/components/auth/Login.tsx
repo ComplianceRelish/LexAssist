@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { LoginProps } from '../../types';
 import './Login.css';
+import LexAssistApiClient from '../../services/LexAssistApiClient';
+
+const apiClient = new LexAssistApiClient(
+  import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com',
+  import.meta.env.VITE_SUPABASE_URL || '',
+  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+);
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [loginMethod, setLoginMethod] = useState<string>('email');
@@ -12,34 +19,33 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   
-  const handleEmailLogin = (e: React.FormEvent) => {
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      // For preview purposes, accept any email with valid format and any password
-      if (validateEmail(email) && password.length >= 6) {
-        // Mock user data
-        const user = {
-          id: '1',
-          email: email,
-          name: email.split('@')[0],
-          role: email.includes('admin') ? 'admin' as const : email.includes('super') ? 'super_admin' as const : 'user' as const,
-          subscription: getSubscriptionByEmail(email)
-        };
-        
-        onLogin(user);
+    try {
+      const success = await apiClient.login(email, password);
+      if (success) {
+        // Get user from client after successful login
+        const user = apiClient.getCurrentUser();
+        if (user) {
+          onLogin(user);
+        } else {
+          setError('Login successful but user data could not be retrieved.');
+        }
       } else {
-        setError('Invalid email or password. For the preview, use any valid email and password (min 6 characters).');
+        setError('Invalid email or password. Please try again.');
       }
-      
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('An error occurred during login. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
   
-  const handleOtpLogin = (e: React.FormEvent) => {
+  const handleOtpLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!otpSent) {
@@ -48,11 +54,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError('');
         setIsLoading(true);
         
-        // Simulate API call
-        setTimeout(() => {
-          setOtpSent(true);
+        try {
+          const success = await apiClient.requestOTP(mobile);
+          if (success) {
+            setOtpSent(true);
+          } else {
+            setError('Failed to send OTP. Please try again.');
+          }
+        } catch (err) {
+          console.error('OTP request error:', err);
+          setError('An error occurred while sending OTP. Please try again.');
+        } finally {
           setIsLoading(false);
-        }, 1500);
+        }
       } else {
         setError('Please enter a valid mobile number.');
       }
@@ -61,94 +75,33 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       setError('');
       setIsLoading(true);
       
-      // Simulate API call
-      setTimeout(() => {
-        // For preview purposes, accept any 6-digit OTP
-        if (otp.length === 6 && /^\d+$/.test(otp)) {
-          // Mock user data
-          const user = {
-            id: '2',
-            email: `user${mobile.slice(-4)}@example.com`,
-            name: `User ${mobile.slice(-4)}`,
-            role: 'user' as const,
-            subscription: {
-              tier: 'free' as const,
-              expiresAt: '2025-12-31',
-              features: ['basic_analysis', 'limited_results', 'pdf_export']
-            }
-          };
-          
-          onLogin(user);
+      try {
+        const success = await apiClient.loginWithOTP(mobile, otp);
+        if (success) {
+          const user = apiClient.getCurrentUser();
+          if (user) {
+            onLogin(user);
+          } else {
+            setError('OTP verification successful but user data could not be retrieved.');
+          }
         } else {
-          setError('Invalid OTP. For the preview, enter any 6 digits.');
+          setError('Invalid OTP. Please try again.');
         }
-        
+      } catch (err) {
+        console.error('OTP verification error:', err);
+        setError('An error occurred during OTP verification. Please try again.');
+      } finally {
         setIsLoading(false);
-      }, 1500);
+      }
     }
   };
   
-  // Helper function to validate email format
-  const validateEmail = (email: string): boolean => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
   
   // Helper function to validate mobile format
   const validateMobile = (mobile: string): boolean => {
     return mobile.length >= 10 && /^\d+$/.test(mobile);
   };
-  
-  // Helper function to get subscription based on email
-  const getSubscriptionByEmail = (email: string) => {
-    if (email.includes('free')) {
-      return {
-        tier: 'free' as const,
-        expiresAt: '2025-12-31',
-        features: ['basic_analysis', 'limited_results', 'pdf_export']
-      };
-    } else if (email.includes('pro')) {
-      return {
-        tier: 'pro' as const,
-        expiresAt: '2025-12-31',
-        features: [
-          'enhanced_analysis', 
-          'comprehensive_results', 
-          'document_segmentation', 
-          'advanced_statute_identification', 
-          'judgment_prediction', 
-          'all_document_formats', 
-          'email_sharing', 
-          'whatsapp_sharing'
-        ]
-      };
-    } else if (email.includes('enterprise')) {
-      return {
-        tier: 'enterprise' as const,
-        expiresAt: '2025-12-31',
-        features: [
-          'enhanced_analysis', 
-          'unlimited_results', 
-          'document_segmentation', 
-          'advanced_statute_identification', 
-          'judgment_prediction', 
-          'all_document_formats', 
-          'email_sharing', 
-          'whatsapp_sharing',
-          'risk_assessment',
-          'strategic_considerations',
-          'alternative_approaches',
-          'comparative_jurisprudence',
-          'success_probability'
-        ]
-      };
-    } else {
-      return {
-        tier: 'free' as const,
-        expiresAt: '2025-12-31',
-        features: ['basic_analysis', 'limited_results', 'pdf_export']
-      };
-    }
-  };
+
 
   return (
     <div className="login-container">
@@ -198,9 +151,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 disabled={isLoading}
                 placeholder="Enter your password"
               />
-              <span className="password-note">
-                For preview: Use any valid email and password (min 6 characters)
-              </span>
             </div>
             <button 
               type="submit" 
@@ -213,17 +163,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             {error && <div className="error-message">{error}</div>}
             
             <div className="login-footer">
-              <div className="preview-note">
-                <p><strong>Preview Login Tips:</strong></p>
-                <ul>
-                  <li>For Free tier access: Use an email containing "free"</li>
-                  <li>For Pro tier access: Use an email containing "pro"</li>
-                  <li>For Enterprise tier access: Use an email containing "enterprise"</li>
-                  <li>For Admin access: Use an email containing "admin"</li>
-                  <li>For Super Admin access: Use an email containing "super"</li>
-                </ul>
-                <p>Example: "pro-user@example.com" will log you in as a Pro tier user</p>
-              </div>
+              <a href="#" onClick={(e) => { e.preventDefault(); alert('Contact support for password reset'); }}>Forgot password?</a>
             </div>
           </form>
         ) : (
@@ -254,9 +194,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   placeholder="Enter 6-digit OTP"
                   maxLength={6}
                 />
-                <span className="password-note">
-                  For preview: Enter any 6 digits
-                </span>
               </div>
             )}
             
@@ -280,14 +217,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             )}
             
             {error && <div className="error-message">{error}</div>}
-            
-            <div className="login-footer">
-              <div className="preview-note">
-                <p><strong>Preview Login Tips:</strong></p>
-                <p>Enter any valid mobile number (min 10 digits) and any 6-digit OTP</p>
-                <p>OTP login will create a Free tier user account</p>
-              </div>
-            </div>
           </form>
         )}
       </div>

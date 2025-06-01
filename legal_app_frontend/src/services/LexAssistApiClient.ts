@@ -75,16 +75,12 @@ interface SubscriptionTier {
 // API Client Class
 class LexAssistApiClient {
   private baseUrl: string;
-  private supabaseUrl: string;
-  private supabaseKey: string;
   private supabaseClient: any;
   private accessToken: string | null = null;
   private user: User | null = null;
 
   constructor(baseUrl: string, supabaseUrl: string, supabaseKey: string) {
     this.baseUrl = baseUrl;
-    this.supabaseUrl = supabaseUrl;
-    this.supabaseKey = supabaseKey;
     this.supabaseClient = createClient(supabaseUrl, supabaseKey);
     
     // Initialize from localStorage if available
@@ -125,6 +121,34 @@ class LexAssistApiClient {
 
   async login(email: string, password: string): Promise<boolean> {
     try {
+      // First try authenticating with Supabase
+      try {
+        const { data, error } = await this.supabaseClient.auth.signInWithPassword({
+          email,
+          password
+        });
+        
+        if (!error && data.session) {
+          // Successfully authenticated with Supabase
+          this.accessToken = data.session.access_token;
+          
+          // Get user data from our backend using the verified session
+          const userResponse = await this.getCurrentUser();
+          if (userResponse) {
+            if (typeof window !== 'undefined' && this.accessToken) {
+              localStorage.setItem('lexassist_token', this.accessToken);
+              if (this.user) {
+                localStorage.setItem('lexassist_user', JSON.stringify(this.user));
+              }
+            }
+            return true;
+          }
+        }
+      } catch (supabaseError) {
+        console.log('Supabase authentication not available, falling back to API:', supabaseError);
+      }
+      
+      // Fall back to our own API
       const response = await axios.post<AuthResponse>(`${this.baseUrl}/auth/login`, {
         username: email,
         password
@@ -133,7 +157,6 @@ class LexAssistApiClient {
       this.accessToken = response.data.access_token;
       this.user = response.data.user;
       
-      // Store in localStorage
       if (typeof window !== 'undefined') {
         localStorage.setItem('lexassist_token', this.accessToken);
         localStorage.setItem('lexassist_user', JSON.stringify(this.user));
@@ -146,17 +169,50 @@ class LexAssistApiClient {
     }
   }
 
-  async loginWithOTP(phone: string, code: string): Promise<boolean> {
+  async loginWithOTP(mobile: string, otp: string): Promise<boolean> {
     try {
-      const response = await axios.post<AuthResponse>(`${this.baseUrl}/auth/otp/verify`, {
-        phone,
-        code
+      // First try using Supabase OTP verification if available
+      try {
+        const { error } = await this.supabaseClient.auth.verifyOtp({
+          phone: mobile,
+          token: otp,
+          type: 'sms'
+        });
+        
+        if (!error) {
+          // Successfully authenticated with Supabase
+          const { data } = await this.supabaseClient.auth.getSession();
+          if (data.session) {
+            this.accessToken = data.session.access_token;
+            
+            // Get user data from our backend using the verified session
+            const userResponse = await this.getCurrentUser();
+            if (userResponse) {
+              if (typeof window !== 'undefined') {
+                if (this.accessToken) {
+                  localStorage.setItem('lexassist_token', this.accessToken);
+                }
+                if (this.user) {
+                  localStorage.setItem('lexassist_user', JSON.stringify(this.user));
+                }
+              }
+              return true;
+            }
+          }
+        }
+      } catch (supabaseError) {
+        console.log('Supabase OTP verification not available, falling back to API:', supabaseError);
+      }
+      
+      // Fall back to our own API
+      const response = await axios.post<AuthResponse>(`${this.baseUrl}/auth/verify-otp`, {
+        mobile,
+        otp
       });
       
       this.accessToken = response.data.access_token;
       this.user = response.data.user;
       
-      // Store in localStorage
       if (typeof window !== 'undefined') {
         localStorage.setItem('lexassist_token', this.accessToken);
         localStorage.setItem('lexassist_user', JSON.stringify(this.user));
@@ -164,7 +220,7 @@ class LexAssistApiClient {
       
       return true;
     } catch (error) {
-      console.error('OTP login failed:', error);
+      console.error('OTP verification failed:', error);
       return false;
     }
   }
