@@ -36,10 +36,12 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://lex-assist.vercel.app", "http://localhost:3000", "http://localhost:5173"],
+    allow_origins=["https://lex-assist.vercel.app", "http://localhost:3000", "http://localhost:5173", "*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Access-Control-Allow-Origin", "Origin"],
+    expose_headers=["Access-Control-Allow-Origin"],
+    max_age=86400,
 )
 
 # Register routers

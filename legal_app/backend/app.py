@@ -12,16 +12,15 @@ app = Flask(__name__)
 
 # Configure CORS to allow requests from Vercel and localhost
 # This must be set up before any routes
-CORS(app, 
+cors = CORS(app, 
      resources={r"/*": {
          "origins": ["https://lex-assist.vercel.app", "http://localhost:3000", "http://localhost:5173"],
          "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-         "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
-         "expose_headers": ["Content-Type", "Authorization"],
-         "supports_credentials": True,
-         "max_age": 86400  # Cache preflight response for 24 hours
+         "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Access-Control-Allow-Origin"],
+         "expose_headers": ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
      }}, 
-     supports_credentials=True)
+     supports_credentials=True,
+     send_wildcard=False)
 
 # Import FastAPI app - ensure this import happens here to avoid circular imports
 import sys
@@ -35,6 +34,20 @@ from main import app as fastapi_app
 @app.route('/<path:path>', methods=['OPTIONS'])
 def handle_options(path):
     response = app.make_default_options_response()
+    response.headers.add('Access-Control-Allow-Origin', 'https://lex-assist.vercel.app')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+# Special handler for the registration endpoint
+@app.route('/api/auth/register', methods=['OPTIONS'])
+def handle_register_options():
+    response = app.make_default_options_response()
+    response.headers.add('Access-Control-Allow-Origin', 'https://lex-assist.vercel.app')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
 # Root endpoint redirects to FastAPI app

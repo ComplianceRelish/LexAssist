@@ -128,7 +128,7 @@ const LandingPage = () => {
             py={{ base: 3, md: 5 }}
           >
             <Image
-              src="/images/LexAssist_Logo.png"
+              src="/assets/images/LexAssist_Logo.png"
               alt="LexAssist 3D Logo"
               maxW={{ base: "200px", md: "260px", lg: "320px" }}
               w="100%"
@@ -278,7 +278,7 @@ const LandingPage = () => {
             gap={8}
           >
             <Stack align="flex-start" spacing={4}>
-              <Image src="/images/logo-light.png" alt="LexAssist Logo" height="40px" />
+              <Image src="/assets/images/logo.png" alt="LexAssist Logo" height="40px" />
               <Text fontSize="sm">© 2025 LexAssist. All rights reserved.</Text>
             </Stack>
             
