@@ -147,7 +147,7 @@ const LandingPage = () => {
               color={primaryColor}
               lineHeight="1.2"
             >
-              Cutting Edge Legal Research in your palms
+              Empowering Your Legal Journey
             </Heading>
             
             <Stack 
