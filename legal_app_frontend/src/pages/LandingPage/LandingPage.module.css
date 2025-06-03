@@ -240,3 +240,9 @@
     right: 0.5rem;
   }
 }
+
+:root {
+  --lexassist-beige: rgb(245, 241, 236);
+  --lexassist-blue: rgb(7, 71, 94);
+  --lexassist-gold: rgb(242, 190, 34);
+}

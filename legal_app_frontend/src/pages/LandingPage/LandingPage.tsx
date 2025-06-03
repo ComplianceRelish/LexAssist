@@ -1,168 +1,314 @@
-// legal_app_frontend/src/pages/LandingPage/LandingPage.tsx
-import React, { useState } from 'react';
-import styles from './LandingPage.module.css';
-import Button from '../../components/common/Button/Button';
-import Logo from '../../components/common/Logo/Logo';
+// src/pages/LandingPage/LandingPage.tsx
+import { 
+  Box, 
+  Button, 
+  Container, 
+  Flex, 
+  Heading, 
+  Image, 
+  Text, 
+  SimpleGrid,
+  Stack,
+  Icon,
+  LinkBox,
+  Link,
+  BoxProps,
+  HeadingProps,
+  FlexProps,
+  ButtonProps,
+  TextProps
+} from '@chakra-ui/react';
+import { Global, css } from '@emotion/react';
+import { Link as RouterLink } from 'react-router-dom';
+import { FaBalanceScale, FaSearch, FaFileAlt, FaShieldAlt } from 'react-icons/fa';
+import { IconType } from 'react-icons';
 
-interface LandingPageProps {
-  onLogin: (email: string, password: string) => void;
+// Define feature item interface
+interface FeatureItem {
+  icon: IconType;
+  title: string;
+  description: string;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+const LandingPage = () => {
+  // Colors derived from the 3D logo
+  const bgColor = "rgb(245, 241, 236)"; // Light beige background from logo
+  const primaryColor = "rgb(7, 71, 94)"; // Deep teal blue
+  const accentColor = "rgb(242, 190, 34)"; // Golden yellow
+  const textColor = "gray.800";
   
-  const handleLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-    
-    // Simulate API call
-    setTimeout(() => {
-      if (email && password) {
-        onLogin(email, password);
-      } else {
-        setError('Please enter both email and password');
-      }
-      setIsLoading(false);
-    }, 1000);
+  // Feature data
+  const features: FeatureItem[] = [
+    {
+      icon: FaBalanceScale,
+      title: 'Legal Document Analysis',
+      description: 'Advanced AI algorithms analyze legal documents with high precision and accuracy.'
+    },
+    {
+      icon: FaSearch,
+      title: 'Case Research',
+      description: 'Comprehensive legal research capabilities with access to extensive case databases.'
+    },
+    {
+      icon: FaFileAlt,
+      title: 'Document Management',
+      description: 'Secure storage and organization of all your important legal documents.'
+    },
+    {
+      icon: FaShieldAlt,
+      title: 'Data Security',
+      description: 'End-to-end encryption ensuring your sensitive legal information remains protected.'
+    }
+  ];
+
+  // Type-safe button props for navigation
+  const registerButtonProps: ButtonProps & { as: typeof RouterLink; to: string } = {
+    as: RouterLink,
+    to: "/signup",  // Updated to match the route in App.tsx
+    size: { base: "md", md: "lg" },
+    bg: primaryColor,
+    color: "white",
+    fontWeight: "bold",
+    _hover: { bg: 'teal.700' },
+    w: { base: '100%', md: 'auto' },
+    mb: { base: 2, md: 0 }
   };
 
+  const loginButtonProps: ButtonProps & { as: typeof RouterLink; to: string } = {
+    as: RouterLink,
+    to: "/login",  // This matches the route in App.tsx
+    size: { base: "md", md: "lg" },
+    variant: "outline",
+    color: primaryColor,
+    fontWeight: "bold",
+    borderColor: primaryColor,
+    _hover: { bg: `${primaryColor}10` },
+    w: { base: '100%', md: 'auto' }
+  };
+  
   return (
-    <div className={styles['landingPage']}>
-      <div className={styles['heroSection']}>
-        <div className={styles['heroContent']}>
-          <div className={styles['logoContainer']}>
-            <Logo size="large" welcomeText={true} />
-          </div>
-          <h2 className={styles['heroSubtitle']}>AI-Powered Legal Assistant</h2>
-          <p className={styles['heroDescription']}>
-            Enter your case brief and instantly get relevant sections of law and case histories with judgments specific to your case.
-          </p>
-          <div className={styles['heroButtons']}>
-            <Button 
-              variant="secondary"
-              size="large"
-              onClick={() => setShowLoginModal(true)}
-            >
-              Get Started
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className={styles['featuresSection']}>
-        <h2 className={styles['sectionTitle']}>Key Features</h2>
-        <div className={styles['featuresGrid']}>
-          <div className={styles['featureCard']}>
-            <div className={styles['featureIcon']}>📚</div>
-            <h3 className={styles['featureTitle']}>Law Section Extraction</h3>
-            <p className={styles['featureDescription']}>
-              Automatically identify relevant sections of Indian law codes related to your case brief.
-            </p>
-          </div>
-          <div className={styles['featureCard']}>
-            <div className={styles['featureIcon']}>⚖️</div>
-            <h3 className={styles['featureTitle']}>Case History Analysis</h3>
-            <p className={styles['featureDescription']}>
-              Discover precedent cases with judgments specifically relevant to your legal matter.
-            </p>
-          </div>
-          <div className={styles['featureCard']}>
-            <div className={styles['featureIcon']}>📝</div>
-            <h3 className={styles['featureTitle']}>Case File Drafting</h3>
-            <p className={styles['featureDescription']}>
-              Generate comprehensive case files based on your brief and analysis results.
-            </p>
-          </div>
-          <div className={styles['featureCard']}>
-            <div className={styles['featureIcon']}>📱</div>
-            <h3 className={styles['featureTitle']}>Share & Download</h3>
-            <p className={styles['featureDescription']}>
-              Easily download your results or share them via Email and WhatsApp.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Login Modal */}
-      {showLoginModal && (
-        <div className={styles['modalBackdrop']} onClick={() => setShowLoginModal(false)}>
-          <div 
-            className={styles['modalContainer']} 
-            onClick={(e) => e.stopPropagation()}
+    <Box bg={bgColor} minH="100vh">
+      {/* Global styles for animations */}
+      <Global
+        styles={css`
+          @keyframes float {
+            0% {
+              transform: translateY(0px);
+            }
+            50% {
+              transform: translateY(-15px);
+            }
+            100% {
+              transform: translateY(0px);
+            }
+          }
+          
+          .logo-3d {
+            animation: float 6s ease-in-out infinite;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.15));
+          }
+          
+          @media (prefers-reduced-motion) {
+            .logo-3d {
+              animation: none;
+            }
+          }
+        `}
+      />
+      
+      {/* Hero Logo Section - Logo at the top */}
+      <Container maxW="1200px" pt={{ base: 10, md: 12 }} pb={{ base: 6, md: 8 }}>
+        <Stack spacing={8}>
+          {/* Prominent Logo Display as Hero Element */}
+          <Box
+            w="100%"
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            py={{ base: 6, md: 10 }}
           >
-            <div className={styles['modalHeader']}>
-              <Logo size="default" showText={false} />
-              <h2>Welcome to LexAssist</h2>
-              <button 
-                className={styles['closeButton']} 
-                onClick={() => setShowLoginModal(false)}
-              >
-                ×
-              </button>
-            </div>
+            <Image
+              src="/images/LexAssist_Logo.png"
+              alt="LexAssist 3D Logo"
+              maxW={{ base: "280px", md: "380px", lg: "450px" }}
+              w="100%"
+              h="auto"
+              objectFit="contain"
+              className="logo-3d"
+            />
+          </Box>
+          
+          {/* Tagline and CTA */}
+          <Stack spacing={6} textAlign="center" maxW="800px" mx="auto" px={4}>
+            <Heading
+              as="h1"
+              fontSize={{ base: '2xl', md: '3xl', lg: '4xl' }}
+              fontWeight="bold"
+              color={primaryColor}
+              lineHeight="1.2"
+            >
+              AI-powered Cutting Edge for Law Professionals
+            </Heading>
             
-            <form onSubmit={handleLoginSubmit} className={styles['loginForm']}>
-              <div className={styles['formGroup']}>
-                <label htmlFor="email">Email</label>
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  required
-                  className={styles['formInput']}
-                />
-              </div>
-              
-              <div className={styles['formGroup']}>
-                <label htmlFor="password">Password</label>
-                <input
-                  type="password"
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  className={styles['formInput']}
-                />
-              </div>
-              
-              {error && <div className={styles['errorMessage']}>{error}</div>}
-              
-              <Button 
-                type="submit" 
-                variant="primary"
-                fullWidth={true}
-                disabled={isLoading}
-                // Fixed: Define a string value or don't provide className at all
-                className={styles['loginButton'] || ''}
-              >
-                {isLoading ? 'Logging in...' : 'Login'}
+            <Stack 
+              direction={{ base: 'column', md: 'row' }} 
+              spacing={4} 
+              pt={4} 
+              justify="center"
+              width="100%"
+            >
+              <Button {...registerButtonProps}>
+                Register
               </Button>
+              <Button {...loginButtonProps}>
+                Login
+              </Button>
+            </Stack>
+          </Stack>
+        </Stack>
+      </Container>
+      
+      {/* Features Section */}
+      <Box
+        as="section"
+        py={{ base: '60px', md: '80px' }}
+        bg="white"
+        borderTopRadius="3xl"
+        boxShadow="0 -10px 30px rgba(0,0,0,0.05)"
+      >
+        <Container maxW="1200px">
+          <Stack spacing={12}>
+            <Stack spacing={3} align="center">
+              <Heading
+                as="h2"
+                fontSize={{ base: '2xl', md: '3xl' }}
+                fontWeight="bold"
+                color={primaryColor}
+                textAlign="center"
+              >
+                Powerful Legal Tools
+              </Heading>
+              <Text
+                fontSize={{ base: 'md', md: 'lg' }}
+                color={textColor}
+                textAlign="center"
+                maxW="800px"
+              >
+                Designed for legal professionals, our platform offers comprehensive tools to streamline your workflow
+              </Text>
+            </Stack>
+            
+            <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacingX={8} spacingY={8}>
+              {features.map((feature, index) => (
+                <Stack
+                  key={index}
+                  p={6}
+                  bg="white"
+                  borderRadius="lg"
+                  boxShadow="md"
+                  alignItems="flex-start"
+                  borderTop="4px solid"
+                  borderTopColor={index % 2 === 0 ? primaryColor : accentColor}
+                  transition="transform 0.3s ease"
+                  _hover={{ transform: 'translateY(-5px)' }}
+                  spacing={3}
+                >
+                  <Box
+                    borderRadius="full"
+                    bg={index % 2 === 0 ? `${primaryColor}20` : `${accentColor}20`}
+                    p={3}
+                  >
+                    <Icon
+                      as={feature.icon}
+                      boxSize={6}
+                      color={index % 2 === 0 ? primaryColor : accentColor}
+                    />
+                  </Box>
+                  <Heading as="h3" fontSize="lg" fontWeight="bold" color={primaryColor}>
+                    {feature.title}
+                  </Heading>
+                  <Text fontSize="sm" color="gray.600">
+                    {feature.description}
+                  </Text>
+                </Stack>
+              ))}
+            </SimpleGrid>
+          </Stack>
+        </Container>
+      </Box>
+      
+      {/* CTA Section */}
+      <Box as="section" py={{ base: '60px', md: '80px' }} bg={bgColor}>
+        <Container maxW="900px">
+          <Box
+            bg="linear-gradient(135deg, rgba(7,71,94,0.95) 0%, rgba(7,71,94,0.8) 100%)"
+            borderRadius="xl"
+            p={{ base: 6, md: 10 }}
+            textAlign="center"
+            boxShadow="xl"
+          >
+            <Stack spacing={6} align="center">
+              <Heading color="white" fontSize={{ base: 'xl', md: '2xl' }}>
+                Ready to Transform Your Legal Practice?
+              </Heading>
+              <Text color="whiteAlpha.900" maxW="600px">
+                Join thousands of legal professionals who have streamlined their workflow with LexAssist's powerful tools.
+              </Text>
+              <Button
+                size="lg"
+                bg={accentColor}
+                color={primaryColor}
+                fontWeight="bold"
+                _hover={{ bg: 'yellow.500' }}
+              >
+                Start Your Free Trial
+              </Button>
+            </Stack>
+          </Box>
+        </Container>
+      </Box>
+      
+      {/* Footer */}
+      <Box as="footer" bg={primaryColor} color="white" py={10}>
+        <Container maxW="1200px">
+          <Flex 
+            direction={{ base: 'column', md: 'row' }} 
+            justify="space-between" 
+            align="flex-start"
+            gap={8}
+          >
+            <Stack align="flex-start" spacing={4}>
+              <Image src="/images/logo-light.png" alt="LexAssist Logo" height="40px" />
+              <Text fontSize="sm">© 2025 LexAssist. All rights reserved.</Text>
+            </Stack>
+            
+            <SimpleGrid columns={{ base: 2, md: 3 }} spacingX={8} spacingY={8}>
+              <Stack align="flex-start" spacing={3}>
+                <Text fontWeight="bold">Company</Text>
+                <Link href="#" fontSize="sm">About Us</Link>
+                <Link href="#" fontSize="sm">Careers</Link>
+                <Link href="#" fontSize="sm">Contact</Link>
+              </Stack>
               
-              <div className={styles['loginFooter']}>
-                <p className={styles['previewNote']}>
-                  <strong>Preview Login Tips:</strong><br />
-                  For Free tier: free@lexassist.com<br />
-                  For Pro tier: pro@lexassist.com<br />
-                  For Enterprise tier: enterprise@lexassist.com<br />
-                  For Admin: admin@lexassist.com<br />
-                  Password: password123
-                </p>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
+              <Stack align="flex-start" spacing={3}>
+                <Text fontWeight="bold">Product</Text>
+                <Link href="#" fontSize="sm">Features</Link>
+                <Link href="#" fontSize="sm">Pricing</Link>
+                <Link href="#" fontSize="sm">Documentation</Link>
+              </Stack>
+              
+              <Stack align="flex-start" spacing={3}>
+                <Text fontWeight="bold">Legal</Text>
+                <Link href="#" fontSize="sm">Privacy Policy</Link>
+                <Link href="#" fontSize="sm">Terms of Service</Link>
+                <Link href="#" fontSize="sm">Security</Link>
+              </Stack>
+            </SimpleGrid>
+          </Flex>
+        </Container>
+      </Box>
+    </Box>
   );
 };
 
-// Make sure we have a proper default export
 export default LandingPage;

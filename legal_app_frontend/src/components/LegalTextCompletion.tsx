@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Form, Button, Alert, Spinner, ListGroup, Badge } from 'react-bootstrap';
+import { Form, Button, Alert, Spinner } from 'react-bootstrap';
+import ListGroup from 'react-bootstrap/ListGroup';
+import Badge from 'react-bootstrap/Badge';
 import legalAiService from '../services/legalAiService';
 
 interface Prediction {
@@ -85,7 +87,7 @@ const LegalTextCompletion: React.FC = () => {
           <Form.Control
             as="textarea"
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputText(e.target.value)}
             placeholder="Enter text with [MASK] tokens"
             rows={5}
           />

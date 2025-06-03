@@ -48,7 +48,7 @@ const LegalTextAnalysis: React.FC = () => {
           <Form.Control
             as="textarea"
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setText(e.target.value)}
             placeholder="Enter legal text to analyze"
             rows={8}
           />

@@ -17,14 +17,30 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
   subscription
 }) => {
   const [activeTab, setActiveTab] = useState('lawSections');
-  const [selectedItem, setSelectedItem] = useState<LawSection | CaseHistory | null>(null);
+  type LawSectionWithType = LawSection & { type: 'law' };
+  type CaseHistoryWithType = CaseHistory & { type: 'case' };
+  type SelectedItemType = LawSectionWithType | CaseHistoryWithType | null;
+  
+  const [selectedItem, setSelectedItem] = useState<SelectedItemType>(null);
+
+  const handleItemClick = (item: LawSection | CaseHistory) => {
+    if ('act_name' in item) {
+      setSelectedItem({
+        ...item,
+        type: 'law'
+      } as LawSectionWithType);
+    } else {
+      setSelectedItem({
+        ...item,
+        type: 'case'
+      } as CaseHistoryWithType);
+    }
+    setShowDetailModal(true);
+  };
   
   const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
   
-  const handleItemClick = (item: LawSection | CaseHistory) => {
-    setSelectedItem(item);
-    setShowDetailModal(true);
-  };
+
   
   return (
     <div className="response-tabs-container">
@@ -61,13 +77,13 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                     className="item-card law-section-card"
                     onClick={() => handleItemClick(section)}
                   >
-                    <h3>{section.act}</h3>
-                    <h4>Section {section.section}</h4>
+                    <h3>{section.act_name}</h3>
+                    <h4>Section {section.section_number}</h4>
                     <p className="item-title">{section.title}</p>
                     <div className="relevance-indicator">
                       <div 
                         className="relevance-bar" 
-                        style={{ width: `${section.relevance * 100}%` }}
+                        style={{ width: `${section.relevance_score * 100}%` }}
                       ></div>
                     </div>
                     <span className="view-details">View Details</span>
@@ -92,14 +108,14 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                     className="item-card case-history-card"
                     onClick={() => handleItemClick(caseHistory)}
                   >
-                    <h3>{caseHistory.title}</h3>
+                    <h3>{caseHistory.case_name}</h3>
                     <p className="case-citation">{caseHistory.citation}</p>
                     <p className="case-court">{caseHistory.court}</p>
                     <p className="case-date">{caseHistory.date}</p>
                     <div className="relevance-indicator">
                       <div 
                         className="relevance-bar" 
-                        style={{ width: `${caseHistory.relevance * 100}%` }}
+                        style={{ width: `${caseHistory.relevance_score * 100}%` }}
                       ></div>
                     </div>
                     <span className="view-details">View Details</span>
@@ -130,7 +146,10 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                     <h3>Key Issues</h3>
                     <ul>
                       {analysis.keyIssues.map((issue, index) => (
-                        <li key={index}>{issue}</li>
+                        <li key={index}>
+                          <h4>{typeof issue === 'string' ? 'Issue' : issue.title}</h4>
+                          <p>{typeof issue === 'string' ? issue : issue.content}</p>
+                        </li>
                       ))}
                     </ul>
                   </div>
@@ -141,8 +160,8 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                     <h3>Arguments</h3>
                     {analysis.arguments.map((arg, index) => (
                       <div key={index} className="argument-item">
-                        <h4>{arg.title}</h4>
-                        <p>{arg.content}</p>
+                        <h4>{typeof arg === 'string' ? 'Argument' : arg.title}</h4>
+                        <p>{typeof arg === 'string' ? arg : arg.content}</p>
                       </div>
                     ))}
                   </div>
@@ -153,8 +172,8 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                     <h3>Recommendations</h3>
                     {analysis.recommendations.map((rec, index) => (
                       <div key={index} className="recommendation-item">
-                        <h4>{rec.title}</h4>
-                        <p>{rec.content}</p>
+                        <h4>{typeof rec === 'string' ? 'Recommendation' : rec.title}</h4>
+                        <p>{typeof rec === 'string' ? rec : rec.content}</p>
                       </div>
                     ))}
                   </div>
@@ -177,14 +196,14 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
       <Modal
         isOpen={showDetailModal}
         onClose={() => setShowDetailModal(false)}
-        title={selectedItem ? ('act' in selectedItem ? selectedItem.act : selectedItem.title) : "Details"}
+        title={selectedItem ? (selectedItem.type === 'law' ? selectedItem.act_name : selectedItem.case_name) : "Details"}
         maxWidth="800px"
       >
-        {selectedItem && activeTab === 'lawSections' && 'act' in selectedItem && (
+        {selectedItem && activeTab === 'lawSections' && selectedItem.type === 'law' && (
           <div className="law-section-detail">
             <div className="detail-header">
-              <h3>{selectedItem.act}</h3>
-              <h4>Section {selectedItem.section}</h4>
+              <h3>{selectedItem.act_name}</h3>
+              <h4>Section {selectedItem.section_number}</h4>
             </div>
             <div className="detail-content">
               <h3>{selectedItem.title}</h3>
@@ -192,16 +211,16 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                 {selectedItem.content}
               </div>
               <div className="relevance-info">
-                <span>Relevance Score: {(selectedItem.relevance * 100).toFixed(1)}%</span>
+                <span>Relevance Score: {(selectedItem.relevance_score * 100).toFixed(1)}%</span>
               </div>
             </div>
           </div>
         )}
         
-        {selectedItem && activeTab === 'caseHistories' && 'citation' in selectedItem && (
+        {selectedItem && activeTab === 'caseHistories' && selectedItem.type === 'case' && (
           <div className="case-history-detail">
             <div className="detail-header">
-              <h3>{selectedItem.title}</h3>
+              <h3>{selectedItem.case_name}</h3>
               <div className="case-meta">
                 <span className="case-citation">{selectedItem.citation}</span>
                 <span className="case-court">{selectedItem.court}</span>
@@ -214,7 +233,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                 {selectedItem.summary}
               </div>
               <div className="relevance-info">
-                <span>Relevance Score: {(selectedItem.relevance * 100).toFixed(1)}%</span>
+                <span>Relevance Score: {(selectedItem.relevance_score * 100).toFixed(1)}%</span>
               </div>
             </div>
           </div>

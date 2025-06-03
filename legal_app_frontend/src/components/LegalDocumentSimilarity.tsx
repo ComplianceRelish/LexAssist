@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Form, Button, Alert, Spinner, Card, ProgressBar } from 'react-bootstrap';
+import { Form, Button, Alert, Spinner, Card } from 'react-bootstrap';
+import ProgressBar from 'react-bootstrap/ProgressBar';
 import legalAiService from '../services/legalAiService';
 
 const LegalDocumentSimilarity: React.FC = () => {
@@ -61,7 +62,7 @@ const LegalDocumentSimilarity: React.FC = () => {
               <Form.Control
                 as="textarea"
                 value={document1}
-                onChange={(e) => setDocument1(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDocument1(e.target.value)}
                 placeholder="Enter first legal document"
                 rows={8}
               />
@@ -74,7 +75,7 @@ const LegalDocumentSimilarity: React.FC = () => {
               <Form.Control
                 as="textarea"
                 value={document2}
-                onChange={(e) => setDocument2(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDocument2(e.target.value)}
                 placeholder="Enter second legal document"
                 rows={8}
               />

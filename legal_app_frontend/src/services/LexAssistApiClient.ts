@@ -103,21 +103,38 @@ class LexAssistApiClient {
   }
 
   // Authentication Methods
-  async register(email: string, password: string, fullName: string, phone?: string): Promise<User> {
-    try {
-      const response = await axios.post(`${this.baseUrl}/auth/register`, {
-        email,
-        password,
-        full_name: fullName,
-        phone
-      });
-      
-      return response.data;
-    } catch (error) {
-      console.error('Registration failed:', error);
-      throw error;
+// Method 1: Update the existing method to accept an object
+async register(userData: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  mobile: string;
+  password: string;
+  userType: string;
+}) {
+  try {
+    // Implementation depends on your backend API
+    // Example:
+    const response = await fetch(`${this.baseUrl}/api/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(userData)
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Registration failed');
     }
+    
+    return true;
+  } catch (error) {
+    console.error('Registration error:', error);
+    throw error;
   }
+}
 
   async login(email: string, password: string): Promise<boolean> {
     try {

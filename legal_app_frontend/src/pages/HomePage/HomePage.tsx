@@ -11,7 +11,10 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
   const getRoleSpecificContent = () => {
     if (!user) return null;
     
-    switch (user.role) {
+    // Check if user has a subscription tier or use role
+    const userType = user.subscription?.tier || user.role;
+    
+    switch (userType) {
       case 'admin':
         return (
           <div className="admin-features">
@@ -24,7 +27,7 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
             </ul>
           </div>
         );
-      case 'pro':
+      case 'pro': // This is a subscription tier
         return (
           <div className="pro-features">
             <h3>Pro Plan Features</h3>
@@ -36,7 +39,7 @@ const HomePage: React.FC<HomePageProps> = ({ user }) => {
             </ul>
           </div>
         );
-      case 'enterprise':
+      case 'enterprise': // This is a subscription tier
         return (
           <div className="enterprise-features">
             <h3>Enterprise Plan Features</h3>

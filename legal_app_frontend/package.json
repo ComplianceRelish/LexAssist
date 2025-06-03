@@ -11,10 +11,17 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@chakra-ui/next-js": "^2.4.2",
+    "@chakra-ui/react": "^2.8.0",
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
     "@supabase/supabase-js": "^2.49.8",
+    "@types/jwt-decode": "^3.1.0",
     "axios": "^1.9.0",
     "bootstrap": "^5.3.6",
     "date-fns": "^2.30.0",
+    "framer-motion": "^12.15.0",
+    "jwt-decode": "^4.0.0",
     "react": "^18.2.0",
     "react-bootstrap": "^2.10.10",
     "react-day-picker": "^8.10.1",
@@ -23,8 +30,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
-    "@types/react": "^18.2.55",
-    "@types/react-dom": "^18.2.19",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
     "@typescript-eslint/eslint-plugin": "^7.0.1",
     "@typescript-eslint/parser": "^7.0.1",
     "@vitejs/plugin-react": "^4.2.1",

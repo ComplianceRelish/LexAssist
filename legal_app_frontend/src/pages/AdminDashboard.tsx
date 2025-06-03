@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AdminDashboardProps } from '../../types';
+import { AdminDashboardProps } from '../types';
 import './AdminDashboard.css';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
@@ -190,7 +190,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         <div className="analytics-section">
           <h4>Top Features Used</h4>
           <ul className="feature-list">
-            {analytics.topFeatures.map((feature, index) => (
+            {analytics.topFeatures.map((feature: string, index: number) => (
               <li key={index} className="feature-item">
                 {feature}
               </li>
@@ -246,7 +246,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               </tr>
             </thead>
             <tbody>
-              {settings.currencies.map((currency, index) => (
+              {settings.currencies.map((currency: { code: string; symbol: string; name: string }, index: number) => (
                 <tr key={index}>
                   <td>{currency.code}</td>
                   <td>{currency.symbol}</td>
