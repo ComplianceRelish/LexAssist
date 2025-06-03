@@ -1,5 +1,5 @@
 # From the root of your repository
-touch requirements.txt
+
 flask==2.0.1
 werkzeug==2.0.3
 flask-cors==3.0.10
