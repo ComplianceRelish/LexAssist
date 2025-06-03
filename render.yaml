@@ -1,13 +1,37 @@
 services:
   - type: web
-    name: lexassist-api
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    name: lexassist-backend
+    runtime: python
+    buildCommand: cd legal_app/backend && pip install -r requirements.txt
+    startCommand: cd legal_app/backend && gunicorn app:app
     envVars:
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: ASSEMBLY_AI_API_KEY
+        sync: false
+      - key: NEO4J_USERNAME
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
       - key: SUPABASE_URL
-        value: https://meuyiktpkeomskqornnu.supabase.co
-      - key: SUPABASE_ANON_KEY
-        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU
+        sync: false
+      - key: SUPABASE_ANON_PUBLIC_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_API_ACCOUNT_KEY
+        sync: false
+      - key: REDIS_API_USER_KEY
+        sync: false
       - key: INLEGALBERT_MODEL_PATH
         value: law-ai/InLegalBERT
+      - key: HUGGINGFACE_TOKEN
+        sync: false
+    disk:
+      name: huggingface-cache
+      mountPath: /app/huggingface
+      sizeGB: 2

@@ -142,7 +142,7 @@ const LandingPage = () => {
           <Stack spacing={4} textAlign="center" maxW="800px" mx="auto" px={4}>
             <Heading
               as="h1"
-              fontSize={{ base: '2xl', md: '3xl', lg: '4xl' }}
+              fontSize={{ base: 'xl', md: '3xl', lg: '4xl' }}
               fontWeight="bold"
               color={primaryColor}
               lineHeight="1.2"

@@ -3,6 +3,7 @@ Supabase client initialization module.
 Creates a singleton Supabase client for reuse across the application.
 """
 import os
+import logging
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -11,7 +12,10 @@ load_dotenv()
 
 # Get Supabase credentials from environment variables
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_ANON_PUBLIC_KEY", "")
+
+# Configure logging
+logger = logging.getLogger("lexassist.supabase")
 
 def get_supabase_client() -> Client:
     """
@@ -21,12 +25,19 @@ def get_supabase_client() -> Client:
     Returns:
         Client: Supabase client instance
     """
-    # For development, we can create a dummy client if credentials are missing
+    # Check for missing credentials
     if not SUPABASE_URL or not SUPABASE_KEY:
-        # In production, this would be a critical error
-        # For development, we'll provide a warning and use dummy values
-        print("WARNING: Supabase credentials are missing. Using dummy client.")
-        return create_client("https://example.supabase.co", "dummy-key")
+        logger.error("Supabase credentials are missing. Check environment variables.")
+        # In production, this should fail hard
+        raise ValueError("Supabase URL and key must be provided")
     
-    # Create Supabase client
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    # Log Supabase URL (not the key for security)
+    logger.info(f"Initializing Supabase client with URL: {SUPABASE_URL}")
+    
+    try:
+        # Create Supabase client
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        return client
+    except Exception as e:
+        logger.error(f"Failed to initialize Supabase client: {str(e)}")
+        raise

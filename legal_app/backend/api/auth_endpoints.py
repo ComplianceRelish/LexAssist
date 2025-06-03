@@ -5,7 +5,7 @@ This module implements the API endpoints for user authentication, registration,
 and role-based access control.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
@@ -18,7 +18,7 @@ from .supabase_client import get_supabase_client
 from .role_based_access_control import verify_admin_access, verify_super_admin_access
 
 # Initialize router
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(tags=["Authentication"])
 
 # Models
 class UserCreate(BaseModel):
@@ -52,14 +52,39 @@ class OTPVerify(BaseModel):
     phone: str
     code: str
 
+# Options handling for CORS preflight requests
+@router.options("/register")
+async def options_register(response: Response):
+    """Handle OPTIONS preflight request for register endpoint"""
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Max-Age"] = "86400"  # 24 hours
+    return {}
+
+@router.options("/login")
+async def options_login(response: Response):
+    """Handle OPTIONS preflight request for login endpoint"""
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Max-Age"] = "86400"  # 24 hours
+    return {}
+
 # Endpoints
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(user_data: UserCreate, supabase: Client = Depends(get_supabase_client)):
+async def register_user(user_data: UserCreate, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Register a new user with email and password.
     
     Creates a new user account with default 'user' role and 'free' subscription tier.
     """
+    # Add CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    
     try:
         # Register user with Supabase Auth
         auth_response = supabase.auth.sign_up({
@@ -127,13 +152,17 @@ async def register_user(user_data: UserCreate, supabase: Client = Depends(get_su
         )
 
 @router.post("/login", response_model=TokenResponse)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), 
+async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), 
                 supabase: Client = Depends(get_supabase_client)):
     """
     Authenticate a user with email and password.
     
     Returns a JWT token with user role and subscription claims.
     """
+    # Add CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    
     try:
         auth_response = supabase.auth.sign_in_with_password({
             "email": form_data.username,
@@ -191,13 +220,26 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(),
             detail=f"Login failed: {str(e)}"
         )
 
+@router.options("/otp/request")
+async def options_otp_request(response: Response):
+    """Handle OPTIONS preflight request for OTP request endpoint"""
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return {}
+
 @router.post("/otp/request")
-async def request_otp(request: OTPRequest, supabase: Client = Depends(get_supabase_client)):
+async def request_otp(request: OTPRequest, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Request an OTP code for phone verification.
     
     Sends an OTP code to the provided phone number.
     """
+    # Add CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    
     try:
         # In a real implementation, this would integrate with Twilio or similar
         # For now, we'll simulate OTP generation
@@ -227,13 +269,26 @@ async def request_otp(request: OTPRequest, supabase: Client = Depends(get_supaba
             detail=f"OTP request failed: {str(e)}"
         )
 
+@router.options("/otp/verify")
+async def options_otp_verify(response: Response):
+    """Handle OPTIONS preflight request for OTP verify endpoint"""
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return {}
+
 @router.post("/otp/verify")
-async def verify_otp(verify_data: OTPVerify, supabase: Client = Depends(get_supabase_client)):
+async def verify_otp(verify_data: OTPVerify, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Verify an OTP code for phone verification.
     
     Validates the OTP code and returns a JWT token if valid.
     """
+    # Add CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    
     try:
         # In a real implementation, this would verify the OTP
         # For demo purposes, we'll accept any code
@@ -295,26 +350,39 @@ async def verify_otp(verify_data: OTPVerify, supabase: Client = Depends(get_supa
             detail=f"OTP verification failed: {str(e)}"
         )
 
+@router.options("/role")
+async def options_role(response: Response):
+    """Handle OPTIONS preflight request for role update endpoint"""
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "PUT, OPTIONS" 
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return {}
+
 @router.put("/role", dependencies=[Depends(verify_super_admin_access)])
-async def update_user_role(role_update: RoleUpdate, supabase: Client = Depends(get_supabase_client)):
+async def update_user_role(role_update: RoleUpdate, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Update a user's role.
     
     Requires Super Admin access.
     """
+    # Add CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    
     try:
         # Update user role
-        response = supabase.table("users").update(
+        update_response = supabase.table("users").update(
             {"role": role_update.role}
         ).eq("id", role_update.user_id).execute()
         
-        if response.error:
+        if update_response.error:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to update role: {response.error.message}"
+                detail=f"Failed to update role: {update_response.error.message}"
             )
         
-        if len(response.data) == 0:
+        if len(update_response.data) == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
@@ -328,18 +396,31 @@ async def update_user_role(role_update: RoleUpdate, supabase: Client = Depends(g
             detail=f"Role update failed: {str(e)}"
         )
 
+@router.options("/refresh")
+async def options_refresh(response: Response):
+    """Handle OPTIONS preflight request for refresh token endpoint"""
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return {}
+
 @router.post("/refresh")
-async def refresh_token(supabase: Client = Depends(get_supabase_client)):
+async def refresh_token(response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Refresh the authentication token.
     
     Uses the current session to generate a new token.
     """
+    # Add CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    
     try:
         # Refresh token
-        response = supabase.auth.refresh_session()
+        refresh_response = supabase.auth.refresh_session()
         
-        if response.error:
+        if refresh_response.error:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Failed to refresh token",
@@ -347,7 +428,7 @@ async def refresh_token(supabase: Client = Depends(get_supabase_client)):
             )
         
         return {
-            "access_token": response.session.access_token,
+            "access_token": refresh_response.session.access_token,
             "token_type": "bearer",
             "expires_in": 3600  # 1 hour
         }
@@ -358,17 +439,30 @@ async def refresh_token(supabase: Client = Depends(get_supabase_client)):
             detail=f"Token refresh failed: {str(e)}"
         )
 
+@router.options("/logout")
+async def options_logout(response: Response):
+    """Handle OPTIONS preflight request for logout endpoint"""
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return {}
+
 @router.post("/logout")
-async def logout(supabase: Client = Depends(get_supabase_client)):
+async def logout(response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Log out the current user.
     
     Invalidates the current session.
     """
+    # Add CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    
     try:
-        response = supabase.auth.sign_out()
+        logout_response = supabase.auth.sign_out()
         
-        if response.error:
+        if logout_response.error:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to log out"
