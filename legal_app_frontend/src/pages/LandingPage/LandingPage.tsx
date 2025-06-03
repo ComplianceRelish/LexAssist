@@ -64,7 +64,7 @@ const LandingPage = () => {
   // Type-safe button props for navigation
   const registerButtonProps: ButtonProps & { as: typeof RouterLink; to: string } = {
     as: RouterLink,
-    to: "/signup",  // Updated to match the route in App.tsx
+    to: "/register",  // Updated to match the actual registration route
     size: { base: "md", md: "lg" },
     bg: primaryColor,
     color: "white",
@@ -117,8 +117,8 @@ const LandingPage = () => {
       />
       
       {/* Hero Logo Section - Logo at the top */}
-      <Container maxW="1200px" pt={{ base: 10, md: 12 }} pb={{ base: 6, md: 8 }}>
-        <Stack spacing={4}>
+      <Container maxW="1200px" pt={{ base: 5, md: 8 }} pb={{ base: 5, md: 6 }} h="calc(100vh - 80px)" display="flex" alignItems="center">
+        <Stack spacing={4} w="100%" justifyContent="center">
           {/* Prominent Logo Display as Hero Element */}
           <Box
             w="100%"
@@ -130,11 +130,11 @@ const LandingPage = () => {
             <Image
               src="/images/LexAssist_Logo.png"
               alt="LexAssist 3D Logo"
-              maxW={{ base: "280px", md: "380px", lg: "450px" }}
+              maxW={{ base: "200px", md: "260px", lg: "320px" }}
               w="100%"
               h="auto"
               objectFit="contain"
-              className="logo-3d"
+              className="logo-static"
             />
           </Box>
           
