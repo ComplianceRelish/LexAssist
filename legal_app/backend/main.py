@@ -13,8 +13,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import logging
 
 # Import API routers
-# Temporarily disable other routers to focus on testing InLegalBERT
-# from api.auth_endpoints import router as auth_router
+# Enable auth router for user registration and login
+from api.auth_endpoints import router as auth_router
 # from api.chat import router as chat_router
 # from api.documents import router as documents_router
 from api.legal_bert import router as legal_bert_router
@@ -43,8 +43,8 @@ app.add_middleware(
 )
 
 # Register routers
-# Temporarily disable other routers to focus on testing InLegalBERT
-# app.include_router(auth_router)
+# Enable auth router for user registration and login
+app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 # app.include_router(chat_router)
 # app.include_router(documents_router)
 app.include_router(legal_bert_router, prefix="/api/legal-bert", tags=["Legal BERT"])

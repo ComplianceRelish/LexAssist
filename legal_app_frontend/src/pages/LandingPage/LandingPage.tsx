@@ -118,14 +118,14 @@ const LandingPage = () => {
       
       {/* Hero Logo Section - Logo at the top */}
       <Container maxW="1200px" pt={{ base: 10, md: 12 }} pb={{ base: 6, md: 8 }}>
-        <Stack spacing={8}>
+        <Stack spacing={4}>
           {/* Prominent Logo Display as Hero Element */}
           <Box
             w="100%"
             display="flex"
             justifyContent="center"
             alignItems="center"
-            py={{ base: 6, md: 10 }}
+            py={{ base: 3, md: 5 }}
           >
             <Image
               src="/images/LexAssist_Logo.png"
@@ -139,7 +139,7 @@ const LandingPage = () => {
           </Box>
           
           {/* Tagline and CTA */}
-          <Stack spacing={6} textAlign="center" maxW="800px" mx="auto" px={4}>
+          <Stack spacing={4} textAlign="center" maxW="800px" mx="auto" px={4}>
             <Heading
               as="h1"
               fontSize={{ base: '2xl', md: '3xl', lg: '4xl' }}
@@ -147,7 +147,7 @@ const LandingPage = () => {
               color={primaryColor}
               lineHeight="1.2"
             >
-              AI-powered Cutting Edge for Law Professionals
+              Cutting Edge Legal Research in your palms
             </Heading>
             
             <Stack 
