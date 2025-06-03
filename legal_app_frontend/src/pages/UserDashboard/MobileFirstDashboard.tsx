@@ -1,6 +1,7 @@
 // src/pages/UserDashboard/MobileFirstDashboard.tsx
 import { useState } from 'react';
 import { User, AnalysisResults, MobileFirstDashboardProps } from '../../types';
+import { IconType } from 'react-icons';
 import {
   Box,
   Flex,
@@ -20,7 +21,6 @@ import {
 } from '@chakra-ui/react';
 import { FaFolder, FaFileAlt, FaClock, FaSearch } from 'react-icons/fa';
 import { useBrand } from '../../contexts/BrandContext';
-import type { IconType } from 'react-icons';
 
 // Define types for our data
 interface Case {
