@@ -102,10 +102,10 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
     
     try:
         # Register user with Supabase Auth
-        auth_response = supabase.auth.sign_up({
-            "email": user_data.email,
-            "password": user_data.password
-        })
+        auth_response = supabase.auth.sign_up(
+            email=user_data.email,
+            password=user_data.password
+        )
         
         if auth_response.user is None:
             raise HTTPException(
