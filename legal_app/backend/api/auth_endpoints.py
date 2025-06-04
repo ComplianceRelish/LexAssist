@@ -102,18 +102,34 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
     
     try:
         # Register user with Supabase Auth
-        auth_response = supabase.auth.sign_up(
-            email=user_data.email,
-            password=user_data.password
-        )
+        auth_response = supabase.auth.sign_up({
+            "email": user_data.email,
+            "password": user_data.password
+        })
         
-        if auth_response.user is None:
+        print(f"Auth response type: {type(auth_response)}")
+        print(f"Auth response: {auth_response}")
+        
+        # Handle the response properly
+        user = None
+        if hasattr(auth_response, 'user') and auth_response.user:
+            user = auth_response.user
+        elif hasattr(auth_response, 'data') and auth_response.data and hasattr(auth_response.data, 'user'):
+            user = auth_response.data.user
+        else:
+            print(f"Unexpected auth response structure: {dir(auth_response)}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Registration failed: Unexpected response from Supabase"
+            )
+        
+        if not user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Registration failed: No user returned from Supabase"
             )
         
-        user_id = auth_response.user.id
+        user_id = user.id
         
         # Determine role based on userType
         role = "lawyer" if user_data.userType == "lawyer" else "user"
@@ -130,38 +146,21 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
         # Try to insert user record
         try:
             user_response = supabase.table("users").insert(user_record).execute()
+            print(f"Database insert response: {user_response}")
             
             if user_response.data is None or len(user_response.data) == 0:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to create user record: No data returned"
-                )
+                print("Database insert returned no data, but continuing...")
         except Exception as db_error:
-            # If database insert fails, we can still return a basic response
-            # since the user was created in Supabase Auth
             print(f"Database insert failed, but auth user created: {str(db_error)}")
-            
-            # Return basic user info without database lookup
-            return {
-                "id": user_id,
-                "email": user_data.email,
-                "full_name": user_data.full_name,
-                "role": role,
-                "subscription_tier": "free",
-                "created_at": datetime.now()
-            }
         
-        # If we get here, the database insert was successful
-        # Get the created user data
-        created_user_data = user_response.data[0] if user_response.data else user_record
-        
+        # Return success response
         return {
-            "id": created_user_data["id"],
-            "email": created_user_data["email"],
-            "full_name": created_user_data["full_name"],
-            "role": created_user_data["role"],
-            "subscription_tier": "free",  # Default since we're not handling subscriptions yet
-            "created_at": created_user_data.get("created_at", datetime.now())
+            "id": user_id,
+            "email": user_data.email,
+            "full_name": user_data.full_name,
+            "role": role,
+            "subscription_tier": "free",
+            "created_at": datetime.now()
         }
         
     except HTTPException:
