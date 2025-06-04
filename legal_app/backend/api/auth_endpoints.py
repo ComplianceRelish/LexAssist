@@ -14,8 +14,13 @@ import os
 from supabase import create_client, Client
 
 from .supabase_client import get_supabase_client
-# Commenting out role-based access control for now to avoid import errors
-# from .role_based_access_control import verify_admin_access, verify_super_admin_access
+from .role_based_access_control import (
+    verify_admin_access, 
+    verify_super_admin_access,
+    verify_user_access,
+    verify_lawyer_access,
+    get_current_user
+)
 
 # Initialize router
 router = APIRouter(tags=["Authentication"])
@@ -27,7 +32,7 @@ class UserCreate(BaseModel):
     firstName: str
     lastName: str
     mobileNumber: Optional[str] = None
-    userType: Optional[str] = "client"
+    userType: Optional[str] = "client"  # client, lawyer
     
     @property
     def full_name(self) -> str:
@@ -53,7 +58,7 @@ class TokenResponse(BaseModel):
 
 class RoleUpdate(BaseModel):
     user_id: str
-    role: str = Field(..., pattern="^(super_admin|admin|user)$")
+    role: str = Field(..., pattern="^(super_admin|admin|lawyer|user)$")  # Updated to include lawyer
 
 class OTPRequest(BaseModel):
     phone: str
@@ -89,7 +94,7 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
     """
     Register a new user with email and password.
     
-    Creates a new user account with default 'user' role and 'free' subscription tier.
+    Creates a new user account with role based on userType (client -> user, lawyer -> lawyer).
     """
     # Add CORS headers
     response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
@@ -110,13 +115,16 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
         
         user_id = auth_response.user.id
         
+        # Determine role based on userType
+        role = "lawyer" if user_data.userType == "lawyer" else "user"
+        
         # Create user record in users table
         user_record = {
             "id": user_id,
             "email": user_data.email,
             "full_name": user_data.full_name,
             "phone": user_data.phone,
-            "role": "user"  # Default role
+            "role": role
         }
         
         # Try to insert user record
@@ -138,7 +146,7 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
                 "id": user_id,
                 "email": user_data.email,
                 "full_name": user_data.full_name,
-                "role": "user",
+                "role": role,
                 "subscription_tier": "free",
                 "created_at": datetime.now()
             }
@@ -246,6 +254,53 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
             detail=f"Login failed: {str(e)}"
         )
 
+# Protected endpoint example - Get user profile
+@router.options("/profile")
+async def options_profile(response: Response):
+    """Handle OPTIONS preflight request for profile endpoint"""
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return {}
+
+@router.get("/profile", response_model=UserResponse)
+async def get_profile(
+    response: Response,
+    current_user = Depends(verify_user_access),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """Get current user's profile - requires authentication"""
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    
+    try:
+        # Get user data from database
+        user_response = supabase.table("users").select(
+            "id, email, full_name, role, created_at"
+        ).eq("id", current_user.id).single().execute()
+        
+        if user_response.data:
+            user_data = user_response.data
+            return {
+                "id": user_data["id"],
+                "email": user_data["email"],
+                "full_name": user_data["full_name"],
+                "role": user_data["role"],
+                "subscription_tier": "free",
+                "created_at": user_data["created_at"]
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User profile not found"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get profile: {str(e)}"
+        )
+
 @router.options("/otp/request")
 async def options_otp_request(response: Response):
     """Handle OPTIONS preflight request for OTP request endpoint"""
@@ -318,20 +373,30 @@ async def options_role(response: Response):
     response.headers["Access-Control-Allow-Credentials"] = "true"
     return {}
 
-@router.put("/role")  # Removed admin access dependency for now
+@router.put("/role", dependencies=[Depends(verify_super_admin_access)])
 async def update_user_role(role_update: RoleUpdate, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Update a user's role.
     
-    Note: Admin access verification temporarily disabled.
+    Requires Super Admin access.
     """
     # Add CORS headers
     response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
-        # For now, return success without actually updating
-        return {"message": "Role update successful (demo mode)"}
+        # Update user role in database
+        update_response = supabase.table("users").update(
+            {"role": role_update.role}
+        ).eq("id", role_update.user_id).execute()
+        
+        if update_response.data and len(update_response.data) > 0:
+            return {"message": "Role updated successfully"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
         
     except Exception as e:
         raise HTTPException(
@@ -360,12 +425,20 @@ async def refresh_token(response: Response, supabase: Client = Depends(get_supab
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
-        # For now, return a demo response
-        return {
-            "access_token": "demo_token",
-            "token_type": "bearer",
-            "expires_in": 3600
-        }
+        # Refresh the session
+        refresh_response = supabase.auth.refresh_session()
+        
+        if refresh_response.session:
+            return {
+                "access_token": refresh_response.session.access_token,
+                "token_type": "bearer",
+                "expires_in": 3600
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to refresh token"
+            )
         
     except Exception as e:
         raise HTTPException(
