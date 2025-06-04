@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
-import jwt
+from jose import jwt  # Use python-jose instead of PyJWT
 from datetime import datetime, timedelta
 import os
 from supabase import create_client, Client
