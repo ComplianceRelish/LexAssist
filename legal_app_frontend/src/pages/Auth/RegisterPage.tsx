@@ -274,7 +274,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
                   )}
                 </FormControl>
                 
-                <FormControl id="country" isRequired>
+                <FormControl id="country" isRequired isInvalid={!!errors.country}>
                   <FormLabel>Country</FormLabel>
                   <Select
                     value={country}
