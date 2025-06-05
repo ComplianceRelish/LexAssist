@@ -11,6 +11,7 @@ from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timedelta
 import os
+import traceback
 from supabase import create_client, Client
 
 from .supabase_client import get_supabase_client
@@ -91,36 +92,32 @@ class OTPVerify(BaseModel):
     phone: str
     code: str
 
-# Options handling for CORS preflight requests
-@router.options("/register")
-async def options_register(request: Request, response: Response):
-    """Handle OPTIONS preflight request for register endpoint"""
-    # Allow both URLs for backward compatibility
+# Helper function to handle CORS
+def add_cors_headers(request: Request, response: Response):
+    """Add CORS headers to response"""
     origin = request.headers.get('origin')
     if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
         response.headers["Access-Control-Allow-Origin"] = origin
     else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+
+# Options handling for CORS preflight requests
+@router.options("/register")
+async def options_register(request: Request, response: Response):
+    """Handle OPTIONS preflight request for register endpoint"""
+    add_cors_headers(request, response)
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Max-Age"] = "86400"  # 24 hours
     return {}
 
 @router.options("/login")
 async def options_login(request: Request, response: Response):
     """Handle OPTIONS preflight request for login endpoint"""
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    add_cors_headers(request, response)
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Max-Age"] = "86400"  # 24 hours
     return {}
 
@@ -132,65 +129,44 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
     
     Creates a new user account with role based on userType (client -> user, lawyer -> lawyer).
     """
-    # Add CORS headers
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    add_cors_headers(request, response)
     
     try:
+        print(f"Attempting to register user: {user_data.email}")
+        print(f"User data: firstName={user_data.firstName}, lastName={user_data.lastName}, country={user_data.country}")
+        
         # Register user with Supabase Auth
-        auth_response = supabase.auth.sign_up(
-            email=user_data.email,
-            password=user_data.password
-        )
+        auth_response = supabase.auth.sign_up({
+            "email": user_data.email,
+            "password": user_data.password,
+            "options": {
+                "data": {
+                    "full_name": user_data.full_name,
+                    "country": user_data.country,
+                    "country_code": user_data.countryCode,
+                    "phone": user_data.phone,
+                    "user_type": user_data.userType
+                }
+            }
+        })
         
         print(f"Auth response type: {type(auth_response)}")
         print(f"Auth response: {auth_response}")
-        
-        # Handle the response properly - make more resilient to different Supabase response formats
-        user = None
-        
-        # Debug the response structure
         print(f"Auth response keys: {dir(auth_response)}")
         
-        # Try different ways to extract the user based on various Supabase client versions
-        if hasattr(auth_response, 'user') and auth_response.user:
-            user = auth_response.user
-        elif hasattr(auth_response, 'data') and auth_response.data:
-            if hasattr(auth_response.data, 'user'):
-                user = auth_response.data.user
-            elif isinstance(auth_response.data, dict) and 'user' in auth_response.data:
-                user = auth_response.data['user']
-        elif isinstance(auth_response, dict):
-            if 'user' in auth_response:
-                user = auth_response['user']
-            elif 'data' in auth_response and 'user' in auth_response['data']:
-                user = auth_response['data']['user']
-        
-        # If still no user found, attempt to use session if available
-        if not user and hasattr(auth_response, 'session') and auth_response.session:
-            if hasattr(auth_response.session, 'user'):
-                user = auth_response.session.user
-        
-        if not user:
+        # ✅ Based on your logs, auth_response IS the user object directly
+        if not auth_response or not hasattr(auth_response, 'id'):
             print(f"Unexpected auth response structure: {auth_response}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Registration failed: Could not extract user data from Supabase response"
             )
         
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registration failed: No user returned from Supabase"
-            )
+        # ✅ Get user_id directly from the response (it IS the user object)
+        user_id = str(auth_response.id)  # Convert UUID to string
+        user_email = auth_response.email
         
-        user_id = user.id
+        print(f"Successfully created user with ID: {user_id}, Email: {user_email}")
         
         # Determine role based on userType
         role = "lawyer" if user_data.userType == "lawyer" else "user"
@@ -198,44 +174,55 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
         # Create user record in users table
         user_record = {
             "id": user_id,
-            "email": user_data.email,
+            "email": user_email,
             "full_name": user_data.full_name,
             "phone": user_data.phone,
             "country": user_data.country,
             "country_code": user_data.countryCode,
             "legal_system": user_data.legal_system,
             "jurisdiction_type": user_data.jurisdiction_type,
-            "role": role
+            "role": role,
+            "is_active": False,  # Until email is confirmed
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
         }
         
-        # Try to insert user record
+        print(f"Inserting user record: {user_record}")
+        
+        # Try to insert user record into database
         try:
-            user_response = supabase.table("users").insert(user_record).execute()
-            print(f"Database insert response: {user_response}")
+            db_response = supabase.table("users").insert(user_record).execute()
+            print(f"Database insert response: {db_response}")
             
-            if user_response.data is None or len(user_response.data) == 0:
-                print("Database insert returned no data, but continuing...")
+            if not db_response.data:
+                print("Warning: Database insert returned no data, but continuing...")
+            else:
+                print(f"Successfully inserted user record: {db_response.data}")
+                
         except Exception as db_error:
             print(f"Database insert failed, but auth user created: {str(db_error)}")
+            print(f"Database error traceback: {traceback.format_exc()}")
+            # Continue anyway since the auth user was created successfully
         
         # Return success response
         return {
             "id": user_id,
-            "email": user_data.email,
+            "email": user_email,
             "full_name": user_data.full_name,
             "role": role,
             "subscription_tier": "free",
-            "created_at": datetime.now()
+            "created_at": datetime.utcnow()
         }
         
     except HTTPException:
         # Re-raise HTTP exceptions
         raise
     except Exception as e:
-        # Log the error and return a generic error
+        # Log the full error for debugging
         print(f"Registration error: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Registration failed: {str(e)}"
         )
 
@@ -250,15 +237,7 @@ async def login_for_access_token(
     
     Returns a JWT token with user role and subscription claims.
     """
-    # Add CORS headers
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    add_cors_headers(request, response)
     
     try:
         auth_response = supabase.auth.sign_in_with_password({
@@ -266,7 +245,22 @@ async def login_for_access_token(
             "password": form_data.password
         })
         
-        if auth_response.user is None or auth_response.session is None:
+        # Handle different response structures for login
+        user = None
+        session = None
+        
+        if hasattr(auth_response, 'user') and hasattr(auth_response, 'session'):
+            # Standard response structure
+            user = auth_response.user
+            session = auth_response.session
+        elif hasattr(auth_response, 'data'):
+            # Data wrapper structure
+            if hasattr(auth_response.data, 'user'):
+                user = auth_response.data.user
+            if hasattr(auth_response.data, 'session'):
+                session = auth_response.data.session
+        
+        if not user or not session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",
@@ -274,7 +268,7 @@ async def login_for_access_token(
             )
         
         # Get user details including role
-        user_id = auth_response.user.id
+        user_id = str(user.id)
         
         # Try to get user from database, but fallback to auth user data if not found
         try:
@@ -287,25 +281,26 @@ async def login_for_access_token(
             else:
                 # Fallback to auth user data
                 user_data = {
-                    "id": auth_response.user.id,
-                    "email": auth_response.user.email,
-                    "full_name": auth_response.user.email,  # Fallback
+                    "id": user_id,
+                    "email": user.email,
+                    "full_name": user.email,  # Fallback
                     "role": "user",
-                    "created_at": auth_response.user.created_at
+                    "created_at": user.created_at
                 }
-        except Exception:
+        except Exception as e:
+            print(f"Database lookup failed, using fallback: {str(e)}")
             # Fallback to auth user data
             user_data = {
-                "id": auth_response.user.id,
-                "email": auth_response.user.email,
-                "full_name": auth_response.user.email,  # Fallback
+                "id": user_id,
+                "email": user.email,
+                "full_name": user.email,  # Fallback
                 "role": "user",
-                "created_at": auth_response.user.created_at
+                "created_at": user.created_at
             }
         
         # Create response
         return {
-            "access_token": auth_response.session.access_token,
+            "access_token": session.access_token,
             "token_type": "bearer",
             "expires_in": 3600,  # 1 hour
             "user": {
@@ -322,6 +317,7 @@ async def login_for_access_token(
         raise
     except Exception as e:
         print(f"Login error: {str(e)}")
+        print(f"Login error traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}"
@@ -329,35 +325,22 @@ async def login_for_access_token(
 
 # Protected endpoint example - Get user profile
 @router.options("/profile")
-async def options_profile(response: Response):
+async def options_profile(request: Request, response: Response):
     """Handle OPTIONS preflight request for profile endpoint"""
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    add_cors_headers(request, response)
     response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     return {}
 
 @router.get("/profile", response_model=UserResponse)
 async def get_profile(
+    request: Request,
     response: Response,
     current_user = Depends(verify_user_access),
     supabase: Client = Depends(get_supabase_client)
 ):
     """Get current user's profile - requires authentication"""
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    add_cors_headers(request, response)
     
     try:
         # Get user data from database
@@ -387,36 +370,21 @@ async def get_profile(
         )
 
 @router.options("/otp/request")
-async def options_otp_request(response: Response):
+async def options_otp_request(request: Request, response: Response):
     """Handle OPTIONS preflight request for OTP request endpoint"""
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    add_cors_headers(request, response)
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     return {}
 
 @router.post("/otp/request")
-async def request_otp(request: OTPRequest, response: Response, supabase: Client = Depends(get_supabase_client)):
+async def request_otp(otp_request: OTPRequest, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Request an OTP code for phone verification.
     
     Sends an OTP code to the provided phone number.
     """
-    # Add CORS headers
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    add_cors_headers(request, response)
     
     try:
         # For now, we'll simulate OTP generation
@@ -432,36 +400,21 @@ async def request_otp(request: OTPRequest, response: Response, supabase: Client 
         )
 
 @router.options("/otp/verify")
-async def options_otp_verify(response: Response):
+async def options_otp_verify(request: Request, response: Response):
     """Handle OPTIONS preflight request for OTP verify endpoint"""
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    add_cors_headers(request, response)
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     return {}
 
 @router.post("/otp/verify")
-async def verify_otp(verify_data: OTPVerify, response: Response, supabase: Client = Depends(get_supabase_client)):
+async def verify_otp(verify_data: OTPVerify, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Verify an OTP code for phone verification.
     
     Validates the OTP code and returns a JWT token if valid.
     """
-    # Add CORS headers
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    add_cors_headers(request, response)
     
     try:
         # For demo purposes, accept any code
@@ -474,36 +427,21 @@ async def verify_otp(verify_data: OTPVerify, response: Response, supabase: Clien
         )
 
 @router.options("/role")
-async def options_role(response: Response):
+async def options_role(request: Request, response: Response):
     """Handle OPTIONS preflight request for role update endpoint"""
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    add_cors_headers(request, response)
     response.headers["Access-Control-Allow-Methods"] = "PUT, OPTIONS" 
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     return {}
 
 @router.put("/role", dependencies=[Depends(verify_super_admin_access)])
-async def update_user_role(role_update: RoleUpdate, response: Response, supabase: Client = Depends(get_supabase_client)):
+async def update_user_role(role_update: RoleUpdate, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Update a user's role.
     
     Requires Super Admin access.
     """
-    # Add CORS headers
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    add_cors_headers(request, response)
     
     try:
         # Update user role in database
@@ -526,36 +464,21 @@ async def update_user_role(role_update: RoleUpdate, response: Response, supabase
         )
 
 @router.options("/refresh")
-async def options_refresh(response: Response):
+async def options_refresh(request: Request, response: Response):
     """Handle OPTIONS preflight request for refresh token endpoint"""
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    add_cors_headers(request, response)
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     return {}
 
 @router.post("/refresh")
-async def refresh_token(response: Response, supabase: Client = Depends(get_supabase_client)):
+async def refresh_token(request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Refresh the authentication token.
     
     Uses the current session to generate a new token.
     """
-    # Add CORS headers
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    add_cors_headers(request, response)
     
     try:
         # Refresh the session
@@ -580,36 +503,21 @@ async def refresh_token(response: Response, supabase: Client = Depends(get_supab
         )
 
 @router.options("/logout")
-async def options_logout(response: Response):
+async def options_logout(request: Request, response: Response):
     """Handle OPTIONS preflight request for logout endpoint"""
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    add_cors_headers(request, response)
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     return {}
 
 @router.post("/logout")
-async def logout(response: Response, supabase: Client = Depends(get_supabase_client)):
+async def logout(request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Log out the current user.
     
     Invalidates the current session.
     """
-    # Add CORS headers
-    # Allow both URLs for backward compatibility
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        # Default to the new URL if origin not in the allowed list
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    add_cors_headers(request, response)
     
     try:
         logout_response = supabase.auth.sign_out()
@@ -620,3 +528,14 @@ async def logout(response: Response, supabase: Client = Depends(get_supabase_cli
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Logout failed: {str(e)}"
         )
+
+# Test endpoint to debug Supabase connection
+@router.get("/test/supabase")
+async def test_supabase(supabase: Client = Depends(get_supabase_client)):
+    """Test endpoint to verify Supabase connection"""
+    try:
+        # Test basic Supabase connection
+        response = supabase.table('users').select('id, email').limit(1).execute()
+        return {"status": "success", "message": "Supabase connection working", "data": response.data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
