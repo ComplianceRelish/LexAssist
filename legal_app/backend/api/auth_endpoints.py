@@ -5,7 +5,7 @@ This module implements the API endpoints for user authentication, registration,
 and role-based access control.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
@@ -93,9 +93,15 @@ class OTPVerify(BaseModel):
 
 # Options handling for CORS preflight requests
 @router.options("/register")
-async def options_register(response: Response):
+async def options_register(request: Request, response: Response):
     """Handle OPTIONS preflight request for register endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -103,9 +109,15 @@ async def options_register(response: Response):
     return {}
 
 @router.options("/login")
-async def options_login(response: Response):
+async def options_login(request: Request, response: Response):
     """Handle OPTIONS preflight request for login endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -114,14 +126,20 @@ async def options_login(response: Response):
 
 # Endpoints
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(user_data: UserCreate, response: Response, supabase: Client = Depends(get_supabase_client)):
+async def register_user(user_data: UserCreate, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
     Register a new user with email and password.
     
     Creates a new user account with role based on userType (client -> user, lawyer -> lawyer).
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -134,17 +152,36 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
         print(f"Auth response type: {type(auth_response)}")
         print(f"Auth response: {auth_response}")
         
-        # Handle the response properly
+        # Handle the response properly - make more resilient to different Supabase response formats
         user = None
+        
+        # Debug the response structure
+        print(f"Auth response keys: {dir(auth_response)}")
+        
+        # Try different ways to extract the user based on various Supabase client versions
         if hasattr(auth_response, 'user') and auth_response.user:
             user = auth_response.user
-        elif hasattr(auth_response, 'data') and auth_response.data and hasattr(auth_response.data, 'user'):
-            user = auth_response.data.user
-        else:
-            print(f"Unexpected auth response structure: {dir(auth_response)}")
+        elif hasattr(auth_response, 'data') and auth_response.data:
+            if hasattr(auth_response.data, 'user'):
+                user = auth_response.data.user
+            elif isinstance(auth_response.data, dict) and 'user' in auth_response.data:
+                user = auth_response.data['user']
+        elif isinstance(auth_response, dict):
+            if 'user' in auth_response:
+                user = auth_response['user']
+            elif 'data' in auth_response and 'user' in auth_response['data']:
+                user = auth_response['data']['user']
+        
+        # If still no user found, attempt to use session if available
+        if not user and hasattr(auth_response, 'session') and auth_response.session:
+            if hasattr(auth_response.session, 'user'):
+                user = auth_response.session.user
+        
+        if not user:
+            print(f"Unexpected auth response structure: {auth_response}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registration failed: Unexpected response from Supabase"
+                detail="Registration failed: Could not extract user data from Supabase response"
             )
         
         if not user:
@@ -203,15 +240,24 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
         )
 
 @router.post("/login", response_model=TokenResponse)
-async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), 
-                supabase: Client = Depends(get_supabase_client)):
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    request: Request = None,
+    response: Response = None,
+    supabase: Client = Depends(get_supabase_client)):
     """
     Authenticate a user with email and password.
     
     Returns a JWT token with user role and subscription claims.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -285,7 +331,13 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
 @router.options("/profile")
 async def options_profile(response: Response):
     """Handle OPTIONS preflight request for profile endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -298,7 +350,13 @@ async def get_profile(
     supabase: Client = Depends(get_supabase_client)
 ):
     """Get current user's profile - requires authentication"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -331,7 +389,13 @@ async def get_profile(
 @router.options("/otp/request")
 async def options_otp_request(response: Response):
     """Handle OPTIONS preflight request for OTP request endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -345,7 +409,13 @@ async def request_otp(request: OTPRequest, response: Response, supabase: Client 
     Sends an OTP code to the provided phone number.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -364,7 +434,13 @@ async def request_otp(request: OTPRequest, response: Response, supabase: Client 
 @router.options("/otp/verify")
 async def options_otp_verify(response: Response):
     """Handle OPTIONS preflight request for OTP verify endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -378,7 +454,13 @@ async def verify_otp(verify_data: OTPVerify, response: Response, supabase: Clien
     Validates the OTP code and returns a JWT token if valid.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -394,7 +476,13 @@ async def verify_otp(verify_data: OTPVerify, response: Response, supabase: Clien
 @router.options("/role")
 async def options_role(response: Response):
     """Handle OPTIONS preflight request for role update endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "PUT, OPTIONS" 
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -408,7 +496,13 @@ async def update_user_role(role_update: RoleUpdate, response: Response, supabase
     Requires Super Admin access.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -434,7 +528,13 @@ async def update_user_role(role_update: RoleUpdate, response: Response, supabase
 @router.options("/refresh")
 async def options_refresh(response: Response):
     """Handle OPTIONS preflight request for refresh token endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -448,7 +548,13 @@ async def refresh_token(response: Response, supabase: Client = Depends(get_supab
     Uses the current session to generate a new token.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -476,7 +582,13 @@ async def refresh_token(response: Response, supabase: Client = Depends(get_supab
 @router.options("/logout")
 async def options_logout(response: Response):
     """Handle OPTIONS preflight request for logout endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -490,7 +602,13 @@ async def logout(response: Response, supabase: Client = Depends(get_supabase_cli
     Invalidates the current session.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
+    # Allow both URLs for backward compatibility
+    origin = request.headers.get('origin')
+    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        # Default to the new URL if origin not in the allowed list
+        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
