@@ -126,10 +126,10 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
     
     try:
         # Register user with Supabase Auth
-        auth_response = supabase.auth.sign_up({
-            "email": user_data.email,
-            "password": user_data.password
-        })
+        auth_response = supabase.auth.sign_up(
+            email=user_data.email,
+            password=user_data.password
+        )
         
         print(f"Auth response type: {type(auth_response)}")
         print(f"Auth response: {auth_response}")
