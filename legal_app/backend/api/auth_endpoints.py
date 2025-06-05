@@ -123,131 +123,48 @@ async def options_login(request: Request, response: Response):
 
 # Endpoints
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(user_data: UserCreate, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
-    """
-    Register a new user with email and password.
-    
-    Creates a new user account with role based on userType (client -> user, lawyer -> lawyer).
-    """
-    add_cors_headers(request, response)
-    
+async def register_user(user_data: UserCreate, supabase: Client = Depends(get_supabase_client)):
     try:
-        print(f"Attempting to register user: {user_data.email}")
-        print(f"User data: firstName={user_data.firstName}, lastName={user_data.lastName}, country={user_data.country}")
-        
-        # ✅ Correct syntax for Supabase 0.5.8 - use keyword arguments
-        auth_response = supabase.auth.sign_up(
-            email=user_data.email,
-            password=user_data.password
-        )
-        
-        print(f"Auth response type: {type(auth_response)}")
-        print(f"Auth response: {auth_response}")
-        print(f"Auth response dir: {dir(auth_response)}")
-        
-        # Handle the response structure for version 0.5.8
-        user = None
-        
-        # For older Supabase versions, the response structure might be different
-        if hasattr(auth_response, 'user') and auth_response.user:
-            user = auth_response.user
-        elif hasattr(auth_response, 'data'):
-            if hasattr(auth_response.data, 'user') and auth_response.data.user:
-                user = auth_response.data.user
-            elif isinstance(auth_response.data, dict) and 'user' in auth_response.data:
-                user = auth_response.data['user']
-        elif hasattr(auth_response, 'id'):
-            # Direct user object
-            user = auth_response
-        elif isinstance(auth_response, dict) and 'user' in auth_response:
-            user = auth_response['user']
-        
-        if not user:
-            print(f"Unexpected auth response structure: {auth_response}")
-            print(f"Auth response attributes: {[attr for attr in dir(auth_response) if not attr.startswith('_')]}")
-            
-            # Try to find any user-like data in the response
-            if hasattr(auth_response, '__dict__'):
-                print(f"Auth response dict: {auth_response.__dict__}")
-            
+        # Correct v2.15.2 syntax
+        auth_response = await supabase.auth.sign_up({
+            "email": user_data.email,
+            "password": user_data.password,
+            "options": {
+                "data": {
+                    "full_name": user_data.full_name,
+                    "country": user_data.country,
+                    "phone": user_data.phone,
+                    "user_type": user_data.userType
+                }
+            }
+        })
+
+        # Handle response
+        if not auth_response.user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registration failed: Could not extract user data from Supabase response"
+                detail="Registration failed: No user returned"
             )
-        
-        # Extract user ID and email
-        if hasattr(user, 'id'):
-            user_id = str(user.id)
-        elif isinstance(user, dict) and 'id' in user:
-            user_id = str(user['id'])
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registration failed: Could not extract user ID"
-            )
-        
-        if hasattr(user, 'email'):
-            user_email = user.email
-        elif isinstance(user, dict) and 'email' in user:
-            user_email = user['email']
-        else:
-            user_email = user_data.email  # Fallback
-        
-        print(f"Successfully created user with ID: {user_id}, Email: {user_email}")
-        
-        # Determine role based on userType
-        role = "lawyer" if user_data.userType == "lawyer" else "user"
-        
-        # Create user record in users table
+
+        # Create database record
         user_record = {
-            "id": user_id,
-            "email": user_email,
-            "full_name": user_data.full_name,
-            "phone": user_data.phone,
-            "country": user_data.country,
-            "country_code": user_data.countryCode,
-            "legal_system": user_data.legal_system,
-            "jurisdiction_type": user_data.jurisdiction_type,
-            "role": role,
-            "is_active": False,  # Until email is confirmed
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
+            "id": str(auth_response.user.id),
+            "email": auth_response.user.email,
+            # ... other fields
         }
         
-        print(f"Inserting user record: {user_record}")
-        
-        # Try to insert user record into database
-        try:
-            db_response = supabase.table("users").insert(user_record).execute()
-            print(f"Database insert response: {db_response}")
-            
-            if not db_response.data:
-                print("Warning: Database insert returned no data, but continuing...")
-            else:
-                print(f"Successfully inserted user record: {db_response.data}")
-                
-        except Exception as db_error:
-            print(f"Database insert failed, but auth user created: {str(db_error)}")
-            print(f"Database error traceback: {traceback.format_exc()}")
-            # Continue anyway since the auth user was created successfully
-        
-        # Return success response
+        db_response = await supabase.table("users").insert(user_record).execute()
+
         return {
-            "id": user_id,
-            "email": user_email,
+            "id": str(auth_response.user.id),
+            "email": auth_response.user.email,
             "full_name": user_data.full_name,
-            "role": role,
+            "role": "lawyer" if user_data.userType == "lawyer" else "user",
             "subscription_tier": "free",
             "created_at": datetime.utcnow()
         }
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
+
     except Exception as e:
-        # Log the full error for debugging
-        print(f"Registration error: {str(e)}")
-        print(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Registration failed: {str(e)}"
