@@ -95,7 +95,7 @@ class OTPVerify(BaseModel):
 @router.options("/register")
 async def options_register(response: Response):
     """Handle OPTIONS preflight request for register endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -105,7 +105,7 @@ async def options_register(response: Response):
 @router.options("/login")
 async def options_login(response: Response):
     """Handle OPTIONS preflight request for login endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -121,7 +121,7 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
     Creates a new user account with role based on userType (client -> user, lawyer -> lawyer).
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -211,7 +211,7 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
     Returns a JWT token with user role and subscription claims.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -285,7 +285,7 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
 @router.options("/profile")
 async def options_profile(response: Response):
     """Handle OPTIONS preflight request for profile endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -298,7 +298,7 @@ async def get_profile(
     supabase: Client = Depends(get_supabase_client)
 ):
     """Get current user's profile - requires authentication"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -331,7 +331,7 @@ async def get_profile(
 @router.options("/otp/request")
 async def options_otp_request(response: Response):
     """Handle OPTIONS preflight request for OTP request endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -345,7 +345,7 @@ async def request_otp(request: OTPRequest, response: Response, supabase: Client 
     Sends an OTP code to the provided phone number.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -364,7 +364,7 @@ async def request_otp(request: OTPRequest, response: Response, supabase: Client 
 @router.options("/otp/verify")
 async def options_otp_verify(response: Response):
     """Handle OPTIONS preflight request for OTP verify endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -378,7 +378,7 @@ async def verify_otp(verify_data: OTPVerify, response: Response, supabase: Clien
     Validates the OTP code and returns a JWT token if valid.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -394,7 +394,7 @@ async def verify_otp(verify_data: OTPVerify, response: Response, supabase: Clien
 @router.options("/role")
 async def options_role(response: Response):
     """Handle OPTIONS preflight request for role update endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "PUT, OPTIONS" 
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -408,7 +408,7 @@ async def update_user_role(role_update: RoleUpdate, response: Response, supabase
     Requires Super Admin access.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -434,7 +434,7 @@ async def update_user_role(role_update: RoleUpdate, response: Response, supabase
 @router.options("/refresh")
 async def options_refresh(response: Response):
     """Handle OPTIONS preflight request for refresh token endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -448,7 +448,7 @@ async def refresh_token(response: Response, supabase: Client = Depends(get_supab
     Uses the current session to generate a new token.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
@@ -476,7 +476,7 @@ async def refresh_token(response: Response, supabase: Client = Depends(get_supab
 @router.options("/logout")
 async def options_logout(response: Response):
     """Handle OPTIONS preflight request for logout endpoint"""
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -490,7 +490,7 @@ async def logout(response: Response, supabase: Client = Depends(get_supabase_cli
     Invalidates the current session.
     """
     # Add CORS headers
-    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
+    response.headers["Access-Control-Allow-Origin"] = "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     
     try:
