@@ -135,22 +135,20 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
         print(f"Attempting to register user: {user_data.email}")
         print(f"User data: firstName={user_data.firstName}, lastName={user_data.lastName}, country={user_data.country}")
         
-        # ✅ Correct way to call Supabase sign_up with keyword arguments
-        auth_response = supabase.auth.sign_up(
-            credentials={
-                "email": user_data.email,
-                "password": user_data.password,
-                "options": {
-                    "data": {
-                        "full_name": user_data.full_name,
-                        "country": user_data.country,
-                        "country_code": user_data.countryCode,
-                        "phone": user_data.phone,
-                        "user_type": user_data.userType
-                    }
+        # Corrected Supabase sign_up call
+        auth_response = supabase.auth.sign_up({
+            "email": user_data.email,
+            "password": user_data.password,
+            "options": {
+                "data": {
+                    "full_name": user_data.full_name,
+                    "country": user_data.country,
+                    "country_code": user_data.countryCode,
+                    "phone": user_data.phone,
+                    "user_type": user_data.userType
                 }
             }
-        )
+        })
         
         print(f"Auth response type: {type(auth_response)}")
         print(f"Auth response: {auth_response}")
