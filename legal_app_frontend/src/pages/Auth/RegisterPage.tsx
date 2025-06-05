@@ -19,10 +19,13 @@ import {
   MenuList,
   MenuItem,
   Button as ChakraButton,
+  Select,
+  InputLeftAddon,
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon, ChevronDownIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
 import LexAssistApiClient from '../../services/LexAssistApiClient';
+import { countries } from '../../data/countryData';
 
 // Import custom components
 import FormControl from '../../components/forms/FormControl';
@@ -48,6 +51,8 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
   const [firstName, setFirstName] = useState<string>('');
   const [lastName, setLastName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
+  const [country, setCountry] = useState<string>('US'); // Default
+  const [countryCode, setCountryCode] = useState<string>('+1'); // Default
   const [mobile, setMobile] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -60,6 +65,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
     firstName?: string;
     lastName?: string;
     email?: string;
+    country?: string;
     mobile?: string;
     password?: string;
     confirmPassword?: string;
@@ -100,6 +106,12 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
       isValid = false;
     } else if (!/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = 'Email is invalid';
+      isValid = false;
+    }
+    
+    // Validate country
+    if (!country.trim()) {
+      newErrors.country = 'Country is required';
       isValid = false;
     }
     
@@ -152,7 +164,9 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
         firstName,
         lastName,
         email,
-        mobile,
+        country,
+        countryCode,
+        mobileNumber: mobile,
         password,
         userType
       };
@@ -260,14 +274,40 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
                   )}
                 </FormControl>
                 
+                <FormControl id="country" isRequired>
+                  <FormLabel>Country</FormLabel>
+                  <Select
+                    value={country}
+                    onChange={(e) => {
+                      const selectedCountry = countries.find(c => c.code === e.target.value);
+                      setCountry(e.target.value);
+                      if (selectedCountry) {
+                        setCountryCode(selectedCountry.phoneCode);
+                      }
+                    }}
+                    borderColor={primaryColor}
+                  >
+                    {countries.map(country => (
+                      <option key={country.code} value={country.code}>
+                        {country.flag} {country.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormControl>
+                
                 <FormControl id="mobile" isRequired isInvalid={!!errors.mobile}>
                   <FormLabel>Mobile Number</FormLabel>
-                  <Input 
-                    type="tel" 
-                    value={mobile} 
-                    onChange={(e) => setMobile(e.target.value)} 
-                    borderColor={primaryColor}
-                  />
+                  <InputGroup>
+                    <InputLeftAddon>
+                      {countryCode}
+                    </InputLeftAddon>
+                    <Input 
+                      type="tel" 
+                      value={mobile} 
+                      onChange={(e) => setMobile(e.target.value)} 
+                      borderColor={primaryColor}
+                    />
+                  </InputGroup>
                   {errors.mobile && (
                     <FormErrorMessage>{errors.mobile}</FormErrorMessage>
                   )}

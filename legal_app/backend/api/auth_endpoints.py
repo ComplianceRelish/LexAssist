@@ -31,6 +31,8 @@ class UserCreate(BaseModel):
     password: str
     firstName: str
     lastName: str
+    country: str = "US"  # Country code
+    countryCode: str = "+1"  # Phone country code
     mobileNumber: Optional[str] = None
     userType: Optional[str] = "client"  # client, lawyer
     
@@ -40,7 +42,29 @@ class UserCreate(BaseModel):
     
     @property 
     def phone(self) -> Optional[str]:
-        return self.mobileNumber
+        if self.mobileNumber:
+            return f"{self.countryCode}{self.mobileNumber}"
+        return None
+    
+    @property
+    def legal_system(self) -> str:
+        legal_systems = {
+            'US': 'common_law', 'UK': 'common_law', 'IN': 'common_law',
+            'AU': 'common_law', 'CA': 'common_law', 'SG': 'common_law',
+            'HK': 'common_law', 'DE': 'civil_law', 'FR': 'civil_law',
+            'JP': 'civil_law'
+        }
+        return legal_systems.get(self.country, 'common_law')
+    
+    @property
+    def jurisdiction_type(self) -> str:
+        jurisdictions = {
+            'US': 'federal_state', 'UK': 'unitary', 'IN': 'federal_state',
+            'AU': 'federal_state', 'CA': 'federal_provincial', 'SG': 'unitary',
+            'HK': 'special_administrative', 'DE': 'federal_state',
+            'FR': 'unitary', 'JP': 'unitary'
+        }
+        return jurisdictions.get(self.country, 'federal_state')
 
 class UserResponse(BaseModel):
     id: str
@@ -140,6 +164,10 @@ async def register_user(user_data: UserCreate, response: Response, supabase: Cli
             "email": user_data.email,
             "full_name": user_data.full_name,
             "phone": user_data.phone,
+            "country": user_data.country,
+            "country_code": user_data.countryCode,
+            "legal_system": user_data.legal_system,
+            "jurisdiction_type": user_data.jurisdiction_type,
             "role": role
         }
         

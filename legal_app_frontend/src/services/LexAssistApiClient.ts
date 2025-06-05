@@ -108,19 +108,33 @@ async register(userData: {
   firstName: string;
   lastName: string;
   email: string;
-  mobile: string;
+  mobile?: string; // Make mobile optional for backward compatibility
+  mobileNumber?: string; // Add new property
+  country?: string; // Add country code
+  countryCode?: string; // Add phone country code
   password: string;
   userType: string;
 }) {
   try {
-    // Implementation depends on your backend API
-    // Example:
+    // Format the data for the backend API
+    // Convert userData to a format compatible with backend
+    const requestData = {
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      email: userData.email,
+      password: userData.password,
+      userType: userData.userType,
+      mobileNumber: userData.mobileNumber || userData.mobile || '', // Support both formats
+      country: userData.country || 'US',
+      countryCode: userData.countryCode || '+1'
+    };
+    
     const response = await fetch(`${this.baseUrl}/api/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(userData)
+      body: JSON.stringify(requestData)
     });
     
     const data = await response.json();
