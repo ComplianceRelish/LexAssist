@@ -135,36 +135,46 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
         print(f"Attempting to register user: {user_data.email}")
         print(f"User data: firstName={user_data.firstName}, lastName={user_data.lastName}, country={user_data.country}")
         
-        # Register user with Supabase Auth
-        auth_response = supabase.auth.sign_up({
-            "email": user_data.email,
-            "password": user_data.password,
-            "options": {
-                "data": {
-                    "full_name": user_data.full_name,
-                    "country": user_data.country,
-                    "country_code": user_data.countryCode,
-                    "phone": user_data.phone,
-                    "user_type": user_data.userType
+        # ✅ Correct way to call Supabase sign_up with keyword arguments
+        auth_response = supabase.auth.sign_up(
+            credentials={
+                "email": user_data.email,
+                "password": user_data.password,
+                "options": {
+                    "data": {
+                        "full_name": user_data.full_name,
+                        "country": user_data.country,
+                        "country_code": user_data.countryCode,
+                        "phone": user_data.phone,
+                        "user_type": user_data.userType
+                    }
                 }
             }
-        })
+        )
         
         print(f"Auth response type: {type(auth_response)}")
         print(f"Auth response: {auth_response}")
-        print(f"Auth response keys: {dir(auth_response)}")
         
-        # ✅ Based on your logs, auth_response IS the user object directly
-        if not auth_response or not hasattr(auth_response, 'id'):
+        # Handle the response structure
+        user = None
+        if hasattr(auth_response, 'user') and auth_response.user:
+            user = auth_response.user
+        elif hasattr(auth_response, 'data') and auth_response.data and hasattr(auth_response.data, 'user'):
+            user = auth_response.data.user
+        elif hasattr(auth_response, 'id'):
+            # Direct user object
+            user = auth_response
+        
+        if not user:
             print(f"Unexpected auth response structure: {auth_response}")
+            print(f"Auth response dir: {dir(auth_response)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Registration failed: Could not extract user data from Supabase response"
             )
         
-        # ✅ Get user_id directly from the response (it IS the user object)
-        user_id = str(auth_response.id)  # Convert UUID to string
-        user_email = auth_response.email
+        user_id = str(user.id)
+        user_email = user.email
         
         print(f"Successfully created user with ID: {user_id}, Email: {user_email}")
         
