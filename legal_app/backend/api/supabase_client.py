@@ -12,7 +12,7 @@ load_dotenv()
 
 # Get Supabase credentials from environment variables
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_ANON_PUBLIC_KEY", "")
+SUPABASE_ANON_PUBLIC_KEY = os.environ.get("SUPABASE_ANON_PUBLIC_KEY", "")
 
 # Configure logging
 logger = logging.getLogger("lexassist.supabase")
