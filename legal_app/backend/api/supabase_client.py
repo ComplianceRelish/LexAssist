@@ -26,7 +26,7 @@ def get_supabase_client() -> Client:
         Client: Supabase client instance
     """
     # Check for missing credentials
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    if not SUPABASE_URL or not SUPABASE_ANON_PUBLIC_KEY:
         logger.error("Supabase credentials are missing. Check environment variables.")
         # In production, this should fail hard
         raise ValueError("Supabase URL and key must be provided")
@@ -36,7 +36,7 @@ def get_supabase_client() -> Client:
     
     try:
         # Create Supabase client
-        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        client = create_client(SUPABASE_URL, SUPABASE_ANON_PUBLIC_KEY)
         return client
     except Exception as e:
         logger.error(f"Failed to initialize Supabase client: {str(e)}")
