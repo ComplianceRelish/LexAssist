@@ -80,7 +80,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signUp = async (email: string, password: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
-      await authService.register(email, password);
+      await  authService.register(userData);
       setState(prev => ({ ...prev, loading: false }));
       navigate('/login?registered=true');
     } catch (error) {

@@ -164,7 +164,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
         userType
       };
       
-      const user = await authService.register(userData);
+      const user = await .register(userData);
       
       console.log('Registration successful:', user);
       alert("Registration successful! Your account has been created. You can now login.");
