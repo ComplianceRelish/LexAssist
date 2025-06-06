@@ -24,7 +24,7 @@ import {
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon, ChevronDownIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
-import LexAssistApiClient from '../../services/LexAssistApiClient';
+import { authService } from '../../services/auth.service'; // ✅ Use the updated auth service
 import { countries } from '../../data/countryData';
 
 // Import custom components
@@ -32,13 +32,6 @@ import FormControl from '../../components/forms/FormControl';
 import FormLabel from '../../components/forms/FormLabel';
 import FormErrorMessage from '../../components/forms/FormErrorMessage';
 import InputRightElement from '../../components/ui/InputRightElement';
-
-// Initialize API client with environment variables
-const apiClient = new LexAssistApiClient(
-  import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com',
-  import.meta.env.VITE_SUPABASE_URL || '',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-);
 
 interface RegisterPageProps {
   onRegister?: (user: any) => void;
@@ -159,7 +152,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
     setIsLoading(true);
     
     try {
-      // Update this to match your API client method signature
+      // ✅ Use the updated auth service
       const userData = {
         firstName,
         lastName,
@@ -171,29 +164,22 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
         userType
       };
       
-      const success = await apiClient.register(userData);
+      const user = await authService.register(userData);
       
-      if (success) {
-        alert("Registration successful! Your account has been created. You can now login.");
-        
-        // If onRegister callback is provided, use it, otherwise navigate to login
-        if (onRegister) {
-          // Get user from client after successful registration if needed
-          const user = apiClient.getCurrentUser();
-          if (user) {
-            onRegister(user);
-          }
-        } else {
-          // Navigate to login page after successful registration
-          setTimeout(() => navigate('/login'), 1000);
-        }
+      console.log('Registration successful:', user);
+      alert("Registration successful! Your account has been created. You can now login.");
+      
+      // If onRegister callback is provided, use it, otherwise navigate to login
+      if (onRegister) {
+        onRegister(user);
       } else {
-        alert("Registration failed. Unable to create your account. Please try again.");
+        // Navigate to login page after successful registration
+        setTimeout(() => navigate('/login'), 1000);
       }
     } catch (err: any) {
       console.error('Registration error:', err);
       
-      // Handle specific error cases if your API provides error details
+      // Handle specific error cases
       const errorMessage = err.message || "An error occurred during registration. Please try again.";
       alert(errorMessage);
     } finally {

@@ -19,13 +19,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS
+# ✅ Updated CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://lex-assist.vercel.app"],
+    allow_origins=[
+        "https://lex-assist.vercel.app",
+        "https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:5173"
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_headers=["*"],  # Allow all headers
 )
 
 # Include routers

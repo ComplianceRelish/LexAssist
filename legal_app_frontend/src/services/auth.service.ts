@@ -1,5 +1,4 @@
 import { User } from '../types';
-import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
@@ -10,7 +9,20 @@ interface AuthToken {
 
 interface AuthResponse {
   access_token: string;
+  token_type: string;
+  expires_in: number;
   user: User;
+}
+
+interface RegistrationData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  country: string;
+  countryCode: string;
+  mobileNumber: string;
+  userType: string;
 }
 
 class AuthService {
@@ -18,17 +30,53 @@ class AuthService {
   private tokens: AuthToken | null = null;
   private currentUser: User | null = null;
   private refreshPromise: Promise<void> | null = null;
-  private supabaseClient: any;
+  private apiBaseUrl: string;
 
   private constructor() {
-    // Initialize Supabase client
-    this.supabaseClient = createClient(
-      process.env.REACT_APP_SUPABASE_URL || '',
-      process.env.REACT_APP_SUPABASE_KEY || ''
-    );
-
+    // ✅ Use the correct backend URL with /api prefix
+    this.apiBaseUrl = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com';
+    
     // Initialize from sessionStorage if available
     this.loadFromStorage();
+    
+    // Set up axios defaults
+    this.setupAxiosDefaults();
+  }
+
+  private setupAxiosDefaults(): void {
+    // Set default base URL for axios
+    axios.defaults.baseURL = this.apiBaseUrl;
+    axios.defaults.withCredentials = true;
+    
+    // Add request interceptor to include auth token
+    axios.interceptors.request.use((config) => {
+      const token = this.getAccessToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    });
+
+    // Add response interceptor for token refresh
+    axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        if (error.response?.status === 401 && this.tokens) {
+          try {
+            await this.refreshToken();
+            // Retry the original request
+            const token = this.getAccessToken();
+            if (token) {
+              error.config.headers.Authorization = `Bearer ${token}`;
+              return axios.request(error.config);
+            }
+          } catch (refreshError) {
+            this.clearAuth();
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   public static getInstance(): AuthService {
@@ -81,62 +129,47 @@ class AuthService {
     return Date.now() >= this.tokens.expiresAt;
   }
 
-  public async register(email: string, password: string): Promise<void> {
+  public async register(userData: RegistrationData): Promise<User> {
     try {
-      const { data: supabaseData, error: supabaseError } = await this.supabaseClient.auth.signUp({
-        email,
-        password,
-      });
-
-      if (supabaseError) throw supabaseError;
-
-      // Call our backend to complete registration
-      await axios.post('/api/auth/register', {
-        email,
-        supabaseId: supabaseData.user?.id,
-      });
-    } catch (error) {
-      console.error('Registration error:', error);
-      throw new Error('Registration failed');
+      console.log('Registering user with data:', userData);
+      
+      // ✅ Call your backend API with correct endpoint
+      const response = await axios.post<User>('/api/auth/register', userData);
+      
+      console.log('Registration response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Registration error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.detail || 'Registration failed');
     }
   }
 
   public async login(email: string, password: string): Promise<User> {
     try {
-      // Try Supabase authentication first
-      const { data: supabaseData, error: supabaseError } = await this.supabaseClient.auth.signInWithPassword({
-        email,
-        password,
+      console.log('Logging in user:', email);
+      
+      // ✅ Create FormData for OAuth2PasswordRequestForm
+      const formData = new FormData();
+      formData.append('username', email);
+      formData.append('password', password);
+
+      const response = await axios.post<AuthResponse>('/api/auth/login', formData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
       });
 
-      if (supabaseError) throw supabaseError;
-
-      if (supabaseData?.user) {
-        const response = await axios.post<AuthResponse>('/api/auth/verify', {
-          supabaseToken: supabaseData.session?.access_token
-        });
-
-        this.setAuthData(response.data);
-        return this.currentUser!;
-      }
-
-      // Fallback to traditional login
-      const response = await axios.post<AuthResponse>('/api/auth/login', {
-        email,
-        password,
-      });
-
+      console.log('Login response:', response.data);
       this.setAuthData(response.data);
       return this.currentUser!;
-    } catch (error) {
-      console.error('Login error:', error);
-      throw new Error('Authentication failed');
+    } catch (error: any) {
+      console.error('Login error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.detail || 'Authentication failed');
     }
   }
 
   public async logout(): Promise<void> {
     try {
-      await this.supabaseClient.auth.signOut();
       await axios.post('/api/auth/logout');
     } catch (error) {
       console.error('Logout error:', error);
@@ -146,11 +179,12 @@ class AuthService {
   }
 
   private setAuthData(authResponse: AuthResponse): void {
-    const decodedToken = jwtDecode<{ exp: number }>(authResponse.access_token);
+    // Calculate expiration time
+    const expiresAt = Date.now() + (authResponse.expires_in * 1000);
     
     this.tokens = {
       token: authResponse.access_token,
-      expiresAt: decodedToken.exp * 1000, // Convert to milliseconds
+      expiresAt: expiresAt,
     };
     
     this.currentUser = authResponse.user;
@@ -170,31 +204,27 @@ class AuthService {
 
   public async updateProfile(data: Partial<User>): Promise<User> {
     try {
-      const response = await axios.put<{ user: User }>('/api/users/profile', data, {
-        headers: { Authorization: `Bearer ${this.getAccessToken()}` }
-      });
+      const response = await axios.put<{ user: User }>('/api/auth/profile', data);
       
       this.currentUser = response.data.user;
       this.saveToStorage();
       return this.currentUser;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Profile update error:', error);
-      throw new Error('Failed to update profile');
+      throw new Error(error.response?.data?.detail || 'Failed to update profile');
     }
   }
 
   public async refreshUser(): Promise<User> {
     try {
-      const response = await axios.get<{ user: User }>('/api/users/me', {
-        headers: { Authorization: `Bearer ${this.getAccessToken()}` }
-      });
+      const response = await axios.get<User>('/api/auth/profile');
       
-      this.currentUser = response.data.user;
+      this.currentUser = response.data;
       this.saveToStorage();
       return this.currentUser;
-    } catch (error) {
+    } catch (error: any) {
       console.error('User refresh error:', error);
-      throw new Error('Failed to refresh user data');
+      throw new Error(error.response?.data?.detail || 'Failed to refresh user data');
     }
   }
 
@@ -220,6 +250,25 @@ class AuthService {
     })();
 
     return this.refreshPromise;
+  }
+
+  // ✅ Add OTP methods to match your backend
+  public async requestOTP(phone: string): Promise<void> {
+    try {
+      await axios.post('/api/auth/otp/request', { phone });
+    } catch (error: any) {
+      console.error('OTP request error:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to send OTP');
+    }
+  }
+
+  public async verifyOTP(phone: string, code: string): Promise<void> {
+    try {
+      await axios.post('/api/auth/otp/verify', { phone, code });
+    } catch (error: any) {
+      console.error('OTP verification error:', error);
+      throw new Error(error.response?.data?.detail || 'OTP verification failed');
+    }
   }
 }
 

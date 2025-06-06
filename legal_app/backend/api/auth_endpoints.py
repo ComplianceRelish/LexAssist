@@ -83,7 +83,7 @@ class TokenResponse(BaseModel):
 
 class RoleUpdate(BaseModel):
     user_id: str
-    role: str = Field(..., pattern="^(super_admin|admin|lawyer|user)$")  # Updated to include lawyer
+    role: str = Field(..., pattern="^(super_admin|admin|lawyer|user)$")
 
 class OTPRequest(BaseModel):
     phone: str
@@ -92,48 +92,17 @@ class OTPVerify(BaseModel):
     phone: str
     code: str
 
-# Helper function to handle CORS
-def add_cors_headers(request: Request, response: Response):
-    """Add CORS headers to response"""
-    origin = request.headers.get('origin')
-    if origin in ["https://lex-assist-o1uh54us1-compliancerelishs-projects.vercel.app", "https://lex-assist.vercel.app"]:
-        response.headers["Access-Control-Allow-Origin"] = origin
-    else:
-        response.headers["Access-Control-Allow-Origin"] = "https://lex-assist.vercel.app"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-
-# Options handling for CORS preflight requests
-@router.options("/register")
-async def options_register(request: Request, response: Response):
-    """Handle OPTIONS preflight request for register endpoint"""
-    add_cors_headers(request, response)
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Max-Age"] = "86400"  # 24 hours
-    return {}
-
-@router.options("/login")
-async def options_login(request: Request, response: Response):
-    """Handle OPTIONS preflight request for login endpoint"""
-    add_cors_headers(request, response)
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Max-Age"] = "86400"  # 24 hours
-    return {}
-
 # Endpoints
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
     """
-    Register a new user with email and password using Supabase 2.3.1+
+    Register a new user with email and password using Supabase 2.15.2
     """
-    add_cors_headers(request, response)
-    
     try:
-        print(f"=== REGISTRATION DEBUG (Supabase 2.3.1+) ===")
+        print(f"=== REGISTRATION DEBUG (Supabase 2.15.2) ===")
         print(f"Attempting to register user: {user_data.email}")
         
-        # For Supabase 2.3.1+, sign_up returns an AuthResponse object
+        # For Supabase 2.15.2, sign_up returns an AuthResponse object
         auth_response = supabase.auth.sign_up({
             "email": user_data.email,
             "password": user_data.password,
@@ -151,7 +120,7 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
         print(f"Auth response type: {type(auth_response)}")
         print(f"Auth response: {auth_response}")
         
-        # In Supabase 2.3.1+, the response structure is:
+        # In Supabase 2.15.2, the response structure is:
         # AuthResponse with .user and .session attributes
         if not auth_response or not hasattr(auth_response, 'user'):
             print(f"Unexpected auth response structure: {dir(auth_response)}")
@@ -196,7 +165,7 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
         
         print(f"Inserting user record: {user_record}")
         
-        # Insert into database with error handling
+        # ✅ Handle duplicate user registration and database errors
         try:
             db_response = supabase.table("users").insert(user_record).execute()
             print(f"Database insert response: {db_response}")
@@ -210,8 +179,24 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             print(f"Database insert failed: {str(db_error)}")
             print(f"Database error type: {type(db_error)}")
             
-            # Check if it's an RLS error
-            if "row-level security policy" in str(db_error).lower():
+            # Handle duplicate user
+            if "duplicate key" in str(db_error).lower():
+                print(f"User already exists in database: {user_email}")
+                # Update existing user instead
+                try:
+                    update_response = supabase.table("users").update({
+                        "full_name": user_data.full_name,
+                        "phone": user_data.phone,
+                        "country": user_data.country,
+                        "country_code": user_data.countryCode,
+                        "legal_system": user_data.legal_system,
+                        "jurisdiction_type": user_data.jurisdiction_type,
+                        "updated_at": datetime.utcnow().isoformat()
+                    }).eq("email", user_email).execute()
+                    print(f"Updated existing user: {update_response.data}")
+                except Exception as update_error:
+                    print(f"Failed to update existing user: {update_error}")
+            elif "row-level security policy" in str(db_error).lower():
                 print("RLS policy violation detected")
             elif "permission denied" in str(db_error).lower():
                 print("Permission denied - check SERVICE_ROLE_KEY")
@@ -247,15 +232,13 @@ async def login_for_access_token(
     response: Response = None,
     supabase: Client = Depends(get_supabase_client)):
     """
-    Authenticate a user with email and password using Supabase 2.3.1+
+    Authenticate a user with email and password using Supabase 2.15.2
     """
-    add_cors_headers(request, response)
-    
     try:
-        print(f"=== LOGIN DEBUG (Supabase 2.3.1+) ===")
+        print(f"=== LOGIN DEBUG (Supabase 2.15.2) ===")
         print(f"Attempting to login user: {form_data.username}")
         
-        # For Supabase 2.3.1+
+        # For Supabase 2.15.2
         auth_response = supabase.auth.sign_in_with_password({
             "email": form_data.username,
             "password": form_data.password
@@ -336,25 +319,16 @@ async def login_for_access_token(
             detail=f"Login failed: {str(e)}"
         )
 
-# Protected endpoint example - Get user profile
-@router.options("/profile")
-async def options_profile(request: Request, response: Response):
-    """Handle OPTIONS preflight request for profile endpoint"""
-    add_cors_headers(request, response)
-    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    return {}
+# ✅ Removed all manual CORS handling since FastAPI middleware handles it
+# ✅ Removed all OPTIONS handlers since FastAPI handles preflight automatically
 
+# Protected endpoint example - Get user profile
 @router.get("/profile", response_model=UserResponse)
 async def get_profile(
-    request: Request,
-    response: Response,
     current_user = Depends(verify_user_access),
     supabase: Client = Depends(get_supabase_client)
 ):
     """Get current user's profile - requires authentication"""
-    add_cors_headers(request, response)
-    
     try:
         # Get user data from database
         user_response = supabase.table("users").select(
@@ -382,28 +356,14 @@ async def get_profile(
             detail=f"Failed to get profile: {str(e)}"
         )
 
-@router.options("/otp/request")
-async def options_otp_request(request: Request, response: Response):
-    """Handle OPTIONS preflight request for OTP request endpoint"""
-    add_cors_headers(request, response)
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    return {}
-
 @router.post("/otp/request")
-async def request_otp(otp_request: OTPRequest, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
+async def request_otp(otp_request: OTPRequest, supabase: Client = Depends(get_supabase_client)):
     """
     Request an OTP code for phone verification.
-    
-    Sends an OTP code to the provided phone number.
     """
-    add_cors_headers(request, response)
-    
     try:
         # For now, we'll simulate OTP generation
         # In a real implementation, this would integrate with Twilio or similar
-        
-        # Return success for demo
         return {"message": "OTP sent successfully (demo mode)"}
         
     except Exception as e:
@@ -412,23 +372,11 @@ async def request_otp(otp_request: OTPRequest, request: Request, response: Respo
             detail=f"OTP request failed: {str(e)}"
         )
 
-@router.options("/otp/verify")
-async def options_otp_verify(request: Request, response: Response):
-    """Handle OPTIONS preflight request for OTP verify endpoint"""
-    add_cors_headers(request, response)
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    return {}
-
 @router.post("/otp/verify")
-async def verify_otp(verify_data: OTPVerify, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
+async def verify_otp(verify_data: OTPVerify, supabase: Client = Depends(get_supabase_client)):
     """
     Verify an OTP code for phone verification.
-    
-    Validates the OTP code and returns a JWT token if valid.
     """
-    add_cors_headers(request, response)
-    
     try:
         # For demo purposes, accept any code
         return {"message": "OTP verified successfully (demo mode)"}
@@ -439,23 +387,13 @@ async def verify_otp(verify_data: OTPVerify, request: Request, response: Respons
             detail=f"OTP verification failed: {str(e)}"
         )
 
-@router.options("/role")
-async def options_role(request: Request, response: Response):
-    """Handle OPTIONS preflight request for role update endpoint"""
-    add_cors_headers(request, response)
-    response.headers["Access-Control-Allow-Methods"] = "PUT, OPTIONS" 
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    return {}
-
 @router.put("/role", dependencies=[Depends(verify_super_admin_access)])
-async def update_user_role(role_update: RoleUpdate, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
+async def update_user_role(role_update: RoleUpdate, supabase: Client = Depends(get_supabase_client)):
     """
     Update a user's role.
     
     Requires Super Admin access.
     """
-    add_cors_headers(request, response)
-    
     try:
         # Update user role in database
         update_response = supabase.table("users").update(
@@ -476,23 +414,11 @@ async def update_user_role(role_update: RoleUpdate, request: Request, response: 
             detail=f"Role update failed: {str(e)}"
         )
 
-@router.options("/refresh")
-async def options_refresh(request: Request, response: Response):
-    """Handle OPTIONS preflight request for refresh token endpoint"""
-    add_cors_headers(request, response)
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    return {}
-
 @router.post("/refresh")
-async def refresh_token(request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
+async def refresh_token(supabase: Client = Depends(get_supabase_client)):
     """
     Refresh the authentication token.
-    
-    Uses the current session to generate a new token.
     """
-    add_cors_headers(request, response)
-    
     try:
         # Refresh the session
         refresh_response = supabase.auth.refresh_session()
@@ -515,23 +441,11 @@ async def refresh_token(request: Request, response: Response, supabase: Client =
             detail=f"Token refresh failed: {str(e)}"
         )
 
-@router.options("/logout")
-async def options_logout(request: Request, response: Response):
-    """Handle OPTIONS preflight request for logout endpoint"""
-    add_cors_headers(request, response)
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    return {}
-
 @router.post("/logout")
-async def logout(request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
+async def logout(supabase: Client = Depends(get_supabase_client)):
     """
     Log out the current user.
-    
-    Invalidates the current session.
     """
-    add_cors_headers(request, response)
-    
     try:
         logout_response = supabase.auth.sign_out()
         return {"message": "Logged out successfully"}
