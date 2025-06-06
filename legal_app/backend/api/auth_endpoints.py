@@ -123,50 +123,120 @@ async def options_login(request: Request, response: Response):
 
 # Endpoints
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(user_data: UserCreate, supabase: Client = Depends(get_supabase_client)):
+async def register_user(user_data: UserCreate, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
+    """
+    Register a new user with email and password using Supabase 2.3.1+
+    """
+    add_cors_headers(request, response)
+    
     try:
-        # Correct v2.15.2 syntax
-        auth_response = await supabase.auth.sign_up({
+        print(f"=== REGISTRATION DEBUG (Supabase 2.3.1+) ===")
+        print(f"Attempting to register user: {user_data.email}")
+        
+        # For Supabase 2.3.1+, sign_up returns an AuthResponse object
+        auth_response = supabase.auth.sign_up({
             "email": user_data.email,
             "password": user_data.password,
             "options": {
                 "data": {
                     "full_name": user_data.full_name,
                     "country": user_data.country,
+                    "country_code": user_data.countryCode,
                     "phone": user_data.phone,
                     "user_type": user_data.userType
                 }
             }
         })
-
-        # Handle response
-        if not auth_response.user:
+        
+        print(f"Auth response type: {type(auth_response)}")
+        print(f"Auth response: {auth_response}")
+        
+        # In Supabase 2.3.1+, the response structure is:
+        # AuthResponse with .user and .session attributes
+        if not auth_response or not hasattr(auth_response, 'user'):
+            print(f"Unexpected auth response structure: {dir(auth_response)}")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Registration failed: No user returned"
+                status_code=400,
+                detail="Registration failed: Invalid response from Supabase"
             )
-
-        # Create database record
+        
+        user = auth_response.user
+        session = getattr(auth_response, 'session', None)
+        
+        if not user:
+            raise HTTPException(
+                status_code=400,
+                detail="Registration failed: No user data returned"
+            )
+        
+        # Extract user details
+        user_id = str(user.id)
+        user_email = user.email
+        
+        print(f"Successfully created auth user - ID: {user_id}, Email: {user_email}")
+        
+        # Determine role
+        role = "lawyer" if user_data.userType == "lawyer" else "user"
+        
+        # Create user record in database
         user_record = {
-            "id": str(auth_response.user.id),
-            "email": auth_response.user.email,
-            # ... other fields
+            "id": user_id,
+            "email": user_email,
+            "full_name": user_data.full_name,
+            "phone": user_data.phone,
+            "country": user_data.country,
+            "country_code": user_data.countryCode,
+            "legal_system": user_data.legal_system,
+            "jurisdiction_type": user_data.jurisdiction_type,
+            "role": role,
+            "is_active": False,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
         }
         
-        db_response = await supabase.table("users").insert(user_record).execute()
-
+        print(f"Inserting user record: {user_record}")
+        
+        # Insert into database with error handling
+        try:
+            db_response = supabase.table("users").insert(user_record).execute()
+            print(f"Database insert response: {db_response}")
+            
+            if db_response.data:
+                print(f"Successfully inserted user: {db_response.data[0]}")
+            else:
+                print("Warning: No data returned from database insert")
+                
+        except Exception as db_error:
+            print(f"Database insert failed: {str(db_error)}")
+            print(f"Database error type: {type(db_error)}")
+            
+            # Check if it's an RLS error
+            if "row-level security policy" in str(db_error).lower():
+                print("RLS policy violation detected")
+            elif "permission denied" in str(db_error).lower():
+                print("Permission denied - check SERVICE_ROLE_KEY")
+            
+            # Continue anyway since auth user was created successfully
+            print("Continuing with registration despite database error...")
+        
+        # Return success response
         return {
-            "id": str(auth_response.user.id),
-            "email": auth_response.user.email,
+            "id": user_id,
+            "email": user_email,
             "full_name": user_data.full_name,
-            "role": "lawyer" if user_data.userType == "lawyer" else "user",
+            "role": role,
             "subscription_tier": "free",
             "created_at": datetime.utcnow()
         }
-
+        
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"Registration error: {str(e)}")
+        print(f"Error type: {type(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=400,
             detail=f"Registration failed: {str(e)}"
         )
 
@@ -177,44 +247,44 @@ async def login_for_access_token(
     response: Response = None,
     supabase: Client = Depends(get_supabase_client)):
     """
-    Authenticate a user with email and password.
-    
-    Returns a JWT token with user role and subscription claims.
+    Authenticate a user with email and password using Supabase 2.3.1+
     """
     add_cors_headers(request, response)
     
     try:
+        print(f"=== LOGIN DEBUG (Supabase 2.3.1+) ===")
+        print(f"Attempting to login user: {form_data.username}")
+        
+        # For Supabase 2.3.1+
         auth_response = supabase.auth.sign_in_with_password({
             "email": form_data.username,
             "password": form_data.password
         })
         
-        # Handle different response structures for login
-        user = None
-        session = None
+        print(f"Login auth response type: {type(auth_response)}")
+        print(f"Login auth response: {auth_response}")
         
-        if hasattr(auth_response, 'user') and hasattr(auth_response, 'session'):
-            # Standard response structure
-            user = auth_response.user
-            session = auth_response.session
-        elif hasattr(auth_response, 'data'):
-            # Data wrapper structure
-            if hasattr(auth_response.data, 'user'):
-                user = auth_response.data.user
-            if hasattr(auth_response.data, 'session'):
-                session = auth_response.data.session
-        
-        if not user or not session:
+        if not auth_response or not hasattr(auth_response, 'user') or not auth_response.user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        # Get user details including role
+        if not hasattr(auth_response, 'session') or not auth_response.session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed: No session created",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        user = auth_response.user
+        session = auth_response.session
         user_id = str(user.id)
         
-        # Try to get user from database, but fallback to auth user data if not found
+        print(f"Successfully authenticated user - ID: {user_id}")
+        
+        # Try to get user details from database
         try:
             user_response = supabase.table("users").select(
                 "id, email, full_name, role, created_at"
@@ -231,8 +301,8 @@ async def login_for_access_token(
                     "role": "user",
                     "created_at": user.created_at
                 }
-        except Exception as e:
-            print(f"Database lookup failed, using fallback: {str(e)}")
+        except Exception as db_error:
+            print(f"Database lookup failed: {str(db_error)}")
             # Fallback to auth user data
             user_data = {
                 "id": user_id,
@@ -242,17 +312,16 @@ async def login_for_access_token(
                 "created_at": user.created_at
             }
         
-        # Create response
         return {
             "access_token": session.access_token,
             "token_type": "bearer",
-            "expires_in": 3600,  # 1 hour
+            "expires_in": 3600,
             "user": {
                 "id": user_data["id"],
                 "email": user_data["email"],
                 "full_name": user_data["full_name"],
                 "role": user_data["role"],
-                "subscription_tier": "free",  # Default for now
+                "subscription_tier": "free",
                 "created_at": user_data["created_at"]
             }
         }
@@ -261,7 +330,7 @@ async def login_for_access_token(
         raise
     except Exception as e:
         print(f"Login error: {str(e)}")
-        print(f"Login error traceback: {traceback.format_exc()}")
+        print(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}"
