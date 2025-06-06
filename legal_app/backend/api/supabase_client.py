@@ -5,6 +5,7 @@ Creates a singleton Supabase client for reuse across the application.
 import os
 import logging
 from supabase import create_client, Client
+from supabase.lib.client_options import ClientOptions
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -39,21 +40,22 @@ def get_supabase_client() -> Client:
     logger.info(f"Using SERVICE_ROLE_KEY starting with: {SUPABASE_SERVICE_KEY[:20]}...")
     
     try:
+        # ✅ Correct options structure for Supabase 2.3.1+
+        options = ClientOptions(
+            auto_refresh_token=True,
+            persist_session=False,  # Backend doesn't need session persistence
+            detect_session_in_url=False,  # Backend doesn't handle URL sessions
+            headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"
+            }
+        )
+        
         # Create Supabase client with SERVICE_ROLE_KEY for backend operations
-        # This bypasses RLS and allows admin operations
         client = create_client(
             supabase_url=SUPABASE_URL, 
             supabase_key=SUPABASE_SERVICE_KEY,
-            options={
-                "auth": {
-                    "auto_refresh_token": True,
-                    "persist_session": False,  # Backend doesn't need session persistence
-                    "detect_session_in_url": False,  # Backend doesn't handle URL sessions
-                },
-                "db": {
-                    "schema": "public"
-                }
-            }
+            options=options
         )
         
         logger.info("Supabase client initialized successfully with service role")
@@ -61,7 +63,15 @@ def get_supabase_client() -> Client:
         
     except Exception as e:
         logger.error(f"Failed to initialize Supabase client: {str(e)}")
-        raise
+        # Try fallback without complex options
+        try:
+            logger.info("Trying fallback initialization without complex options...")
+            client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+            logger.info("Fallback Supabase client initialized successfully")
+            return client
+        except Exception as fallback_error:
+            logger.error(f"Fallback initialization also failed: {str(fallback_error)}")
+            raise
 
 def get_supabase_anon_client() -> Client:
     """
