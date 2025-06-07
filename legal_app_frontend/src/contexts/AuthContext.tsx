@@ -3,6 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth.service';
 import { User, Subscription } from '../types';
 
+interface RegistrationData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  country: string;
+  countryCode: string;
+  mobileNumber: string;
+  userType: string;
+}
+
 interface AuthState {
   user: User | null;
   subscription: Subscription | null;
@@ -13,7 +24,7 @@ interface AuthState {
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (userData: RegistrationData) => Promise<void>; // ✅ Fixed: now takes userData object
   updateProfile: (data: Partial<User>) => Promise<void>;
   refreshUser: () => Promise<void>;
   clearError: () => void;
@@ -67,27 +78,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loading: false
       }));
       navigate('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       setState(prev => ({
         ...prev,
         loading: false,
-        error: 'Invalid credentials or server error'
+        error: error.message || 'Invalid credentials or server error'
       }));
       throw error;
     }
   };
 
-  const signUp = async (email: string, password: string) => {
+  // ✅ Fixed: signUp now takes userData object instead of email and password
+  const signUp = async (userData: RegistrationData) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
-      await  authService.register(userData);
-      setState(prev => ({ ...prev, loading: false }));
-      navigate('/login?registered=true');
-    } catch (error) {
+      const user = await authService.register(userData);
+      setState(prev => ({ 
+        ...prev, 
+        loading: false,
+        user // Set the user after successful registration
+      }));
+      
+      // Show success message and redirect
+      alert('Registration successful! Please check your email for verification code.');
+      navigate('/verify-email?email=' + encodeURIComponent(userData.email));
+    } catch (error: any) {
       setState(prev => ({
         ...prev,
         loading: false,
-        error: 'Registration failed. Please try again.'
+        error: error.message || 'Registration failed. Please try again.'
       }));
       throw error;
     }
@@ -104,11 +123,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         error: null
       });
       navigate('/login');
-    } catch (error) {
+    } catch (error: any) {
       setState(prev => ({
         ...prev,
         loading: false,
-        error: 'Logout failed'
+        error: error.message || 'Logout failed'
       }));
       throw error;
     }
@@ -124,11 +143,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         subscription: updatedUser.subscription || null,
         loading: false
       }));
-    } catch (error) {
+    } catch (error: any) {
       setState(prev => ({
         ...prev,
         loading: false,
-        error: 'Failed to update profile'
+        error: error.message || 'Failed to update profile'
       }));
       throw error;
     }
@@ -144,11 +163,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         subscription: user.subscription || null,
         loading: false
       }));
-    } catch (error) {
+    } catch (error: any) {
       setState(prev => ({
         ...prev,
         loading: false,
-        error: 'Failed to refresh user data'
+        error: error.message || 'Failed to refresh user data'
       }));
     }
   };

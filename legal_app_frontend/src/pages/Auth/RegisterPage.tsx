@@ -21,10 +21,12 @@ import {
   Button as ChakraButton,
   Select,
   InputLeftAddon,
+  Alert,
+  AlertIcon,
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon, ChevronDownIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
-import { authService } from '../../services/auth.service'; // ✅ Use the updated auth service
+import { useAuth } from '../../contexts/AuthContext'; // ✅ Use AuthContext
 import { countries } from '../../data/countryData';
 
 // Import custom components
@@ -33,23 +35,20 @@ import FormLabel from '../../components/forms/FormLabel';
 import FormErrorMessage from '../../components/forms/FormErrorMessage';
 import InputRightElement from '../../components/ui/InputRightElement';
 
-interface RegisterPageProps {
-  onRegister?: (user: any) => void;
-}
-
-const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
+const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
+  const { signUp, loading, error, clearError } = useAuth(); // ✅ Use AuthContext
   
   // Form states
   const [firstName, setFirstName] = useState<string>('');
   const [lastName, setLastName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [country, setCountry] = useState<string>('US'); // Default
-  const [countryCode, setCountryCode] = useState<string>('+1'); // Default
+  const [country, setCountry] = useState<string>('US');
+  const [countryCode, setCountryCode] = useState<string>('+1');
   const [mobile, setMobile] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
-  const [userType, setUserType] = useState<string>('client'); // client, lawyer, admin
+  const [userType, setUserType] = useState<string>('client');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   
@@ -64,36 +63,28 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
     confirmPassword?: string;
   }>({});
   
-  // UI states
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  
   // Chakra UI hooks
   const bgColor = useColorModeValue('white', 'gray.800');
-  const primaryColor = "rgb(7, 71, 94)"; // Deep teal blue
-  const accentColor = "rgb(242, 190, 34)"; // Golden yellow
-  const pageBg = useColorModeValue("rgb(245, 241, 236)", "gray.900"); // Light beige background
+  const primaryColor = "rgb(7, 71, 94)";
+  const pageBg = useColorModeValue("rgb(245, 241, 236)", "gray.900");
 
   /**
    * Validate form inputs
-   * @returns boolean - true if valid, false otherwise
    */
   const validateForm = () => {
     const newErrors: any = {};
     let isValid = true;
     
-    // Validate first name
     if (!firstName.trim()) {
       newErrors.firstName = 'First name is required';
       isValid = false;
     }
     
-    // Validate last name
     if (!lastName.trim()) {
       newErrors.lastName = 'Last name is required';
       isValid = false;
     }
     
-    // Validate email
     if (!email.trim()) {
       newErrors.email = 'Email is required';
       isValid = false;
@@ -102,13 +93,11 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
       isValid = false;
     }
     
-    // Validate country
     if (!country.trim()) {
       newErrors.country = 'Country is required';
       isValid = false;
     }
     
-    // Validate mobile
     if (!mobile.trim()) {
       newErrors.mobile = 'Mobile number is required';
       isValid = false;
@@ -117,7 +106,6 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
       isValid = false;
     }
     
-    // Validate password
     if (!password) {
       newErrors.password = 'Password is required';
       isValid = false;
@@ -126,7 +114,6 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
       isValid = false;
     }
     
-    // Validate confirm password
     if (password !== confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
       isValid = false;
@@ -142,17 +129,16 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Clear any previous errors
+    clearError();
+    
     // Validate form
     if (!validateForm()) {
-      alert("Please correct the errors in the form.");
       return;
     }
     
-    // Start loading
-    setIsLoading(true);
-    
     try {
-      // ✅ Use the updated auth service
+      // ✅ Use AuthContext signUp with userData object
       const userData = {
         firstName,
         lastName,
@@ -164,26 +150,12 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
         userType
       };
       
-      const user = await .register(userData);
+      await signUp(userData);
+      // Navigation is handled in AuthContext
       
-      console.log('Registration successful:', user);
-      alert("Registration successful! Your account has been created. You can now login.");
-      
-      // If onRegister callback is provided, use it, otherwise navigate to login
-      if (onRegister) {
-        onRegister(user);
-      } else {
-        // Navigate to login page after successful registration
-        setTimeout(() => navigate('/login'), 1000);
-      }
     } catch (err: any) {
       console.error('Registration error:', err);
-      
-      // Handle specific error cases
-      const errorMessage = err.message || "An error occurred during registration. Please try again.";
-      alert(errorMessage);
-    } finally {
-      setIsLoading(false);
+      // Error is handled in AuthContext
     }
   };
 
@@ -217,6 +189,14 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
             boxShadow={'lg'}
             p={8}
           >
+            {/* ✅ Show error message if any */}
+            {error && (
+              <Alert status="error" mb={4}>
+                <AlertIcon />
+                {error}
+              </Alert>
+            )}
+
             <form onSubmit={handleSubmit}>
               <Stack gap={4}>
                 <HStack>
@@ -375,7 +355,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister }) => {
                     _hover={{
                       bg: 'teal.700',
                     }}
-                    isLoading={isLoading}
+                    isLoading={loading}
                     loadingText="Creating Account..."
                   >
                     Sign Up

@@ -12,6 +12,10 @@ import RegisterPage from './pages/Auth/RegisterPage';
 import MobileFirstDashboard from './pages/UserDashboard/MobileFirstDashboard';
 import EnvCheckPage from './pages/DevTools/EnvCheckPage';
 import AdminDashboard from './pages/AdminDashboard';
+import VerifyEmailPage from './pages/Auth/VerifyEmailPage';
+
+// Add this route
+<Route path="/verify-email" element={<VerifyEmailPage />} />
 
 // Component imports 
 import BriefInput from './components/BriefInput';
