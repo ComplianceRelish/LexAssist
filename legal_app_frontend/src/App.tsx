@@ -3,19 +3,17 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ChakraProvider } from '@chakra-ui/react';
 import { BrandProvider } from './contexts/BrandContext';
+import { AuthProvider } from './contexts/AuthContext'; // ✅ Import AuthProvider
 import theme from './styles/theme';
 
 // Page imports
 import LandingPage from './pages/LandingPage/LandingPage';
 import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
+import VerifyEmailPage from './pages/Auth/VerifyEmailPage'; // ✅ Added VerifyEmailPage
 import MobileFirstDashboard from './pages/UserDashboard/MobileFirstDashboard';
 import EnvCheckPage from './pages/DevTools/EnvCheckPage';
 import AdminDashboard from './pages/AdminDashboard';
-import VerifyEmailPage from './pages/Auth/VerifyEmailPage';
-
-// Add this route
-<Route path="/verify-email" element={<VerifyEmailPage />} />
 
 // Component imports 
 import BriefInput from './components/BriefInput';
@@ -226,39 +224,45 @@ function App() {
     <ChakraProvider theme={theme}>
       <BrandProvider>
         <BrowserRouter>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/env-check" element={<EnvCheckPage />} />
+          {/* ✅ Wrap Routes with AuthProvider for production-ready authentication */}
+          <AuthProvider>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} /> {/* ✅ Added verify email route */}
+              <Route path="/env-check" element={<EnvCheckPage />} />
 
-            {/* Protected routes */}
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <MobileFirstDashboard 
-                  user={user}
-                  onBriefSubmit={handleBriefSubmit}
-                  isAnalyzing={isAnalyzing}
-                  analysisResults={analysisResults}
-                  hasAccess={hasAccess}
-                />
-              </ProtectedRoute>
-            } />
-            <Route path="/profile" element={
-              <ProtectedRoute>
-                <UserProfile user={user} subscription={subscription} />
-              </ProtectedRoute>
-            } />
+              {/* Protected routes */}
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <MobileFirstDashboard 
+                    user={user}
+                    onBriefSubmit={handleBriefSubmit}
+                    isAnalyzing={isAnalyzing}
+                    analysisResults={analysisResults}
+                    hasAccess={hasAccess}
+                  />
+                </ProtectedRoute>
+              } />
+              <Route path="/profile" element={
+                <ProtectedRoute>
+                  <UserProfile user={user} subscription={subscription} />
+                </ProtectedRoute>
+              } />
 
-            {/* Admin routes */}
-            <Route path="/admin" element={
-              <AdminRoute>
-                {/* AdminDashboard component needs to be created or imported */}
-                <div>Admin Dashboard (Component to be implemented)</div>
-              </AdminRoute>
-            } />
-          </Routes>
+              {/* Admin routes */}
+<Route path="/admin" element={
+  <AdminRoute>
+    <AdminDashboard user={user} />
+  </AdminRoute>
+} />
+
+              {/* Catch-all route - redirect to login */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
+          </AuthProvider>
         </BrowserRouter>
       </BrandProvider>
     </ChakraProvider>
