@@ -16,6 +16,14 @@ from supabase import create_client, Client
 
 from .supabase_client import get_supabase_client
 from .role_based_access_control import verify_admin_access, verify_super_admin_access
+from fastapi.middleware.cors import CORSMiddleware
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 # Initialize router
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -191,44 +199,21 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(),
             detail=f"Login failed: {str(e)}"
         )
 
+from .otp_service import generate_otp, send_otp_sms, verify_otp
+
 @router.post("/otp/request")
-async def request_otp(request: OTPRequest, supabase: Client = Depends(get_supabase_client)):
-    """
-    Request an OTP code for phone verification.
-    
-    Sends an OTP code to the provided phone number.
-    """
-    try:
-        # In a real implementation, this would integrate with Twilio or similar
-        # For now, we'll simulate OTP generation
-        
-        # Check if phone exists in users table
-        user_response = supabase.table("users").select("id").eq("phone", request.phone).execute()
-        
-        if user_response.error:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to check phone number"
-            )
-        
-        if len(user_response.data) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Phone number not found"
-            )
-        
-        # In a real implementation, generate and send OTP
-        # For demo, we'll just return success
-        return {"message": "OTP sent successfully"}
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"OTP request failed: {str(e)}"
-        )
+async def request_otp(request: OTPRequest):
+    otp = generate_otp()
+    cache.set(f"otp:{request.phone}", otp, ex=300)
+    send_otp_sms(request.phone, otp)
+    return {"message": "OTP sent"}
 
 @router.post("/otp/verify")
-async def verify_otp(verify_data: OTPVerify, supabase: Client = Depends(get_supabase_client)):
+async def verify_otp_endpoint(data: OTPVerify):
+    stored_otp = cache.get(f"otp:{data.phone}")
+    if not stored_otp or stored_otp != data.code:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+    # Proceed with authentication
     """
     Verify an OTP code for phone verification.
     
@@ -381,3 +366,12 @@ async def logout(supabase: Client = Depends(get_supabase_client)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Logout failed: {str(e)}"
         )
+# Replace mock implementation with:
+async def request_otp(request: OTPRequest):
+    # Integrate with Twilio/MessageBird
+    otp = generate_secure_otp()
+    store_otp_in_db(request.phone, otp)
+    send_sms(request.phone, f"Your OTP is {otp}")
+    
+    # Missing in backend implementation
+    supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))

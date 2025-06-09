@@ -1,3 +1,21 @@
+import os
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+# Supabase initialization
+supabase = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_ANON_KEY")
+)
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 # Import your models and services

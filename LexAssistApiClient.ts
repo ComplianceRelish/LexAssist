@@ -125,7 +125,7 @@ class LexAssistApiClient {
 
   async login(email: string, password: string): Promise<boolean> {
     try {
-      const response = await axios.post<AuthResponse>(`${this.baseUrl}/auth/login`, {
+      const response = await axios.post<AuthResponse>(`${this.baseUrl}/api/auth/login`, {
         username: email,
         password
       });

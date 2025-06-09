@@ -87,7 +87,7 @@ const LoginPage: React.FC<LoginProps> = ({ onLogin }) => {
       if (validateMobile(mobile)) {
         try {
           // Use direct API call for OTP (since it's not in AuthContext)
-          const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com';
+          const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
           const response = await fetch(`${API_URL}/api/auth/otp/request`, {
             method: 'POST',
             headers: {
