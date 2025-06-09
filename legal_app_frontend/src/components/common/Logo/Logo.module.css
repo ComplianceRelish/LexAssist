@@ -1,0 +1,72 @@
+/* src/components/common/Logo/Logo.module.css */
+.logo-link {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.logo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+}
+
+.logo-image {
+  width: 100%;
+  height: auto;
+  transition: transform 0.3s ease;
+}
+
+/* Logo sizes */
+.logo-small {
+  width: 80px;
+}
+
+.logo-default {
+  width: 120px;
+}
+
+.logo-large {
+  width: 160px;
+}
+
+/* Text styling */
+.logo-text {
+  margin-top: 0.5rem;
+  font-family: var(--font-heading, 'Libre Baskerville', serif);
+  font-weight: 700;
+  color: var(--primary-main, #0D3B59);
+  text-align: center;
+}
+
+.logo-text-lex {
+  display: block;
+  font-size: 1.2em;
+  color: var(--primary-main, #0D3B59);
+}
+
+.logo-text-assist {
+  display: block;
+  font-size: 1em;
+  color: var(--primary-main, #0D3B59);
+}
+
+/* Welcome text style */
+.welcome-text {
+  margin-top: 1rem;
+  font-family: var(--font-heading, 'Libre Baskerville', serif);
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: var(--primary-main, #0D3B59);
+  text-align: center;
+}
+
+/* Hide text functionality */
+.logo-text-hidden {
+  display: none;
+}
+
+/* Hover effects */
+.logo-link:hover .logo-image {
+  transform: scale(1.05);
+}

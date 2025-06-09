@@ -1,0 +1,128 @@
+/* src/components/documents/DownloadShareFeature.css */
+.download-share-container {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+  }
+  
+  .download-share-container h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 18px;
+    color: #2c3e50;
+  }
+  
+  .action-buttons {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .download-button,
+  .share-button,
+  .submit-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.2s;
+  }
+  
+  .download-button {
+    background-color: #2c5282;
+    color: white;
+  }
+  
+  .share-button {
+    background-color: #4a5568;
+    color: white;
+  }
+  
+  .submit-button {
+    background-color: #2c5282;
+    color: white;
+    width: 100%;
+    margin-top: 20px;
+    padding: 12px;
+  }
+  
+  .button-icon {
+    margin-right: 8px;
+  }
+  
+  .download-button:disabled {
+    background-color: #a0aec0;
+    cursor: not-allowed;
+  }
+  
+  .upgrade-message {
+    background-color: #f1eded;
+    border-left: 4px solid #b7791f;
+    padding: 12px;
+    margin-top: 16px;
+    font-size: 14px;
+  }
+  
+  .share-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .form-group label {
+    font-weight: 500;
+    font-size: 14px;
+  }
+  
+  .form-group input,
+  .form-group textarea {
+    padding: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+  
+  .share-options h4 {
+    margin-bottom: 8px;
+    font-size: 16px;
+  }
+  
+  .share-methods {
+    display: flex;
+    gap: 10px;
+  }
+  
+  .share-method {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    background-color: #f8f9fa;
+    cursor: pointer;
+  }
+  
+  .share-icon {
+    margin-right: 8px;
+  }
+  
+  .success-message {
+    text-align: center;
+    padding: 20px 0;
+  }
+  
+  .success-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }

@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: lexassist-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PINECONE_API_KEY
+        value: pcsk_76Pk4Y_ABp8Yw7eMT2F9sjBAr5LwBMaqawpJZn5WdZ4DG2ozhJtkz2GvAniuK3YDudMAKb
+      - key: ASSEMBLY_AI_API_KEY
+        value: acd3d7ddea50411d85feba6dee6b179c
+      - key: NEO4J_USERNAME
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        value: SvUkTb8OutU4Z-yS0L5o65z8TrJo9JTFRMk0aG8Q0Gw
+      - key: OPENAI_API_KEY
+        fromDatabase:
+          name: lexassist-env-vars
+          property: OPENAI_API_KEY
+      - key: SUPABASE_URL
+        value: https://meuyiktpkeomskqornnu.supabase.co
+      - key: SUPABASE_ANON_PUBLIC_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDM0NDQsImV4cCI6MjA2MzYxOTQ0NH0.ADWjENLW1GdjdQjrrqjG8KtXndRoTxXy8zBffm4mweU
+      - key: SUPABASE_JWT_SECRET
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ldXlpa3Rwa2VvbXNrcW9ybm51Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODA0MzQ0NCwiZXhwIjoyMDYzNjE5NDQ0fQ.YiAquC2_nY1Kid3EqDvnpqxpG_8mOgRP7wwjDhWQUyo
+      - key: REDIS_URL
+        value: redis://localhost:6379
+      - key: REDIS_API_ACCOUNT_KEY
+        value: A5vw32vg4u6btip1t4dfa7j0mab54fsnw9jnyO2swoja85wp1
+      - key: REDIS_API_USER_KEY
+        value: A5vw32vg4u6btip1t4dfa7j0mab54fsnw9jnyO2swoja85wp1
+      - key: INLEGALBERT_MODEL_PATH
+        value: law-ai/InLegalBERT
+      - key: HUGGINGFACE_TOKEN
+        value: hf_zSAcaCWTaaJBHwImVPUChBsIFlaXgQFwG
+    disk:
+      name: huggingface-cache
+      mountPath: /app/huggingface
+      sizeGB: 2

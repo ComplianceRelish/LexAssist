@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "buildCommand": "cd legal_app_frontend && npm install && npm run build",
+  "outputDirectory": "legal_app_frontend/dist",
+  "installCommand": "cd legal_app_frontend && npm install",
+  "framework": "vite",
+  "github": {
+    "enabled": true,
+    "silent": false
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
