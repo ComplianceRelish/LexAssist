@@ -360,7 +360,8 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             "password": user_data.password,
             "phone": user_data.phone,
             "options": {
-                "email_confirm": False,  # 🚨 This should disable confirmation
+                "emailRedirectTo": None,  # Don't redirect after confirmation
+                "skipConfirmation": True,
                 "data": {
                     "full_name": user_data.full_name,
                     "country": user_data.country,
