@@ -349,6 +349,23 @@ class VerificationCodeRequest(BaseModel):
     contact: str  # email or phone
     code: str
 
+class RegistrationResponse(BaseModel):
+    id: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    user_type: Optional[str] = None
+    country: Optional[str] = None
+    country_code: Optional[str] = None
+    is_email_verified: Optional[bool] = None
+    is_phone_verified: Optional[bool] = None
+    legal_system: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    verification_method: Optional[str] = None
+    verification_sent: Optional[Dict[str, Any]] = None
+    message: Optional[str] = None
+
 # Endpoints (rest of your endpoints remain the same)
 # ✅ FIXED: Registration endpoint with proper response model
 @router.post("/register", response_model=RegistrationResponse, status_code=status.HTTP_201_CREATED)
