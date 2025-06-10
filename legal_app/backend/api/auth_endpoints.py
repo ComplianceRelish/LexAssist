@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 import os
 import traceback
 from supabase import create_client, Client
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 from .supabase_client import get_supabase_client
 from .role_based_access_control import (
@@ -395,6 +397,9 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
         except Exception as admin_error:
             print(f"Admin create failed, falling back to regular signup: {admin_error}")
             # Fallback to regular signup if admin method fails
+            # FIXED: Added skipConfirmation and emailRedirectTo to prevent default email
+            redirect_url = os.getenv("FRONTEND_URL", "https://lexassist.vercel.app") + "/verify-email"
+            
             auth_response = supabase.auth.sign_up({
                 "email": user_data.email,
                 "password": user_data.password,
@@ -407,7 +412,9 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
                         "user_type": user_data.userType,
                         "legal_system": user_data.legal_system,
                         "jurisdiction_type": user_data.jurisdiction_type
-                    }
+                    },
+                    "skipConfirmation": True,  # CRITICAL: Disable Supabase email confirmation
+                    "emailRedirectTo": redirect_url  # Will be used if confirmation still happens
                 }
             })
         
@@ -488,6 +495,53 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
         else:
             verification_results["email"] = {"success": False, "error": "Twilio not configured"}
             verification_method = "email_link"  # Fallback to email link
+        
+        # If we're using email link verification, manually generate and send a confirmation email
+        # This avoids the expired link issues with Supabase's default confirmation emails
+        if verification_method == "email_link":
+            try:
+                # Generate a custom confirmation link with a longer expiry
+                confirmation_token = supabase.auth.admin.generate_link({
+                    "type": "signup",
+                    "email": user_data.email,
+                    "redirect_to": os.getenv("FRONTEND_URL", "https://lexassist.vercel.app") + "/verify-success"
+                })
+                
+                if confirmation_token and hasattr(confirmation_token, "properties") and confirmation_token.properties.action_link:
+                    # We have a valid confirmation link
+                    verification_link = confirmation_token.properties.action_link
+                    print(f"Generated custom confirmation link: {verification_link}")
+                    
+                    # Send email with confirmation link using SendGrid
+                    try:
+                        message = Mail(
+                            from_email='support@lexassist.com',
+                            to_emails=user_data.email,
+                            subject='Verify Your LexAssist Account',
+                            html_content=f'<p>Click <a href="{verification_link}">here</a> to verify your account.</p>'
+                        )
+                        
+                        sg = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))
+                        sg_response = sg.send(message)
+                        print(f"SendGrid response status code: {sg_response.status_code}")
+                        
+                        verification_results["email_link"] = {
+                            "success": True,
+                            "message": f"Custom confirmation link sent via SendGrid"
+                        }
+                    except Exception as email_error:
+                        print(f"Failed to send email via SendGrid: {email_error}")
+                        verification_results["email_link"] = {
+                            "success": False,
+                            "error": str(email_error),
+                            "message": "Failed to send verification email"
+                        }
+                else:
+                    print("Failed to generate confirmation link")
+            except Exception as link_error:
+                print(f"Error generating confirmation link: {link_error}")
+                # We'll still return email_link as verification method,
+                # and rely on any emails sent by Supabase
         
         # 5. Return the proper response format
         return RegistrationResponse(
