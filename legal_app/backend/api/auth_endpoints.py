@@ -7,7 +7,7 @@ and role-based access control with Twilio Verify integration.
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timedelta
 import os
@@ -34,14 +34,219 @@ except ImportError:
 # Initialize router
 router = APIRouter(tags=["Authentication"])
 
+# Enhanced Indian Legal System Framework
+class IndianLegalSystemMixin:
+    """Enhanced legal system definitions with focus on Indian plural legal system"""
+    
+    @staticmethod
+    def get_legal_system(country: str) -> str:
+        """
+        Returns the primary legal system classification for each country.
+        India is correctly classified as 'plural' due to multiple coexisting legal systems.
+        """
+        legal_systems = {
+            # Plural Legal Systems (Multiple systems coexisting)
+            'IN': 'plural',               # India - Common law + Personal laws + Customary + Constitutional
+            'PK': 'plural',               # Pakistan - Common law + Islamic law + Customary
+            'BD': 'plural',               # Bangladesh - Common law + Islamic law + Customary
+            'LK': 'plural',               # Sri Lanka - Common law + Kandyan law + Muslim law
+            'MY': 'plural',               # Malaysia - Common law + Islamic law + Customary
+            'ID': 'plural',               # Indonesia - Civil law + Islamic law + Adat (customary)
+            'PH': 'plural',               # Philippines - Civil law + Common law + Customary
+            'NG': 'plural',               # Nigeria - Common law + Customary + Sharia
+            'ZA': 'plural',               # South Africa - Common law + Roman-Dutch + Customary
+            
+            # Common Law Systems
+            'US': 'common_law', 'UK': 'common_law', 'AU': 'common_law',
+            'CA': 'common_law', 'SG': 'common_law', 'HK': 'common_law',
+            'NZ': 'common_law', 'IE': 'common_law',
+            
+            # Civil Law Systems
+            'DE': 'civil_law', 'FR': 'civil_law', 'JP': 'civil_law',
+            'IT': 'civil_law', 'ES': 'civil_law', 'NL': 'civil_law',
+            'BE': 'civil_law', 'AT': 'civil_law', 'CH': 'civil_law',
+            'SE': 'civil_law', 'NO': 'civil_law', 'DK': 'civil_law',
+            'FI': 'civil_law', 'BR': 'civil_law', 'AR': 'civil_law',
+            'MX': 'civil_law', 'CL': 'civil_law', 'CO': 'civil_law',
+            'PE': 'civil_law', 'KR': 'civil_law', 'CN': 'civil_law',
+            'TW': 'civil_law', 'TH': 'civil_law', 'VN': 'civil_law',
+            'RU': 'civil_law', 'PL': 'civil_law', 'CZ': 'civil_law',
+            'HU': 'civil_law', 'RO': 'civil_law', 'GR': 'civil_law',
+            'PT': 'civil_law', 'TR': 'civil_law',
+            
+            # Mixed Legal Systems
+            'IL': 'mixed', 'LB': 'mixed', 'JO': 'mixed', 'QA': 'mixed',
+            'AE': 'mixed', 'KW': 'mixed', 'BH': 'mixed', 'OM': 'mixed',
+            'EG': 'mixed', 'LY': 'mixed', 'TN': 'mixed', 'MA': 'mixed',
+            'DZ': 'mixed', 'SD': 'mixed', 'ET': 'mixed', 'KE': 'mixed',
+            'UG': 'mixed', 'TZ': 'mixed',
+            
+            # Religious Law Systems
+            'SA': 'religious_law', 'IR': 'religious_law', 'AF': 'religious_law',
+            'VA': 'religious_law',
+        }
+        return legal_systems.get(country, 'common_law')
+    
+    @staticmethod
+    def get_jurisdiction_type(country: str) -> str:
+        """Enhanced jurisdiction classification with Indian federal union structure"""
+        jurisdictions = {
+            'IN': 'federal_union',        # India - Union of States (more accurate than federal_state)
+            'US': 'federal_state',        # United States
+            'AU': 'federal_commonwealth', # Australia
+            'CA': 'federal_provincial',   # Canada
+            'DE': 'federal_state',        # Germany
+            'BR': 'federal_state',        # Brazil
+            'MY': 'federal_state',        # Malaysia
+            'PK': 'federal_state',        # Pakistan
+            'AE': 'federal_emirate',      # UAE
+            'RU': 'federal_state',        # Russia
+            
+            'UK': 'unitary_devolved',     # UK with devolution
+            'FR': 'unitary', 'JP': 'unitary', 'IT': 'unitary',
+            'ES': 'unitary', 'NL': 'unitary', 'CN': 'unitary',
+            
+            'SG': 'city_state', 'HK': 'special_administrative',
+        }
+        return jurisdictions.get(country, 'unitary')
+    
+    @staticmethod
+    def get_indian_legal_sources() -> Dict[str, List[str]]:
+        """Comprehensive Indian legal system sources"""
+        return {
+            'constitutional_law': [
+                'Constitution of India (1950)',
+                'Constitutional Amendments (104 amendments)',
+                'Fundamental Rights (Articles 12-35)',
+                'Directive Principles of State Policy (Articles 36-51)',
+                'Fundamental Duties (Article 51A)',
+                'Emergency Provisions (Articles 352-360)'
+            ],
+            'statutory_law': [
+                'Central Acts (Parliament)',
+                'State Acts (State Legislatures)',
+                'Ordinances (President/Governor)',
+                'Delegated Legislation',
+                'Rules, Regulations, and Notifications'
+            ],
+            'common_law_heritage': [
+                'English Common Law (pre-1947)',
+                'Judicial Precedents (Article 141)',
+                'Supreme Court Judgments',
+                'High Court Judgments',
+                'Equity and Justice Principles'
+            ],
+            'personal_laws': [
+                'Hindu Personal Law (Hindu Marriage Act 1955, Hindu Succession Act 1956)',
+                'Muslim Personal Law (Muslim Personal Law (Shariat) Application Act 1937)',
+                'Christian Personal Law (Indian Christian Marriage Act 1872)',
+                'Parsi Personal Law (Parsi Marriage and Divorce Act 1936)',
+                'Jewish Personal Law (Limited application)',
+                'Special Marriage Act 1954 (Secular marriages)'
+            ],
+            'customary_law': [
+                'Tribal Customary Laws (Fifth & Sixth Schedule areas)',
+                'Agricultural Customs',
+                'Trade and Commercial Customs',
+                'Local Usage and Customs',
+                'Community-specific practices'
+            ],
+            'international_law': [
+                'Treaties and Conventions (Article 253)',
+                'UN Charter Obligations',
+                'Bilateral Investment Treaties',
+                'Trade Agreements (WTO, FTA)',
+                'International Customary Law'
+            ]
+        }
+    
+    @staticmethod
+    def get_indian_court_hierarchy() -> Dict[str, any]:
+        """Detailed Indian judicial system structure"""
+        return {
+            'supreme_court': {
+                'jurisdiction': 'All India',
+                'chief_justice': 1,
+                'judges': 33,
+                'total_strength': 34,
+                'powers': [
+                    'Final Court of Appeal',
+                    'Constitutional Interpretation (Article 141)',
+                    'Original Jurisdiction (Inter-state disputes)',
+                    'Advisory Jurisdiction (Article 143)',
+                    'Writ Jurisdiction (Article 32)',
+                    'Review Jurisdiction'
+                ]
+            },
+            'high_courts': {
+                'total_courts': 25,
+                'for_states': 28,
+                'jurisdiction': 'State/Multi-state level',
+                'powers': [
+                    'Constitutional Writ Jurisdiction (Article 226)',
+                    'Supervisory Jurisdiction over subordinate courts',
+                    'Original Civil & Criminal Jurisdiction',
+                    'Appellate Jurisdiction'
+                ],
+                'notable_courts': [
+                    'Delhi High Court', 'Bombay High Court', 'Madras High Court',
+                    'Calcutta High Court', 'Karnataka High Court', 'Kerala High Court'
+                ]
+            },
+            'district_courts': {
+                'types': {
+                    'civil_courts': [
+                        'District Judge (Principal Civil Court)',
+                        'Additional District Judge',
+                        'Civil Judge (Senior Division)',
+                        'Civil Judge (Junior Division)'
+                    ],
+                    'criminal_courts': [
+                        'Sessions Judge',
+                        'Additional Sessions Judge',
+                        'Assistant Sessions Judge'
+                    ]
+                }
+            },
+            'subordinate_courts': {
+                'judicial_magistrates': [
+                    'Chief Judicial Magistrate',
+                    'Judicial Magistrate First Class',
+                    'Judicial Magistrate Second Class'
+                ],
+                'executive_magistrates': [
+                    'District Magistrate/District Collector',
+                    'Sub-Divisional Magistrate',
+                    'Executive Magistrate'
+                ]
+            },
+            'specialized_tribunals': [
+                'National Green Tribunal (NGT)',
+                'Central Administrative Tribunal (CAT)',
+                'Income Tax Appellate Tribunal (ITAT)',
+                'Customs, Excise & Service Tax Appellate Tribunal (CESTAT)',
+                'National Company Law Tribunal (NCLT)',
+                'National Company Law Appellate Tribunal (NCLAT)',
+                'Debt Recovery Tribunal (DRT)',
+                'Intellectual Property Appellate Board (IPAB)',
+                'Competition Appellate Tribunal (COMPAT)',
+                'Armed Forces Tribunal',
+                'Consumer Disputes Redressal Forums',
+                'Labour Courts and Industrial Tribunals',
+                'Family Courts',
+                'Commercial Courts',
+                'Fast Track Courts'
+            ]
+        }
+
 # Models
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
     firstName: str
     lastName: str
-    country: str = "US"  # Country code
-    countryCode: str = "+1"  # Phone country code
+    country: str = "IN"  # Default to India for your primary market
+    countryCode: str = "+91"  # Default to India country code
     mobileNumber: Optional[str] = None
     userType: Optional[str] = "client"  # client, lawyer
     
@@ -57,23 +262,54 @@ class UserCreate(BaseModel):
     
     @property
     def legal_system(self) -> str:
-        legal_systems = {
-            'US': 'common_law', 'UK': 'common_law', 'IN': 'common_law',
-            'AU': 'common_law', 'CA': 'common_law', 'SG': 'common_law',
-            'HK': 'common_law', 'DE': 'civil_law', 'FR': 'civil_law',
-            'JP': 'civil_law'
-        }
-        return legal_systems.get(self.country, 'common_law')
+        """Get the legal system for the user's country"""
+        return IndianLegalSystemMixin.get_legal_system(self.country)
     
     @property
     def jurisdiction_type(self) -> str:
-        jurisdictions = {
-            'US': 'federal_state', 'UK': 'unitary', 'IN': 'federal_state',
-            'AU': 'federal_state', 'CA': 'federal_provincial', 'SG': 'unitary',
-            'HK': 'special_administrative', 'DE': 'federal_state',
-            'FR': 'unitary', 'JP': 'unitary'
+        """Get the jurisdiction type for the user's country"""
+        return IndianLegalSystemMixin.get_jurisdiction_type(self.country)
+    
+    @property
+    def court_hierarchy(self) -> dict:
+        """Get the court hierarchy for the user's country"""
+        if self.country == 'IN':
+            return IndianLegalSystemMixin.get_indian_court_hierarchy()
+        
+        # Basic court structures for other countries
+        court_structures = {
+            'US': {
+                'supreme': 'US Supreme Court',
+                'appellate': 'US Courts of Appeals (13 circuits)',
+                'district': 'US District Courts (94)',
+                'state_supreme': 'State Supreme Courts',
+                'specialized': ['Tax Court', 'Bankruptcy Courts', 'Immigration Courts']
+            },
+            'UK': {
+                'supreme': 'UK Supreme Court',
+                'appellate': 'Court of Appeal',
+                'high': 'High Court of Justice',
+                'crown': 'Crown Court',
+                'magistrates': 'Magistrates Courts',
+                'specialized': ['Employment Tribunal', 'Family Court']
+            }
         }
-        return jurisdictions.get(self.country, 'federal_state')
+        return court_structures.get(self.country, {})
+    
+    @property
+    def legal_precedent_system(self) -> str:
+        """Get the precedent system for the user's country"""
+        if self.country == 'IN':
+            return 'hierarchical_stare_decisis'  # Article 141 of Indian Constitution
+        
+        precedent_systems = {
+            'US': 'stare_decisis', 'UK': 'stare_decisis', 'AU': 'stare_decisis',
+            'CA': 'stare_decisis', 'SG': 'stare_decisis', 'HK': 'stare_decisis',
+            'DE': 'persuasive_precedent', 'FR': 'persuasive_precedent',
+            'JP': 'persuasive_precedent', 'CN': 'guiding_cases',
+            'BR': 'binding_precedent'
+        }
+        return precedent_systems.get(self.country, 'stare_decisis')
 
 class UserResponse(BaseModel):
     id: str
@@ -102,7 +338,6 @@ class OTPVerify(BaseModel):
     phone: str
     code: str
 
-# New Twilio verification models
 class VerificationRequest(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -111,36 +346,33 @@ class VerificationCodeRequest(BaseModel):
     contact: str  # email or phone
     code: str
 
-# Endpoints
+# Endpoints (rest of your endpoints remain the same)
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
-    """
-    Register user with Twilio verification
-    """
+    """Register user with enhanced Indian legal system support"""
     try:
-        print(f"=== REGISTRATION WITH TWILIO VERIFY ===")
+        print(f"=== REGISTRATION WITH ENHANCED INDIAN LEGAL SYSTEM ===")
         print(f"Attempting to register user: {user_data.email}")
+        print(f"Country: {user_data.country}, Legal System: {user_data.legal_system}")
         
-        # 1. Create user in Supabase Auth
+        # Create user in Supabase Auth
         auth_response = supabase.auth.sign_up({
             "email": user_data.email,
             "password": user_data.password,
+            "phone": user_data.phone,
             "options": {
                 "data": {
                     "full_name": user_data.full_name,
                     "country": user_data.country,
                     "country_code": user_data.countryCode,
-                    "phone": user_data.phone,
-                    "user_type": user_data.userType
+                    "user_type": user_data.userType,
+                    "legal_system": user_data.legal_system,
+                    "jurisdiction_type": user_data.jurisdiction_type
                 }
             }
         })
         
-        print(f"Auth response type: {type(auth_response)}")
-        print(f"Auth response: {auth_response}")
-        
         if not auth_response or not hasattr(auth_response, 'user'):
-            print(f"Unexpected auth response structure: {dir(auth_response)}")
             raise HTTPException(
                 status_code=400,
                 detail="Registration failed: Invalid response from Supabase"
@@ -153,14 +385,11 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
                 detail="Registration failed: No user data returned"
             )
         
-        # Extract user details
         user_id = str(user.id)
         user_email = user.email
         role = "lawyer" if user_data.userType == "lawyer" else "user"
         
-        print(f"Successfully created auth user - ID: {user_id}, Email: {user_email}")
-        
-        # 2. Create user record in database
+        # Create enhanced user record with legal system data
         user_record = {
             "id": user_id,
             "email": user_email,
@@ -171,16 +400,20 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             "legal_system": user_data.legal_system,
             "jurisdiction_type": user_data.jurisdiction_type,
             "role": role,
-            "is_active": False,  # Will be activated after verification
+            "is_active": False,
             "email_verified": False,
             "phone_verified": False,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }
         
-        print(f"Inserting user record: {user_record}")
+        # Store additional Indian legal system data if user is from India
+        if user_data.country == 'IN':
+            user_record["indian_legal_sources"] = IndianLegalSystemMixin.get_indian_legal_sources()
+            user_record["court_hierarchy"] = user_data.court_hierarchy
+            print(f"Added enhanced Indian legal system data for user: {user_email}")
         
-        # Handle duplicate users
+        # Insert user record
         try:
             db_response = supabase.table("users").insert(user_record).execute()
             print(f"Database insert successful: {db_response.data}")
@@ -190,23 +423,16 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
                 supabase.table("users").update(user_record).eq("email", user_data.email).execute()
             else:
                 print(f"Database error: {str(db_error)}")
-                # Continue anyway since auth user was created successfully
         
-        # 3. Send verification via Twilio
+        # Send verification via Twilio
         verification_results = {}
-        
         if TWILIO_AVAILABLE:
-            print(f"Sending Twilio email verification to: {user_data.email}")
             email_result = await twilio_service.send_email_verification(user_data.email)
             verification_results["email"] = email_result
             
-            # Also send SMS if phone number provided
             if user_data.phone:
-                print(f"Sending Twilio SMS verification to: {user_data.phone}")
                 sms_result = await twilio_service.send_sms_verification(user_data.phone)
                 verification_results["sms"] = sms_result
-        else:
-            verification_results["email"] = {"success": False, "error": "Twilio not configured"}
         
         return {
             "id": user_id,
@@ -218,6 +444,8 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             "email_verified": False,
             "phone_verified": False,
             "verification_sent": verification_results,
+            "legal_system": user_data.legal_system,
+            "jurisdiction": user_data.jurisdiction_type,
             "message": "Registration successful! Please check your email for verification code."
         }
         
