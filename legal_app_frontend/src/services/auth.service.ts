@@ -25,6 +25,18 @@ interface RegistrationData {
   userType: string;
 }
 
+interface RegistrationResponse extends User {
+  verification_method?: string;
+  verification_sent?: any;
+  message?: string;
+}
+
+interface VerificationResponse {
+  success: boolean;
+  message: string;
+  verification_type?: string;
+}
+
 class AuthService {
   private static instance: AuthService;
   private tokens: AuthToken | null = null;
@@ -129,12 +141,12 @@ class AuthService {
     return Date.now() >= this.tokens.expiresAt;
   }
 
-  public async register(userData: RegistrationData): Promise<User> {
+  public async register(userData: RegistrationData): Promise<RegistrationResponse> {
     try {
       console.log('Registering user with data:', userData);
       
       // ✅ Call your backend API with correct endpoint
-      const response = await axios.post<User>('/api/auth/register', userData);
+      const response = await axios.post<RegistrationResponse>('/api/auth/register', userData);
       
       console.log('Registration response:', response.data);
       return response.data;
@@ -252,7 +264,31 @@ class AuthService {
     return this.refreshPromise;
   }
 
-  // ✅ Add OTP methods to match your backend
+  // ✅ NEW: Twilio verification methods
+  public async sendVerification(data: { email?: string; phone?: string }): Promise<any> {
+    try {
+      const response = await axios.post('/api/auth/send-verification', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Send verification error:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to send verification code');
+    }
+  }
+
+  public async verifyCode(contact: string, code: string): Promise<VerificationResponse> {
+    try {
+      const response = await axios.post<VerificationResponse>('/api/auth/verify-code', { 
+        contact, 
+        code 
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Verify code error:', error);
+      throw new Error(error.response?.data?.detail || 'Verification failed');
+    }
+  }
+
+  // ✅ Legacy OTP methods (now using Twilio backend)
   public async requestOTP(phone: string): Promise<void> {
     try {
       await axios.post('/api/auth/otp/request', { phone });

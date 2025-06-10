@@ -349,18 +349,18 @@ class VerificationCodeRequest(BaseModel):
 # Endpoints (rest of your endpoints remain the same)
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
-    """Register user with enhanced Indian legal system support"""
     try:
-        print(f"=== REGISTRATION WITH ENHANCED INDIAN LEGAL SYSTEM ===")
+        print(f"=== REGISTRATION WITH TWILIO VERIFICATION ONLY ===")
         print(f"Attempting to register user: {user_data.email}")
         print(f"Country: {user_data.country}, Legal System: {user_data.legal_system}")
         
-        # Create user in Supabase Auth
+        # 1. Create user in Supabase Auth WITHOUT email confirmation
         auth_response = supabase.auth.sign_up({
             "email": user_data.email,
             "password": user_data.password,
             "phone": user_data.phone,
             "options": {
+                "email_confirm": False,  # 🚨 DISABLE SUPABASE EMAIL CONFIRMATION
                 "data": {
                     "full_name": user_data.full_name,
                     "country": user_data.country,
@@ -389,7 +389,9 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
         user_email = user.email
         role = "lawyer" if user_data.userType == "lawyer" else "user"
         
-        # Create enhanced user record with legal system data
+        print(f"Successfully created auth user - ID: {user_id}, Email: {user_email}")
+        
+        # 2. Create enhanced user record with legal system data
         user_record = {
             "id": user_id,
             "email": user_email,
@@ -400,20 +402,20 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             "legal_system": user_data.legal_system,
             "jurisdiction_type": user_data.jurisdiction_type,
             "role": role,
-            "is_active": False,
+            "is_active": False,  # Will be activated after verification
             "email_verified": False,
             "phone_verified": False,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }
         
-        # Store additional Indian legal system data if user is from India
+        # Add Indian legal system data if user is from India
         if user_data.country == 'IN':
             user_record["indian_legal_sources"] = IndianLegalSystemMixin.get_indian_legal_sources()
             user_record["court_hierarchy"] = user_data.court_hierarchy
-            print(f"Added enhanced Indian legal system data for user: {user_email}")
+            print(f"✅ Added enhanced Indian legal system data for user: {user_email}")
         
-        # Insert user record
+        # 3. Insert user record
         try:
             db_response = supabase.table("users").insert(user_record).execute()
             print(f"Database insert successful: {db_response.data}")
@@ -423,16 +425,22 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
                 supabase.table("users").update(user_record).eq("email", user_data.email).execute()
             else:
                 print(f"Database error: {str(db_error)}")
+                # Continue anyway since auth user was created successfully
         
-        # Send verification via Twilio
+        # 4. Send verification via Twilio (NO Supabase confirmation)
         verification_results = {}
+        
         if TWILIO_AVAILABLE:
+            print(f"Sending Twilio email verification to: {user_data.email}")
             email_result = await twilio_service.send_email_verification(user_data.email)
             verification_results["email"] = email_result
             
             if user_data.phone:
+                print(f"Sending Twilio SMS verification to: {user_data.phone}")
                 sms_result = await twilio_service.send_sms_verification(user_data.phone)
                 verification_results["sms"] = sms_result
+        else:
+            verification_results["email"] = {"success": False, "error": "Twilio not configured"}
         
         return {
             "id": user_id,
@@ -443,10 +451,11 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             "created_at": datetime.utcnow(),
             "email_verified": False,
             "phone_verified": False,
+            "verification_method": "twilio_code",  # 🚨 SPECIFY VERIFICATION METHOD
             "verification_sent": verification_results,
             "legal_system": user_data.legal_system,
             "jurisdiction": user_data.jurisdiction_type,
-            "message": "Registration successful! Please check your email for verification code."
+            "message": "Registration successful! Please enter the 6-digit verification code sent to your email."
         }
         
     except HTTPException:
@@ -458,6 +467,7 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             status_code=400,
             detail=f"Registration failed: {str(e)}"
         )
+        # ... error handling ...
 
 @router.post("/login", response_model=TokenResponse)
 async def login_for_access_token(
