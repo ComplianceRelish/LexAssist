@@ -17,17 +17,22 @@ import {
   PinInput,
   PinInputField,
 } from '@chakra-ui/react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 
 const VerifyEmailPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const email = searchParams.get('email') || '';
+  
+  // Get email, message and verification method from both URL params and location state
+  const stateData = location.state as { email?: string; message?: string; verificationType?: string } || {};
+  const email = stateData.email || searchParams.get('email') || '';
+  const verificationType = stateData.verificationType || searchParams.get('type') || 'code';
   
   const [code, setCode] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [message, setMessage] = useState<string>('');
+  const [message, setMessage] = useState<string>(stateData.message || 'Please verify your email to continue.');
   const [error, setError] = useState<string>('');
   const [isResending, setIsResending] = useState<boolean>(false);
   
@@ -134,58 +139,81 @@ const VerifyEmailPage: React.FC = () => {
             )}
 
             <Stack gap={6}>
-              <Text textAlign="center" color="gray.600">
-                Enter the 6-digit verification code
-              </Text>
-              
-              <Flex justify="center">
-                <HStack>
-                  <PinInput 
-                    value={code} 
-                    onChange={setCode}
+              {/* Show different UI based on verification type */}
+              {verificationType === 'link' ? (
+                <>
+                  <Text textAlign="center" color="gray.600">
+                    Please check your email for a verification link and click it to verify your account.
+                  </Text>
+                  
+                  <Button
                     size="lg"
-                    focusBorderColor={primaryColor}
+                    bg={primaryColor}
+                    color={'white'}
+                    _hover={{
+                      bg: 'teal.700',
+                    }}
+                    onClick={() => window.open('https://mail.google.com', '_blank')}
                   >
-                    <PinInputField />
-                    <PinInputField />
-                    <PinInputField />
-                    <PinInputField />
-                    <PinInputField />
-                    <PinInputField />
-                  </PinInput>
-                </HStack>
-              </Flex>
-              
-              <Button
-                onClick={handleVerify}
-                size="lg"
-                bg={primaryColor}
-                color={'white'}
-                _hover={{
-                  bg: 'teal.700',
-                }}
-                isLoading={isLoading}
-                loadingText="Verifying..."
-                isDisabled={code.length !== 6}
-              >
-                Verify Email
-              </Button>
-              
-              <Stack align="center" gap={2}>
-                <Text color="gray.600" fontSize="sm">
-                  Didn't receive the code?
-                </Text>
-                <Button
-                  variant="link"
-                  color={primaryColor}
-                  onClick={handleResendCode}
-                  isLoading={isResending}
-                  loadingText="Sending..."
-                  size="sm"
-                >
-                  Resend Code
-                </Button>
-              </Stack>
+                    Open Gmail
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Text textAlign="center" color="gray.600">
+                    Enter the 6-digit verification code
+                  </Text>
+                  
+                  <Flex justify="center">
+                    <HStack>
+                      <PinInput 
+                        value={code} 
+                        onChange={setCode}
+                        size="lg"
+                        focusBorderColor={primaryColor}
+                      >
+                        <PinInputField />
+                        <PinInputField />
+                        <PinInputField />
+                        <PinInputField />
+                        <PinInputField />
+                        <PinInputField />
+                      </PinInput>
+                    </HStack>
+                  </Flex>
+                  
+                  <Button
+                    onClick={handleVerify}
+                    size="lg"
+                    bg={primaryColor}
+                    color={'white'}
+                    _hover={{
+                      bg: 'teal.700',
+                    }}
+                    isLoading={isLoading}
+                    loadingText="Verifying..."
+                    isDisabled={code.length !== 6}
+                  >
+                    Verify Email
+                  </Button>
+                  
+                  <Stack align="center" gap={2}>
+                    <Text color="gray.600" fontSize="sm">
+                      Didn't receive the code?
+                    </Text>
+                    <Button
+                      variant="link"
+                      color={primaryColor}
+                      onClick={handleResendCode}
+                      isLoading={isResending}
+                      loadingText="Sending..."
+                      size="sm"
+                    >
+                      Resend Code
+                    </Button>
+                  </Stack>
+                </>
+              )}
               
               <Stack pt={6}>
                 <Text textAlign={'center'}>

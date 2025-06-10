@@ -1,13 +1,10 @@
 """
 Authentication and User Management API Endpoints for Lex Assist
-
-This module implements the API endpoints for user authentication, registration,
-and role-based access control with Twilio Verify integration.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timedelta
 import os
@@ -27,9 +24,15 @@ from .role_based_access_control import (
 try:
     from ..services.twilio_service import twilio_service
     TWILIO_AVAILABLE = True
-except ImportError:
-    print("Twilio service not available - using fallback mode")
+    print("✅ Twilio service loaded successfully")
+except ImportError as e:
+    print(f"❌ Twilio service not available: {e}")
     TWILIO_AVAILABLE = False
+
+# Check if Twilio is disabled via environment
+if os.getenv('DISABLE_TWILIO', '').lower() == 'true':
+    TWILIO_AVAILABLE = False
+    print("🔇 Twilio disabled via environment variable")
 
 # Initialize router
 router = APIRouter(tags=["Authentication"])
@@ -347,22 +350,23 @@ class VerificationCodeRequest(BaseModel):
     code: str
 
 # Endpoints (rest of your endpoints remain the same)
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+# ✅ FIXED: Registration endpoint with proper response model
+@router.post("/register", response_model=RegistrationResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
     try:
         print(f"=== REGISTRATION WITH TWILIO VERIFICATION ONLY ===")
         print(f"Attempting to register user: {user_data.email}")
         print(f"Country: {user_data.country}, Legal System: {user_data.legal_system}")
         
-        # 1. Create user in Supabase Auth WITHOUT email confirmation
-        auth_response = supabase.auth.sign_up({
-            "email": user_data.email,
-            "password": user_data.password,
-            "phone": user_data.phone,
-            "options": {
-                "emailRedirectTo": None,  # Don't redirect after confirmation
-                "skipConfirmation": True,
-                "data": {
+        # 1. Create user in Supabase Auth with manual approach to avoid auto-confirmation
+        try:
+            # Try to disable confirmation by using admin.create_user instead
+            auth_response = supabase.auth.admin.create_user({
+                "email": user_data.email,
+                "password": user_data.password,
+                "phone": user_data.phone,
+                "email_confirm": False,  # Explicitly disable email confirmation
+                "user_metadata": {
                     "full_name": user_data.full_name,
                     "country": user_data.country,
                     "country_code": user_data.countryCode,
@@ -370,8 +374,25 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
                     "legal_system": user_data.legal_system,
                     "jurisdiction_type": user_data.jurisdiction_type
                 }
-            }
-        })
+            })
+        except Exception as admin_error:
+            print(f"Admin create failed, falling back to regular signup: {admin_error}")
+            # Fallback to regular signup if admin method fails
+            auth_response = supabase.auth.sign_up({
+                "email": user_data.email,
+                "password": user_data.password,
+                "phone": user_data.phone,
+                "options": {
+                    "data": {
+                        "full_name": user_data.full_name,
+                        "country": user_data.country,
+                        "country_code": user_data.countryCode,
+                        "user_type": user_data.userType,
+                        "legal_system": user_data.legal_system,
+                        "jurisdiction_type": user_data.jurisdiction_type
+                    }
+                }
+            })
         
         if not auth_response or not hasattr(auth_response, 'user'):
             raise HTTPException(
@@ -428,37 +449,45 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
                 print(f"Database error: {str(db_error)}")
                 # Continue anyway since auth user was created successfully
         
-        # 4. Send verification via Twilio (NO Supabase confirmation)
+        # 4. Send verification via Twilio ONLY (override any Supabase emails)
         verification_results = {}
+        verification_method = "email_link"  # Default fallback
         
         if TWILIO_AVAILABLE:
-            print(f"Sending Twilio email verification to: {user_data.email}")
-            email_result = await twilio_service.send_email_verification(user_data.email)
-            verification_results["email"] = email_result
-            
-            if user_data.phone:
-                print(f"Sending Twilio SMS verification to: {user_data.phone}")
-                sms_result = await twilio_service.send_sms_verification(user_data.phone)
-                verification_results["sms"] = sms_result
+            try:
+                print(f"Sending Twilio email verification to: {user_data.email}")
+                email_result = await twilio_service.send_email_verification(user_data.email)
+                verification_results["email"] = email_result
+                verification_method = "twilio_code"  # Twilio is working
+                
+                if user_data.phone:
+                    print(f"Sending Twilio SMS verification to: {user_data.phone}")
+                    sms_result = await twilio_service.send_sms_verification(user_data.phone)
+                    verification_results["sms"] = sms_result
+            except Exception as twilio_error:
+                print(f"Twilio verification failed: {twilio_error}")
+                verification_results["email"] = {"success": False, "error": str(twilio_error)}
+                verification_method = "email_link"  # Fallback to email link
         else:
             verification_results["email"] = {"success": False, "error": "Twilio not configured"}
+            verification_method = "email_link"  # Fallback to email link
         
-        # 🚨 CRITICAL: Return the response that frontend expects
-        return {
-            "id": user_id,
-            "email": user_email,
-            "full_name": user_data.full_name,
-            "role": role,
-            "subscription_tier": "free",
-            "created_at": datetime.utcnow(),
-            "email_verified": False,
-            "phone_verified": False,
-            "verification_method": "twilio_code",  # 🚨 ADD THIS FIELD
-            "verification_sent": verification_results,
-            "legal_system": user_data.legal_system,
-            "jurisdiction": user_data.jurisdiction_type,
-            "message": "Registration successful! Please enter the 6-digit verification code sent to your email."
-        }
+        # 5. Return the proper response format
+        return RegistrationResponse(
+            id=user_id,
+            email=user_email,
+            full_name=user_data.full_name,
+            role=role,
+            subscription_tier="free",
+            created_at=datetime,
+            email_verified=False,
+            phone_verified=False,
+            verification_method=verification_method,  # ✅ Key field for frontend
+            verification_sent=verification_results,
+            legal_system=user_data.legal_system,
+            jurisdiction=user_data.jurisdiction_type,
+            message="Registration successful! Please enter the 6-digit verification code sent to your email." if verification_method == "twilio_code" else "Registration successful! Please check your email for the verification link."
+        )
         
     except HTTPException:
         raise
@@ -469,6 +498,52 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             status_code=400,
             detail=f"Registration failed: {str(e)}"
         )
+
+# ✅ IMPROVED: Send verification endpoint with better error handling
+@router.post("/send-verification")
+async def send_verification(request_data: VerificationRequest):
+    """Send verification code to email or phone"""
+    
+    # Check if Twilio is disabled
+    if os.getenv('DISABLE_TWILIO', '').lower() == 'true':
+        return {
+            "success": True,
+            "message": "Verification service is temporarily disabled. Please use email verification link.",
+            "fallback_mode": True
+        }
+    
+    if not TWILIO_AVAILABLE:
+        return {
+            "success": False,
+            "message": "Verification service is currently unavailable. Please use email verification link.",
+            "fallback_mode": True,
+            "error": "Twilio service not configured"
+        }
+    
+    try:
+        results = {}
+        
+        if request_data.email:
+            email_result = await twilio_service.send_email_verification(request_data.email)
+            results["email"] = email_result
+        
+        if request_data.phone:
+            sms_result = await twilio_service.send_sms_verification(request_data.phone)
+            results["sms"] = sms_result
+        
+        return {
+            "success": True,
+            "message": "Verification code(s) sent successfully",
+            "results": results
+        }
+    except Exception as e:
+        print(f"Verification error: {str(e)}")
+        return {
+            "success": False,
+            "message": "Failed to send verification code. Please use email verification link.",
+            "fallback_mode": True,
+            "error": str(e)
+        }
         # ... error handling ...
 
 @router.post("/login", response_model=TokenResponse)

@@ -132,19 +132,40 @@ const RegisterPage: React.FC = () => {
   };
 
   /**
-   * Handle registration success response
+   * Handle registration success response based on verification method
    */
   const handleRegistrationSuccess = (response: any) => {
     console.log('Registration response:', response);
     
-    if (response.verification_method === "twilio_code") {
-      // Show code input interface
-      setShowCodeVerification(true);
-      setVerificationContact(response.email);
-      setVerificationError('');
-    } else {
-      // Fallback - redirect to verification page
-      navigate('/verify-email?email=' + encodeURIComponent(email));
+    // Check which verification method is being used
+    switch(response.verification_method) {
+      case "twilio_code":
+        // Show 6-digit code input interface for Twilio verification
+        setShowCodeVerification(true);
+        setVerificationContact(response.email);
+        setVerificationError('');
+        break;
+        
+      case "email_link":
+        // User needs to check their email for a verification link
+        navigate('/verify-email', { 
+          state: { 
+            email: response.email,
+            verificationType: 'link',
+            message: "Please check your email for a verification link. Click the link to activate your account."
+          }
+        });
+        break;
+        
+      default:
+        // Fallback for any other verification method
+        navigate('/verify-email', { 
+          state: { 
+            email: response.email,
+            verificationType: 'code',
+            message: "Your account has been created. Please verify your email to continue."
+          }
+        });
     }
   };
 

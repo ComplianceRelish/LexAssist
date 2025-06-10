@@ -26,9 +26,11 @@ interface RegistrationData {
 }
 
 interface RegistrationResponse extends User {
-  verification_method?: string;
+  verification_method?: 'twilio_code' | 'email_link';
   verification_sent?: any;
   message?: string;
+  legal_system?: string;
+  jurisdiction?: string;
 }
 
 interface VerificationResponse {
@@ -141,14 +143,22 @@ class AuthService {
     return Date.now() >= this.tokens.expiresAt;
   }
 
+  /**
+   * Register a new user and handle verification method
+   * @returns Registration response with verification_method field
+   */
   public async register(userData: RegistrationData): Promise<RegistrationResponse> {
     try {
       console.log('Registering user with data:', userData);
       
-      // ✅ Call your backend API with correct endpoint
+      // Call backend API with correct endpoint
       const response = await axios.post<RegistrationResponse>('/api/auth/register', userData);
       
       console.log('Registration response:', response.data);
+      
+      // Add logging for verification method
+      console.log(`Verification method: ${response.data.verification_method || 'not specified'}`);
+      
       return response.data;
     } catch (error: any) {
       console.error('Registration error:', error.response?.data || error.message);
@@ -160,7 +170,7 @@ class AuthService {
     try {
       console.log('Logging in user:', email);
       
-      // ✅ Create FormData for OAuth2PasswordRequestForm
+      // Create FormData for OAuth2PasswordRequestForm
       const formData = new FormData();
       formData.append('username', email);
       formData.append('password', password);
@@ -264,10 +274,20 @@ class AuthService {
     return this.refreshPromise;
   }
 
-  // ✅ NEW: Twilio verification methods
+  /**
+   * Send verification code to email or phone
+   * Handles fallback if Twilio is unavailable
+   */
   public async sendVerification(data: { email?: string; phone?: string }): Promise<any> {
     try {
       const response = await axios.post('/api/auth/send-verification', data);
+      console.log('Verification sent response:', response.data);
+      
+      // Check if this is fallback mode where service is not available
+      if (response.data.fallback_mode) {
+        console.log('Using fallback verification mode (email link)');
+      }
+      
       return response.data;
     } catch (error: any) {
       console.error('Send verification error:', error);
