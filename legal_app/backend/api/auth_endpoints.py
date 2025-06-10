@@ -360,7 +360,7 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             "password": user_data.password,
             "phone": user_data.phone,
             "options": {
-                "email_confirm": False,  # 🚨 DISABLE SUPABASE EMAIL CONFIRMATION
+                "email_confirm": False,  # 🚨 This should disable confirmation
                 "data": {
                     "full_name": user_data.full_name,
                     "country": user_data.country,
@@ -442,6 +442,7 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
         else:
             verification_results["email"] = {"success": False, "error": "Twilio not configured"}
         
+        # 🚨 CRITICAL: Return the response that frontend expects
         return {
             "id": user_id,
             "email": user_email,
@@ -451,7 +452,7 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             "created_at": datetime.utcnow(),
             "email_verified": False,
             "phone_verified": False,
-            "verification_method": "twilio_code",  # 🚨 SPECIFY VERIFICATION METHOD
+            "verification_method": "twilio_code",  # 🚨 ADD THIS FIELD
             "verification_sent": verification_results,
             "legal_system": user_data.legal_system,
             "jurisdiction": user_data.jurisdiction_type,
