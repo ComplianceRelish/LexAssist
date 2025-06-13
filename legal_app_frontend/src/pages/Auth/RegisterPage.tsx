@@ -132,66 +132,20 @@ const RegisterPage: React.FC = () => {
   };
 
   /**
-   * Handle registration success response based on verification method
+   * Handle registration success - redirect to dashboard
    */
-  const handleRegistrationSuccess = (response: any) => {
-    console.log('Registration response:', response);
-    
-    // Check which verification method is being used
-    switch(response.verification_method) {
-      case "twilio_code":
-        // Show 6-digit code input interface for Twilio verification
-        setShowCodeVerification(true);
-        setVerificationContact(response.email);
-        setVerificationError('');
-        break;
-        
-      case "email_link":
-        // User needs to check their email for a verification link
-        navigate('/verify-email', { 
-          state: { 
-            email: response.email,
-            verificationType: 'link',
-            message: "Please check your email for a verification link. Click the link to activate your account."
-          }
-        });
-        break;
-        
-      default:
-        // Fallback for any other verification method
-        navigate('/verify-email', { 
-          state: { 
-            email: response.email,
-            verificationType: 'code',
-            message: "Your account has been created. Please verify your email to continue."
-          }
-        });
-    }
+  const handleRegistrationSuccess = (user: any) => {
+    // Immediately redirect to dashboard after successful registration
+    navigate('/dashboard');
   };
 
   /**
-   * Handle code verification
+   * No verification needed - this function is kept for compatibility
+   * but no longer used
    */
   const handleCodeVerification = async () => {
-    if (verificationCode.length !== 6) {
-      setVerificationError('Please enter a 6-digit code');
-      return;
-    }
-
-    setVerificationLoading(true);
-    setVerificationError('');
-
-    try {
-      const result = await authService.verifyCode(verificationContact, verificationCode);
-      if (result.success) {
-        // Success! Redirect to login
-        navigate('/login?verified=true&message=' + encodeURIComponent('Email verified successfully! You can now login.'));
-      }
-    } catch (error: any) {
-      setVerificationError(error.message || 'Verification failed');
-    } finally {
-      setVerificationLoading(false);
-    }
+    // Not needed - verification is bypassed
+    navigate('/dashboard');
   };
 
   /**
@@ -215,8 +169,7 @@ const RegisterPage: React.FC = () => {
     
     // Clear any previous errors
     clearError();
-    
-    // Validate form
+        
     if (!validateForm()) {
       return;
     }
@@ -226,22 +179,20 @@ const RegisterPage: React.FC = () => {
         firstName,
         lastName,
         email,
+        password,
         country,
         countryCode,
         mobileNumber: mobile,
-        password,
         userType
       };
       
-      // Call the updated register function
-      const response = await signUp(userData);
+      // SignUp now returns an enhanced user with pro subscription
+      const user = await signUp(userData);
       
-      // Handle the response based on verification method
-      handleRegistrationSuccess(response);
-      
-    } catch (err: any) {
-      console.error('Registration error:', err);
-      // Error is already handled in AuthContext
+      // Redirect to dashboard after successful signup
+      navigate('/dashboard');
+    } catch (err) {
+      // Error is handled by AuthContext
     }
   };
 

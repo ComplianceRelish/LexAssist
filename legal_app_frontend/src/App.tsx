@@ -193,9 +193,12 @@ function App() {
     return subscription?.features?.includes(feature) || false;
   };
 
-  // Protected route wrapper - BYPASSED for direct access
+  // Protected route wrapper - BYPASSED  // Protected route component
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-    // Bypass authentication check - always allow access
+    // Allow access if user is logged in, otherwise redirect to register page
+    if (!user) {
+      return <Navigate to="/register" />;
+    }
     return <>{children}</>;
   };
 
@@ -214,10 +217,10 @@ function App() {
         <AuthProvider>
           <BrowserRouter>
             <Routes>
-              {/* Public routes - redirect to dashboard */}
+              {/* Public routes */}
               <Route path="/" element={<Navigate to="/dashboard" />} />
-              <Route path="/login" element={<Navigate to="/dashboard" />} />
-              <Route path="/register" element={<Navigate to="/dashboard" />} />
+              <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+              <Route path="/register" element={<RegisterPage />} />
               <Route path="/verify-email" element={<Navigate to="/dashboard" />} />
               <Route path="/env-check" element={<EnvCheckPage />} />
 

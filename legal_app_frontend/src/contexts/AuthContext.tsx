@@ -3,19 +3,12 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { authService } from '../services/auth.service';
 import { User, Subscription } from '../types';
 
-// Mock user for auto-login (bypassing verification)
-const mockUser: User = {
-  id: 'auto-user-1',
-  name: 'Auto User',
-  email: 'auto@lexassist.com',
-  role: 'user',
-  subscription: {
-    id: 'auto-subscription-1',
-    tier: 'pro', // Using pro to access more features
-    expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-    features: ['advanced_search', 'download_pdf', 'citation_export', 'case_comparison']
-  }
-  // Removed 'verified' property as it doesn't exist in the User type
+// This will be a pro tier subscription to assign to new users
+const defaultProSubscription: Subscription = {
+  id: 'default-subscription',
+  tier: 'pro', // Using pro to access more features
+  expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+  features: ['advanced_search', 'download_pdf', 'citation_export', 'case_comparison']
 };
 
 interface RegistrationData {
@@ -58,18 +51,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const initializeAuth = async () => {
+      setState(prev => ({ ...prev, loading: true }));
       try {
-        // Auto-login functionality - always authenticate with mock user
-        // Store mock user in local storage
-        localStorage.setItem('lexAssistUser', JSON.stringify(mockUser));
-        authService.setCurrentUser(mockUser);
-        
-        setState(prev => ({
-          ...prev,
-          user: mockUser,
-          subscription: mockUser.subscription || null,
-          loading: false
-        }));
+        // Check if user is already logged in from local storage
+        const storedUser = localStorage.getItem('lexAssistUser');
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          // Set the stored user in auth service
+          authService.setCurrentUser(user);
+          setState(prev => ({
+            ...prev,
+            user,
+            subscription: user.subscription || null,
+            loading: false
+          }));
+        } else {
+          setState(prev => ({ ...prev, loading: false }));
+        }
       } catch (error) {
         setState(prev => ({
           ...prev,
@@ -106,13 +104,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signUp = async (userData: RegistrationData): Promise<User> => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
+      // Register the user
       const user = await authService.register(userData);
+      
+      // Assign pro subscription and bypass verification
+      const enhancedUser = await assignProSubscription(user);
+      
+      // Set as current user
       setState(prev => ({ 
         ...prev, 
         loading: false,
-        user
+        user: enhancedUser,
+        subscription: enhancedUser.subscription || null // Ensure null fallback
       }));
-      return user; // Return user data
+      
+      return enhancedUser; // Return enhanced user data
     } catch (error: any) {
       setState(prev => ({
         ...prev,
@@ -186,30 +192,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setState(prev => ({ ...prev, error: null }));
   };
 
-  // Auto login functionality - creates a mock authenticated session
-  const autoLogin = async (): Promise<User> => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
-    try {
-      // Set the mock user
-      localStorage.setItem('lexAssistUser', JSON.stringify(mockUser));
-      authService.setCurrentUser(mockUser);
-      
-      setState(prev => ({
-        ...prev,
-        user: mockUser,
-        subscription: mockUser.subscription || null, // Fix TypeScript error with explicit null fallback
-        loading: false
-      }));
-      
-      return mockUser;
-    } catch (error: any) {
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error: error.message || 'Auto-login failed'
-      }));
-      throw error;
-    }
+  // Assign pro subscription to a user - helps bypass subscription requirement
+  // This function serves both as assignProSubscription and as autoLogin replacement
+  const assignProSubscription = async (user?: User): Promise<User> => {
+    // If no user is provided, create a default user for autoLogin functionality
+    const targetUser = user || {
+      id: 'auto-user-1',
+      name: 'Auto User',
+      email: 'auto@lexassist.com',
+      role: 'user'
+    };
+    
+    const userWithPro = {
+      ...targetUser,
+      subscription: defaultProSubscription
+    };
+    
+    localStorage.setItem('lexAssistUser', JSON.stringify(userWithPro));
+    authService.setCurrentUser(userWithPro);
+    
+    setState(prev => ({
+      ...prev,
+      user: userWithPro,
+      subscription: userWithPro.subscription || null, // Ensure null fallback
+      loading: false
+    }));
+    
+    return userWithPro;
   };
 
   return (
@@ -221,7 +230,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       updateProfile,
       refreshUser,
       clearError,
-      autoLogin
+      autoLogin: assignProSubscription // Replace autoLogin with assignProSubscription
     }}>
       {!state.loading && children}
     </AuthContext.Provider>
