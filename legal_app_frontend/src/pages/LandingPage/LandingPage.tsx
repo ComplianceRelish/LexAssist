@@ -1,309 +1,321 @@
-// src/pages/LandingPage/LandingPage.tsx
-import { 
-  Box, 
-  Button, 
-  Container, 
-  Flex, 
-  Heading, 
-  Image, 
-  Text, 
-  SimpleGrid,
-  Stack,
+// src/pages/LandingPage/LandingPage.tsx - ENHANCED WITH PROPER BRANDING
+import React from 'react';
+import {
+  Box,
+  Flex,
+  Container,
+  Heading,
+  Text,
+  Button,
+  VStack,
+  HStack,
+  Image,
+  Grid,
+  GridItem,
   Icon,
-  LinkBox,
-  Link,
-  BoxProps,
-  HeadingProps,
-  FlexProps,
-  ButtonProps,
-  TextProps
+  useColorModeValue,
+  Badge,
+  Card,
+  CardBody,
 } from '@chakra-ui/react';
-import { Global, css } from '@emotion/react';
-import { Link as RouterLink } from 'react-router-dom';
-import { FaBalanceScale, FaSearch, FaFileAlt, FaShieldAlt } from 'react-icons/fa';
-import { IconType } from 'react-icons';
+import { 
+  FaBalanceScale, 
+  FaGavel, 
+  FaBook, 
+  FaShieldAlt,
+  FaRocket,
+  FaBrain,
+  FaChartLine,
+  FaUsers,
+  FaStar
+} from 'react-icons/fa';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { useBrand } from '../../contexts/BrandContext';
 
-// Define feature item interface
-interface FeatureItem {
-  icon: IconType;
-  title: string;
-  description: string;
-}
-
-const LandingPage = () => {
-  // Colors derived from the 3D logo
-  const bgColor = "rgb(245, 241, 236)"; // Light beige background from logo
-  const primaryColor = "rgb(7, 71, 94)"; // Deep teal blue
-  const accentColor = "rgb(242, 190, 34)"; // Golden yellow
-  const textColor = "gray.800";
+const LandingPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { logoUrl, companyName } = useBrand();
   
-  // Feature data
-  const features: FeatureItem[] = [
-    {
-      icon: FaBalanceScale,
-      title: 'Legal Document Analysis',
-      description: 'Advanced AI algorithms analyze legal documents with high precision and accuracy.'
-    },
-    {
-      icon: FaSearch,
-      title: 'Case Research',
-      description: 'Comprehensive legal research capabilities with access to extensive case databases.'
-    },
-    {
-      icon: FaFileAlt,
-      title: 'Document Management',
-      description: 'Secure storage and organization of all your important legal documents.'
-    },
-    {
-      icon: FaShieldAlt,
-      title: 'Data Security',
-      description: 'End-to-end encryption ensuring your sensitive legal information remains protected.'
+  const primaryColor = "#1A365D";
+  const goldColor = "#D4AF37";
+  const bgGradient = useColorModeValue(
+    'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+    'linear-gradient(135deg, #2d3748 0%, #1a202c 100%)'
+  );
+
+  // If user is already logged in, redirect to dashboard
+  React.useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
     }
-  ];
+  }, [user, navigate]);
 
-  // Type-safe button props for navigation
-  const registerButtonProps: ButtonProps & { as: typeof RouterLink; to: string } = {
-    as: RouterLink,
-    to: "/register",  // Updated to match the actual registration route
-    size: { base: "md", md: "lg" },
-    bg: primaryColor,
-    color: "white",
-    fontWeight: "bold",
-    _hover: { bg: 'teal.700' },
-    w: { base: '100%', md: 'auto' },
-    mb: { base: 2, md: 0 }
-  };
-
-  const loginButtonProps: ButtonProps & { as: typeof RouterLink; to: string } = {
-    as: RouterLink,
-    to: "/login",  // This matches the route in App.tsx
-    size: { base: "md", md: "lg" },
-    variant: "outline",
-    color: primaryColor,
-    fontWeight: "bold",
-    borderColor: primaryColor,
-    _hover: { bg: `${primaryColor}10` },
-    w: { base: '100%', md: 'auto' }
-  };
-  
   return (
-    <Box bg={bgColor} minH="100vh">
-      {/* Global styles for animations */}
-      <Global
-        styles={css`
-          @keyframes float {
-            0% {
-              transform: translateY(0px);
-            }
-            50% {
-              transform: translateY(-15px);
-            }
-            100% {
-              transform: translateY(0px);
-            }
-          }
-          
-          .logo-3d {
-            animation: float 6s ease-in-out infinite;
-            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.15));
-          }
-          
-          @media (prefers-reduced-motion) {
-            .logo-3d {
-              animation: none;
-            }
-          }
-        `}
-      />
-      
-      {/* Hero Logo Section - Logo at the top */}
-      <Container maxW="1200px" pt={{ base: 5, md: 8 }} pb={{ base: 5, md: 6 }} h="calc(100vh - 80px)" display="flex" alignItems="center">
-        <Stack spacing={4} w="100%" justifyContent="center">
-          {/* Prominent Logo Display as Hero Element */}
-          <Box
-            w="100%"
-            display="flex"
-            justifyContent="center"
-            alignItems="center"
-            py={{ base: 3, md: 5 }}
-          >
-            <Image
-              src="/images/LexAssist_Logo.png"
-              alt="LexAssist 3D Logo"
-              maxW={{ base: "200px", md: "260px", lg: "320px" }}
-              w="100%"
-              h="auto"
-              objectFit="contain"
-              className="logo-static"
-            />
-          </Box>
-          
-          {/* Tagline and CTA */}
-          <Stack spacing={4} textAlign="center" maxW="800px" mx="auto" px={4}>
-            <Heading
-              as="h1"
-              fontSize={{ base: 'xl', md: '3xl', lg: '4xl' }}
-              fontWeight="bold"
-              color={primaryColor}
+    <Box minH="100vh" bg={bgGradient}>
+      {/* Navigation Header */}
+      <Box bg="white" boxShadow="sm" position="sticky" top={0} zIndex={100}>
+        <Container maxW="7xl" py={4}>
+          <Flex justify="space-between" align="center">
+            <Flex align="center">
+              <Image src={logoUrl} alt={`${companyName} Logo`} height="50px" mr={4} />
+              <Heading size="lg" color={primaryColor} fontFamily="Playfair Display, serif">
+                {companyName}
+              </Heading>
+            </Flex>
+            <HStack spacing={4}>
+              <Button
+                as={RouterLink}
+                to="/login"
+                variant="outline"
+                borderColor={primaryColor}
+                color={primaryColor}
+                _hover={{ bg: `${primaryColor}15` }}
+              >
+                Sign In
+              </Button>
+              <Button
+                as={RouterLink}
+                to="/register"
+                bg={goldColor}
+                color={primaryColor}
+                _hover={{ bg: `${goldColor}90` }}
+              >
+                Get Started
+              </Button>
+            </HStack>
+          </Flex>
+        </Container>
+      </Box>
+
+      {/* Hero Section */}
+      <Container maxW="7xl" py={20}>
+        <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={12} alignItems="center">
+          <VStack align="start" spacing={8}>
+            <Badge bg={`${goldColor}20`} color={goldColor} px={4} py={2} borderRadius="full">
+              AI-Powered Legal Technology
+            </Badge>
+            
+            <Heading 
+              size="3xl" 
+              color={primaryColor} 
+              fontFamily="Playfair Display, serif"
               lineHeight="1.2"
             >
-              Empowering Your Legal Journey
+              Advanced Legal Technology at Your Fingertips
             </Heading>
             
-            <Stack 
-              direction={{ base: 'column', md: 'row' }} 
-              spacing={4} 
-              pt={4} 
-              justify="center"
-              width="100%"
-            >
-              <Button {...registerButtonProps}>
-                Register
-              </Button>
-              <Button {...loginButtonProps}>
-                Login
-              </Button>
-            </Stack>
-          </Stack>
-        </Stack>
-      </Container>
-      
-      {/* Features Section */}
-      <Box
-        as="section"
-        py={{ base: '60px', md: '80px' }}
-        bg="white"
-        borderTopRadius="3xl"
-        boxShadow="0 -10px 30px rgba(0,0,0,0.05)"
-      >
-        <Container maxW="1200px">
-          <Stack spacing={12}>
-            <Stack spacing={3} align="center">
-              <Heading
-                as="h2"
-                fontSize={{ base: '2xl', md: '3xl' }}
-                fontWeight="bold"
-                color={primaryColor}
-                textAlign="center"
-              >
-                Powerful Legal Tools
-              </Heading>
-              <Text
-                fontSize={{ base: 'md', md: 'lg' }}
-                color={textColor}
-                textAlign="center"
-                maxW="800px"
-              >
-                Designed for legal professionals, our platform offers comprehensive tools to streamline your workflow
-              </Text>
-            </Stack>
-            
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacingX={8} spacingY={8}>
-              {features.map((feature, index) => (
-                <Stack
-                  key={index}
-                  p={6}
-                  bg="white"
-                  borderRadius="lg"
-                  boxShadow="md"
-                  alignItems="flex-start"
-                  borderTop="4px solid"
-                  borderTopColor={index % 2 === 0 ? primaryColor : accentColor}
-                  transition="transform 0.3s ease"
-                  _hover={{ transform: 'translateY(-5px)' }}
-                  spacing={3}
-                >
-                  <Box
-                    borderRadius="full"
-                    bg={index % 2 === 0 ? `${primaryColor}20` : `${accentColor}20`}
-                    p={3}
-                  >
-                    <Icon
-                      as={feature.icon}
-                      boxSize={6}
-                      color={index % 2 === 0 ? primaryColor : accentColor}
-                    />
-                  </Box>
-                  <Heading as="h3" fontSize="lg" fontWeight="bold" color={primaryColor}>
-                    {feature.title}
-                  </Heading>
-                  <Text fontSize="sm" color="gray.600">
-                    {feature.description}
-                  </Text>
-                </Stack>
-              ))}
-            </SimpleGrid>
-          </Stack>
-        </Container>
-      </Box>
-      
-      {/* CTA Section */}
-      <Box as="section" py={{ base: '60px', md: '80px' }} bg={bgColor}>
-        <Container maxW="900px">
-          <Box
-            bg="linear-gradient(135deg, rgba(7,71,94,0.95) 0%, rgba(7,71,94,0.8) 100%)"
-            borderRadius="xl"
-            p={{ base: 6, md: 10 }}
-            textAlign="center"
-            boxShadow="xl"
-          >
-            <Stack spacing={6} align="center">
-              <Heading color="white" fontSize={{ base: 'xl', md: '2xl' }}>
-                Ready to Transform Your Legal Practice?
-              </Heading>
-              <Text color="whiteAlpha.900" maxW="600px">
-                Join thousands of legal professionals who have streamlined their workflow with LexAssist's powerful tools.
-              </Text>
+            <Text fontSize="xl" color="gray.600" lineHeight="1.6">
+              Powered by <strong>InLegalBERT</strong> and cutting-edge AI, LexAssist provides 
+              comprehensive legal analysis, case research, and document processing for modern 
+              legal professionals.
+            </Text>
+
+            <HStack spacing={6} color={goldColor} fontSize="2xl">
+              <Icon as={FaBalanceScale} />
+              <Icon as={FaGavel} />
+              <Icon as={FaBook} />
+              <Icon as={FaBrain} />
+            </HStack>
+
+            <VStack align="start" spacing={4} w="full">
               <Button
+                as={RouterLink}
+                to="/register"
                 size="lg"
-                bg={accentColor}
-                color={primaryColor}
-                fontWeight="bold"
-                _hover={{ bg: 'yellow.500' }}
+                bg={primaryColor}
+                color="white"
+                _hover={{ bg: "#2A4A6B", transform: "translateY(-2px)" }}
+                transition="all 0.3s ease"
+                leftIcon={<Icon as={FaRocket} />}
               >
-                Start Your Free Trial
+                Start Free Trial
               </Button>
-            </Stack>
+              
+              <Text fontSize="sm" color="gray.500">
+                <Icon as={FaShieldAlt} color={goldColor} mr={2} />
+                Protected by enterprise-grade security
+              </Text>
+            </VStack>
+          </VStack>
+
+          <Box>
+            <Box
+              bg="white"
+              borderRadius="2xl"
+              boxShadow="2xl"
+              p={8}
+              border="1px"
+              borderColor="gray.200"
+              position="relative"
+            >
+              {/* Mock Dashboard Preview */}
+              <VStack spacing={4} align="stretch">
+                <Flex justify="space-between" align="center">
+                  <Text fontWeight="bold" color={primaryColor}>Dashboard Preview</Text>
+                  <Badge colorScheme="green">Live</Badge>
+                </Flex>
+                
+                <Grid templateColumns="repeat(2, 1fr)" gap={4}>
+                  <Card size="sm" bg={`${primaryColor}10`}>
+                    <CardBody>
+                      <Text fontSize="2xl" fontWeight="bold" color={primaryColor}>12</Text>
+                      <Text fontSize="sm" color="gray.600">Active Cases</Text>
+                    </CardBody>
+                  </Card>
+                  <Card size="sm" bg={`${goldColor}10`}>
+                    <CardBody>
+                      <Text fontSize="2xl" fontWeight="bold" color={goldColor}>86%</Text>
+                      <Text fontSize="sm" color="gray.600">Success Rate</Text>
+                    </CardBody>
+                  </Card>
+                </Grid>
+                
+                <Box h="100px" bg="gray.50" borderRadius="md" position="relative">
+                  <Flex h="full" align="center" justify="center" color="gray.400">
+                    <Icon as={FaChartLine} fontSize="2xl" mr={2} />
+                    <Text>Case Analytics Chart</Text>
+                  </Flex>
+                </Box>
+              </VStack>
+            </Box>
           </Box>
+        </Grid>
+      </Container>
+
+      {/* Features Section */}
+      <Box bg="white" py={20}>
+        <Container maxW="7xl">
+          <VStack spacing={12}>
+            <VStack spacing={4} textAlign="center">
+              <Heading size="xl" color={primaryColor} fontFamily="Playfair Display, serif">
+                Why Choose LexAssist?
+              </Heading>
+              <Text fontSize="lg" color="gray.600" maxW="2xl">
+                Built specifically for Indian legal system with advanced AI capabilities
+              </Text>
+            </VStack>
+
+            <Grid templateColumns={{ base: '1fr', md: 'repeat(3, 1fr)' }} gap={8}>
+              <Card borderTop="4px" borderTopColor={primaryColor} _hover={{ transform: "translateY(-4px)" }} transition="all 0.3s ease">
+                <CardBody>
+                  <VStack spacing={4}>
+                    <Box p={4} bg={`${primaryColor}15`} borderRadius="full">
+                      <Icon as={FaBrain} color={primaryColor} fontSize="2xl" />
+                    </Box>
+                    <Heading size="md" color={primaryColor}>AI-Powered Analysis</Heading>
+                    <Text textAlign="center" color="gray.600">
+                      Advanced InLegalBERT model trained specifically on Indian legal corpus for precise analysis
+                    </Text>
+                  </VStack>
+                </CardBody>
+              </Card>
+
+              <Card borderTop="4px" borderTopColor={goldColor} _hover={{ transform: "translateY(-4px)" }} transition="all 0.3s ease">
+                <CardBody>
+                  <VStack spacing={4}>
+                    <Box p={4} bg={`${goldColor}15`} borderRadius="full">
+                      <Icon as={FaBook} color={goldColor} fontSize="2xl" />
+                    </Box>
+                    <Heading size="md" color={primaryColor}>Comprehensive Research</Heading>
+                    <Text textAlign="center" color="gray.600">
+                      Access to vast legal database with instant case law, statutes, and precedent retrieval
+                    </Text>
+                  </VStack>
+                </CardBody>
+              </Card>
+
+              <Card borderTop="4px" borderTopColor="green.500" _hover={{ transform: "translateY(-4px)" }} transition="all 0.3s ease">
+                <CardBody>
+                  <VStack spacing={4}>
+                    <Box p={4} bg="green.50" borderRadius="full">
+                      <Icon as={FaChartLine} color="green.500" fontSize="2xl" />
+                    </Box>
+                    <Heading size="md" color={primaryColor}>Smart Analytics</Heading>
+                    <Text textAlign="center" color="gray.600">
+                      Track case progress, success rates, and get insights for better legal strategy
+                    </Text>
+                  </VStack>
+                </CardBody>
+              </Card>
+            </Grid>
+          </VStack>
         </Container>
       </Box>
-      
+
+      {/* Stats Section */}
+      <Box bg={`${primaryColor}05`} py={20}>
+        <Container maxW="7xl">
+          <Grid templateColumns={{ base: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }} gap={8}>
+            <VStack>
+              <Text fontSize="4xl" fontWeight="bold" color={primaryColor}>1000+</Text>
+              <Text color="gray.600">Legal Professionals</Text>
+            </VStack>
+            <VStack>
+              <Text fontSize="4xl" fontWeight="bold" color={goldColor}>95%</Text>
+              <Text color="gray.600">Accuracy Rate</Text>
+            </VStack>
+            <VStack>
+              <Text fontSize="4xl" fontWeight="bold" color="green.500">24/7</Text>
+              <Text color="gray.600">AI Support</Text>
+            </VStack>
+            <VStack>
+              <Text fontSize="4xl" fontWeight="bold" color="purple.500">50M+</Text>
+              <Text color="gray.600">Legal Documents</Text>
+            </VStack>
+          </Grid>
+        </Container>
+      </Box>
+
+      {/* CTA Section */}
+      <Box bg={primaryColor} py={20}>
+        <Container maxW="7xl">
+          <VStack spacing={8} textAlign="center">
+            <Heading size="xl" color="white" fontFamily="Playfair Display, serif">
+              Ready to Transform Your Legal Practice?
+            </Heading>
+            <Text fontSize="lg" color="gray.300" maxW="2xl">
+              Join thousands of legal professionals who trust LexAssist for their AI-powered legal research and analysis
+            </Text>
+            <HStack spacing={4}>
+              <Button
+                as={RouterLink}
+                to="/register"
+                size="lg"
+                bg={goldColor}
+                color={primaryColor}
+                _hover={{ bg: `${goldColor}90`, transform: "translateY(-2px)" }}
+                transition="all 0.3s ease"
+              >
+                Start Free Trial
+              </Button>
+              <Button
+                as={RouterLink}
+                to="/login"
+                size="lg"
+                variant="outline"
+                borderColor="white"
+                color="white"
+                _hover={{ bg: "whiteAlpha.200" }}
+              >
+                Sign In
+              </Button>
+            </HStack>
+          </VStack>
+        </Container>
+      </Box>
+
       {/* Footer */}
-      <Box as="footer" bg={primaryColor} color="white" py={10}>
-        <Container maxW="1200px">
-          <Flex 
-            direction={{ base: 'column', md: 'row' }} 
-            justify="space-between" 
-            align="flex-start"
-            gap={8}
-          >
-            <Stack align="flex-start" spacing={4}>
-              <Image src="/images/LexAssist_Logo.png" alt="LexAssist Logo" height="40px" />
-              <Text fontSize="sm">© 2025 LexAssist. All rights reserved.</Text>
-            </Stack>
-            
-            <SimpleGrid columns={{ base: 2, md: 3 }} spacingX={8} spacingY={8}>
-              <Stack align="flex-start" spacing={3}>
-                <Text fontWeight="bold">Company</Text>
-                <Link href="#" fontSize="sm">About Us</Link>
-                <Link href="#" fontSize="sm">Careers</Link>
-                <Link href="#" fontSize="sm">Contact</Link>
-              </Stack>
-              
-              <Stack align="flex-start" spacing={3}>
-                <Text fontWeight="bold">Product</Text>
-                <Link href="#" fontSize="sm">Features</Link>
-                <Link href="#" fontSize="sm">Pricing</Link>
-                <Link href="#" fontSize="sm">Documentation</Link>
-              </Stack>
-              
-              <Stack align="flex-start" spacing={3}>
-                <Text fontWeight="bold">Legal</Text>
-                <Link href="#" fontSize="sm">Privacy Policy</Link>
-                <Link href="#" fontSize="sm">Terms of Service</Link>
-                <Link href="#" fontSize="sm">Security</Link>
-              </Stack>
-            </SimpleGrid>
+      <Box bg="gray.900" py={12}>
+        <Container maxW="7xl">
+          <Flex justify="center" align="center">
+            <Text color="gray.400" textAlign="center">
+              © 2025 {companyName}. All rights reserved. | 
+              <Text as="span" color={goldColor} ml={2}>
+                Powered by InLegalBERT & Advanced AI
+              </Text>
+            </Text>
           </Flex>
         </Container>
       </Box>

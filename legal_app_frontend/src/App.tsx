@@ -199,61 +199,62 @@ const AppContent: React.FC = () => {
 
   return (
     <Routes>
-      {/* Public routes */}
-      <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
-      <Route path="/login" element={<LoginPage onLogin={() => {}} />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/verify-email" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/env-check" element={<EnvCheckPage />} />
+  {/* Public routes */}
+  <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+  <Route path="/landing" element={<LandingPage />} />
+  <Route path="/login" element={<LoginPage onLogin={() => {}} />} />
+  <Route path="/register" element={<RegisterPage />} />
+  <Route path="/verify-email" element={<Navigate to="/dashboard" replace />} />
+  <Route path="/env-check" element={<EnvCheckPage />} />
 
-      {/* Protected routes */}
-      <Route 
-        path="/dashboard" 
-        element={
-          <ProtectedRoute>
-            <EnhancedUserDashboard />
-          </ProtectedRoute>
-        } 
-      />
-      
-      {/* Legacy mobile dashboard - keep for compatibility */}
-      <Route 
-        path="/mobile-dashboard" 
-        element={
-          <ProtectedRoute>
-            <MobileFirstDashboard 
-              user={user}
-              onBriefSubmit={handleBriefSubmit}
-              isAnalyzing={isAnalyzing}
-              analysisResults={analysisResults}
-              hasAccess={hasAccess}
-            />
-          </ProtectedRoute>
-        } 
-      />
-      
-      <Route 
-        path="/profile" 
-        element={
-          <ProtectedRoute>
-            <UserProfile user={user} subscription={subscription} />
-          </ProtectedRoute>
-        } 
-      />
+  {/* Protected routes */}
+  <Route 
+    path="/dashboard" 
+    element={
+      <ProtectedRoute>
+        <EnhancedUserDashboard />
+      </ProtectedRoute>
+    } 
+  />
+  
+  {/* Legacy mobile dashboard - keep for compatibility */}
+  <Route 
+    path="/mobile-dashboard" 
+    element={
+      <ProtectedRoute>
+        <MobileFirstDashboard 
+          user={user}
+          onBriefSubmit={handleBriefSubmit}
+          isAnalyzing={isAnalyzing}
+          analysisResults={analysisResults}
+          hasAccess={hasAccess}
+        />
+      </ProtectedRoute>
+    } 
+  />
+  
+  <Route 
+    path="/profile" 
+    element={
+      <ProtectedRoute>
+        <UserProfile user={user} subscription={subscription} />
+      </ProtectedRoute>
+    } 
+  />
 
-      {/* Admin routes */}
-      <Route 
-        path="/admin" 
-        element={
-          <AdminRoute>
-            <AdminDashboard user={user} />
-          </AdminRoute>
-        } 
-      />
+  {/* Admin routes */}
+  <Route 
+    path="/admin" 
+    element={
+      <AdminRoute>
+        <AdminDashboard user={user} />
+      </AdminRoute>
+    } 
+  />
 
-      {/* Catch-all route - redirect to dashboard */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+  {/* Catch-all route - redirect based on auth status */}
+  <Route path="*" element={<Navigate to={user ? "/dashboard" : "/"} replace />} />
+</Routes>
   );
 };
 
