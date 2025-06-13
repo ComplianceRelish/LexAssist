@@ -224,6 +224,16 @@ class AuthService {
     return this.currentUser;
   }
 
+  public setCurrentUser(user: User): void {
+    this.currentUser = user;
+    this.saveToStorage();
+    // Create a mock token that won't expire for a year
+    this.tokens = {
+      token: 'auto-login-mock-token',
+      expiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000)
+    };
+  }
+
   public async updateProfile(data: Partial<User>): Promise<User> {
     try {
       const response = await axios.put<{ user: User }>('/api/auth/profile', data);

@@ -1,8 +1,21 @@
 // CORRECTED: src/contexts/AuthContext.tsx
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-// ❌ REMOVE: import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth.service';
 import { User, Subscription } from '../types';
+
+// Mock user for auto-login (bypassing verification)
+const mockUser: User = {
+  id: 'auto-user-1',
+  name: 'Auto User',
+  email: 'auto@lexassist.com',
+  role: 'user',
+  subscription: {
+    tier: 'pro', // Using pro to access more features
+    expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    features: ['advanced_search', 'download_pdf', 'citation_export', 'case_comparison']
+  },
+  verified: true
+};
 
 interface RegistrationData {
   firstName: string;
@@ -23,12 +36,13 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<User>; // ✅ Return user instead of void
+  login: (email: string, password: string) => Promise<User>; // Return user instead of void
   logout: () => Promise<void>;
-  signUp: (userData: RegistrationData) => Promise<User>; // ✅ Return user instead of void
+  signUp: (userData: RegistrationData) => Promise<User>; // Return user instead of void
   updateProfile: (data: Partial<User>) => Promise<void>;
   refreshUser: () => Promise<void>;
   clearError: () => void;
+  autoLogin: () => Promise<User>; // New function for auto-login bypass
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,23 +54,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loading: true,
     error: null
   });
-  
-  // ❌ REMOVE: const navigate = useNavigate();
 
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        if (authService.isAuthenticated()) {
-          const user = authService.getCurrentUser();
-          setState(prev => ({
-            ...prev,
-            user,
-            subscription: user?.subscription || null,
-            loading: false
-          }));
-        } else {
-          setState(prev => ({ ...prev, loading: false }));
-        }
+        // Auto-login functionality - always authenticate with mock user
+        // Store mock user in local storage
+        localStorage.setItem('lexAssistUser', JSON.stringify(mockUser));
+        authService.setCurrentUser(mockUser);
+        
+        setState(prev => ({
+          ...prev,
+          user: mockUser,
+          subscription: mockUser.subscription || null,
+          loading: false
+        }));
       } catch (error) {
         setState(prev => ({
           ...prev,
@@ -79,9 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         subscription: user.subscription || null,
         loading: false
       }));
-      // ✅ REMOVE navigation - let components handle it
-      // navigate('/dashboard');
-      return user; // ✅ Return user data
+      return user; // Return user data
     } catch (error: any) {
       setState(prev => ({
         ...prev,
@@ -101,11 +111,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loading: false,
         user
       }));
-      
-      // ✅ REMOVE navigation and alert - let components handle it
-      // alert('Registration successful! Please check your email for verification code.');
-      // navigate('/verify-email?email=' + encodeURIComponent(userData.email));
-      return user; // ✅ Return user data
+      return user; // Return user data
     } catch (error: any) {
       setState(prev => ({
         ...prev,
@@ -126,8 +132,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loading: false,
         error: null
       });
-      // ✅ REMOVE navigation - let components handle it
-      // navigate('/login');
     } catch (error: any) {
       setState(prev => ({
         ...prev,
@@ -181,6 +185,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setState(prev => ({ ...prev, error: null }));
   };
 
+  // Auto login functionality - creates a mock authenticated session
+  const autoLogin = async (): Promise<User> => {
+    setState(prev => ({ ...prev, loading: true, error: null }));
+    try {
+      // Set the mock user
+      localStorage.setItem('lexAssistUser', JSON.stringify(mockUser));
+      authService.setCurrentUser(mockUser);
+      
+      setState(prev => ({
+        ...prev,
+        user: mockUser,
+        subscription: mockUser.subscription,
+        loading: false
+      }));
+      
+      return mockUser;
+    } catch (error: any) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Auto-login failed'
+      }));
+      throw error;
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       ...state,
@@ -189,7 +219,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signUp,
       updateProfile,
       refreshUser,
-      clearError
+      clearError,
+      autoLogin
     }}>
       {!state.loading && children}
     </AuthContext.Provider>
