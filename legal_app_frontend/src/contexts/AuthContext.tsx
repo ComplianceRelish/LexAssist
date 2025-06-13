@@ -10,11 +10,12 @@ const mockUser: User = {
   email: 'auto@lexassist.com',
   role: 'user',
   subscription: {
+    id: 'auto-subscription-1',
     tier: 'pro', // Using pro to access more features
     expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
     features: ['advanced_search', 'download_pdf', 'citation_export', 'case_comparison']
-  },
-  verified: true
+  }
+  // Removed 'verified' property as it doesn't exist in the User type
 };
 
 interface RegistrationData {
@@ -196,7 +197,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setState(prev => ({
         ...prev,
         user: mockUser,
-        subscription: mockUser.subscription,
+        subscription: mockUser.subscription || null, // Fix TypeScript error with explicit null fallback
         loading: false
       }));
       
