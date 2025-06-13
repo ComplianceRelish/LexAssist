@@ -1,5 +1,54 @@
+// src/services/api.service.ts - ENHANCED VERSION
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { authService } from './auth.service';
+
+// Add new interfaces for user-specific data
+export interface UserCase {
+  id: string;
+  title: string;
+  clientName: string;
+  caseType: string;
+  status: 'active' | 'pending' | 'closed' | 'urgent';
+  court: string;
+  nextHearing?: string;
+  createdAt: string;
+  updatedAt: string;
+  userId: string;
+}
+
+export interface UserDocument {
+  id: string;
+  title: string;
+  type: string;
+  size: number;
+  uploadedAt: string;
+  caseId?: string;
+  userId: string;
+  analysisStatus?: 'pending' | 'completed' | 'failed';
+}
+
+export interface UserStats {
+  activeCases: number;
+  pendingDeadlines: number;
+  documentsReviewed: number;
+  successRate: number;
+  totalBriefsAnalyzed: number;
+  monthlyGrowth: {
+    cases: number;
+    documents: number;
+  };
+}
+
+export interface CaseBriefSubmission {
+  clientName: string;
+  caseTitle: string;
+  caseType: string;
+  briefDescription: string;
+  urgencyLevel: 'low' | 'medium' | 'high';
+  courtLevel: string;
+  userId: string;
+  documents?: File[];
+}
 
 class ApiService {
   private static instance: ApiService;
@@ -9,8 +58,8 @@ class ApiService {
 
   private constructor() {
     this.axiosInstance = axios.create({
-      baseURL: process.env.REACT_APP_API_URL,
-      timeout: 10000,
+      baseURL: import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com',
+      timeout: 30000, // Increased for AI processing
       headers: {
         'Content-Type': 'application/json',
       },
@@ -46,7 +95,6 @@ class ApiService {
     this.axiosInstance.interceptors.response.use(
       (response: AxiosResponse) => response,
       async (error: AxiosError) => {
-        // Define the extended type that includes _retry property
         interface ExtendedInternalAxiosRequestConfig extends InternalAxiosRequestConfig {
           _retry?: boolean;
         }
@@ -54,7 +102,6 @@ class ApiService {
         const originalRequest = error.config;
         if (!originalRequest) return Promise.reject(error);
         
-        // Cast to extended type first
         const extendedRequest = originalRequest as ExtendedInternalAxiosRequestConfig;
         
         if (error.response?.status === 401 && !extendedRequest._retry) {
@@ -108,6 +155,78 @@ class ApiService {
     authService.logout();
   }
 
+  // ENHANCED: User-specific data methods
+  public async getUserCases(userId: string): Promise<UserCase[]> {
+    try {
+      const response = await this.get<{ cases: UserCase[] }>(`/api/users/${userId}/cases`);
+      return response.data.cases || [];
+    } catch (error) {
+      console.error('Error fetching user cases:', error);
+      return [];
+    }
+  }
+
+  public async getUserDocuments(userId: string): Promise<UserDocument[]> {
+    try {
+      const response = await this.get<{ documents: UserDocument[] }>(`/api/users/${userId}/documents`);
+      return response.data.documents || [];
+    } catch (error) {
+      console.error('Error fetching user documents:', error);
+      return [];
+    }
+  }
+
+  public async getUserStats(userId: string): Promise<UserStats> {
+    try {
+      const response = await this.get<UserStats>(`/api/users/${userId}/stats`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+      return {
+        activeCases: 0,
+        pendingDeadlines: 0,
+        documentsReviewed: 0,
+        successRate: 0,
+        totalBriefsAnalyzed: 0,
+        monthlyGrowth: { cases: 0, documents: 0 }
+      };
+    }
+  }
+
+  // ENHANCED: Case Brief Analysis with InLegalBERT
+  public async submitCaseBrief(briefData: CaseBriefSubmission): Promise<any> {
+    try {
+      const response = await this.post('/api/legal/analyze-brief', briefData);
+      return response.data;
+    } catch (error) {
+      console.error('Error submitting case brief:', error);
+      throw error;
+    }
+  }
+
+  // ENHANCED: Create new case
+  public async createCase(caseData: Partial<UserCase>): Promise<UserCase> {
+    try {
+      const response = await this.post<UserCase>('/api/cases', caseData);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating case:', error);
+      throw error;
+    }
+  }
+
+  // ENHANCED: Get analysis results
+  public async getAnalysisResults(analysisId: string): Promise<any> {
+    try {
+      const response = await this.get(`/api/legal/analysis/${analysisId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching analysis results:', error);
+      throw error;
+    }
+  }
+
+  // Original methods
   public get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     return this.axiosInstance.get<T>(url, config);
   }

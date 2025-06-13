@@ -7,6 +7,11 @@ export interface User {
   role: 'user' | 'admin' | 'super_admin';
   avatarUrl?: string;
   phone?: string;
+  // Add fields needed for legal system determination
+  country?: string;
+  countryCode?: string;
+  mobileNumber?: string;
+  userType?: string; // 'client' or 'lawyer'
   stats?: {
     briefsAnalyzed: number;
     documentsDownloaded: number;

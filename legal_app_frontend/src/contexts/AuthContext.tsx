@@ -107,8 +107,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Register the user
       const user = await authService.register(userData);
       
+      // Add important country/user type information from registration data
+      // These are critical for determining which legal system to use
+      const userWithLegalContext = {
+        ...user,
+        country: userData.country,
+        countryCode: userData.countryCode,
+        mobileNumber: userData.mobileNumber,
+        userType: userData.userType
+      };
+      
       // Assign pro subscription and bypass verification
-      const enhancedUser = await assignProSubscription(user);
+      const enhancedUser = await assignProSubscription(userWithLegalContext);
       
       // Set as current user
       setState(prev => ({ 
