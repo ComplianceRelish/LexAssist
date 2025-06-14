@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Import routers
-from legal_app.backend.api.auth_endpoints import router as auth_router
-from legal_app.backend.api.legal_endpoints import router as legal_router
+# Import routers - use relative imports that will work in deployment
+from api.auth_endpoints import router as auth_router
+from api.legal_endpoints import router as legal_router
 
 # Create FastAPI app
 app = FastAPI(

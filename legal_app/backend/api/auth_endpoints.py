@@ -448,9 +448,9 @@ async def register_user(user_data: UserCreate, request: Request, response: Respo
             "legal_system": user_data.legal_system,
             "jurisdiction_type": user_data.jurisdiction_type,
             "role": role,
-            "is_active": False,  # Will be activated after verification
-            "email_verified": False,
-            "phone_verified": False,
+            "is_active": True,  # Automatically activate the user (skip verification)
+            "email_verified": True,  # Auto-mark email as verified
+            "phone_verified": True,  # Auto-mark phone as verified
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }
@@ -624,33 +624,27 @@ async def login_for_access_token(
     response: Response = None,
     supabase: Client = Depends(get_supabase_client)):
     """
-    Authenticate a user - requires email verification
+    Authenticate a user - verification skipped
     """
     try:
-        print(f"=== LOGIN WITH VERIFICATION CHECK ===")
+        print(f"=== LOGIN (NO VERIFICATION CHECK) ===")
         print(f"Attempting to login user: {form_data.username}")
         
-        # First check if user is verified
+        # We skip verification check as we've modified registration to auto-verify users
+        # Just check if user exists in database
         try:
             user_check = supabase.table("users").select(
-                "email_verified, is_active, full_name, role, created_at"
+                "full_name, role, created_at, country, country_code"
             ).eq("email", form_data.username).single().execute()
             
             if user_check.data:
-                if not user_check.data.get("email_verified", False):
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Please verify your email before logging in. Check your email for the verification code."
-                    )
-                if not user_check.data.get("is_active", False):
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Account is not active. Please contact support."
-                    )
-        except HTTPException:
-            raise
+                print(f"User found in database: {user_check.data.get('full_name')}")
+                print(f"Country: {user_check.data.get('country')}, Code: {user_check.data.get('country_code')}")
+            else:
+                print(f"User not found in database, will rely on auth data")
+                
         except Exception as db_error:
-            print(f"Database verification check failed: {str(db_error)}")
+            print(f"Database check failed: {str(db_error)}")
             # Continue with login attempt
         
         # Proceed with Supabase authentication

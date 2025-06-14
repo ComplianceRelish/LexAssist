@@ -1,6 +1,6 @@
 # Add to legal_app/backend/api/legal_endpoints.py
 
-from fastapi import BackgroundTasks, Depends, HTTPException, status, Response, File, Form, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Response, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
 from supabase import Client
 from pydantic import BaseModel
@@ -10,11 +10,13 @@ import json
 import os
 
 # Import dependencies
-from legal_app.backend.api.auth_endpoints import verify_user_access
-from legal_app.backend.services.supabase_client import get_supabase_client
-from legal_app.backend.services.ai_service import streaming_ai_service, legal_ragflow_service
+import sys
 
-from fastapi import APIRouter
+# Add the current directory to path to help with relative imports
+from api.auth_endpoints import verify_user_access
+from api.supabase_client import get_supabase_client
+
+# Define the router
 router = APIRouter(prefix="/api", tags=["Legal"])
 
 # Model definitions for type checking
