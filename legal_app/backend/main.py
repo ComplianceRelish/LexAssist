@@ -9,8 +9,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Import your auth router
+# Import routers
 from api.auth_endpoints import router as auth_router
+from api.legal_endpoints import router as legal_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -35,6 +36,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth_router, prefix="/api/auth")
+app.include_router(legal_router)  # No prefix as router already has prefix='/api'
 
 # Health check endpoint
 @app.get("/")
