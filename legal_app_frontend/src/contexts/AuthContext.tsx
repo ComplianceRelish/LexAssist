@@ -153,31 +153,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signUp = async (userData: RegistrationData): Promise<User> => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
-      // Register the user
+      // Register the user – backend returns basic user object but **NO AUTH TOKEN** yet
       const user = await authService.register(userData);
       
-      // Add important country/user type information from registration data
-      // These are critical for determining which legal system to use
-      const userWithLegalContext = {
-        ...user,
-        country: userData.country,
-        countryCode: userData.countryCode,
-        mobileNumber: userData.mobileNumber,
-        userType: userData.userType
-      };
+      // Registration succeeded. Ask user to verify and then log in.
+      console.log('Registration successful. Redirecting to login page…');
       
-      // Assign pro subscription and bypass verification
-      const enhancedUser = await assignProSubscription(userWithLegalContext);
+      // Clear any existing auth state – we are NOT auto-logging in
+      setState(prev => ({ ...prev, loading: false }));
       
-      // Set as current user
-      setState(prev => ({ 
-        ...prev, 
-        loading: false,
-        user: enhancedUser,
-        subscription: enhancedUser.subscription || null // Ensure null fallback
-      }));
+      // Navigate caller back to login (do not set current user)
+      window.location.href = '/login';
       
-      return enhancedUser; // Return enhanced user data
+      return user as unknown as User;
     } catch (error: any) {
       setState(prev => ({
         ...prev,
