@@ -168,18 +168,17 @@ class AuthService {
 
   public async login(email: string, password: string): Promise<User> {
     try {
+      console.log('Attempting regular login...');
       console.log('Logging in user:', email);
       
-      // Try direct login first (for users with verified emails)
+      // 🔧 FIX 1: Try JSON format first (most backends expect this)
       try {
-        // FastAPI OAuth2 expects x-www-form-urlencoded data
-        const params = new URLSearchParams();
-        params.append('username', email);
-        params.append('password', password);
-
-        const response = await axios.post<AuthResponse>('/api/auth/login', params, {
+        const response = await axios.post<AuthResponse>('/api/auth/login', {
+          email: email,  // Use 'email' instead of 'username'
+          password: password
+        }, {
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Type': 'application/json',
           },
         });
 
@@ -200,39 +199,87 @@ class AuthService {
         
         console.log('Authentication successful, token stored');
         return this.currentUser!;
-      } catch (loginError: any) {
-        // If login fails with email verification error, try admin bypass login
-        if (loginError.response?.data?.detail?.includes('Email not confirmed') || 
-            loginError.message?.includes('Email not confirmed')) {
-          
-          console.log('Attempting admin bypass login for unverified email...');
-          
-          // Use admin bypass endpoint that doesn't require email verification
-          const bypassResponse = await axios.post<AuthResponse>('/api/auth/admin-login', {
-            email,
-            password
+        
+      } catch (jsonError: any) {
+        console.log('JSON login failed, trying form-urlencoded...', jsonError.response?.data);
+        
+        // 🔧 FIX 2: Fallback to form-urlencoded if JSON fails
+        try {
+          const params = new URLSearchParams();
+          params.append('username', email);  // Some backends expect 'username'
+          params.append('password', password);
+
+          const response = await axios.post<AuthResponse>('/api/auth/login', params, {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
           });
+
+          console.log('Form login response:', response.data);
           
-          console.log('Admin bypass login response:', bypassResponse.data);
-          
-          if (!bypassResponse.data.access_token) {
-            throw new Error('No access token received from admin login');
+          if (!response.data.access_token) {
+            throw new Error('No access token received from server');
           }
           
           // Set auth data and store tokens
-          this.setAuthData(bypassResponse.data);
+          this.setAuthData(response.data);
           
-          console.log('Admin bypass authentication successful');
+          console.log('Form authentication successful, token stored');
           return this.currentUser!;
-        } else {
-          // If it's not an email verification error, rethrow
-          throw loginError;
+          
+        } catch (formError: any) {
+          // If both formats fail, check if it's an email verification error
+          const errorDetail = formError.response?.data?.detail || jsonError.response?.data?.detail;
+          
+          if (errorDetail?.includes('Email not confirmed') || 
+              errorDetail?.includes('not confirmed') ||
+              errorDetail?.includes('not verified')) {
+            
+            console.log('Attempting admin bypass login for unverified email...');
+            
+            // 🔧 FIX 3: Use consistent JSON format for admin login
+            const bypassResponse = await axios.post<AuthResponse>('/api/auth/admin-login', {
+              email: email,  // Consistent field naming
+              password: password
+            }, {
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            console.log('Admin bypass login response:', bypassResponse.data);
+            
+            if (!bypassResponse.data.access_token) {
+              throw new Error('No access token received from admin login');
+            }
+            
+            // Set auth data and store tokens
+            this.setAuthData(bypassResponse.data);
+            
+            console.log('Admin bypass authentication successful');
+            return this.currentUser!;
+          } else {
+            // If it's not an email verification error, throw the most recent error
+            throw formError;
+          }
         }
       }
     } catch (error: any) {
       console.error('Login error:', error.response?.data || error.message);
       this.clearAuth(); // Clear any partial auth state on failure
-      throw new Error(error.response?.data?.detail || 'Authentication failed');
+      
+      // 🔧 FIX 4: Better error messages
+      const errorMessage = error.response?.data?.detail || error.message || 'Authentication failed';
+      
+      if (errorMessage.includes('Invalid email or password')) {
+        throw new Error('Invalid email or password. Please check your credentials.');
+      } else if (errorMessage.includes('Email not confirmed')) {
+        throw new Error('Please verify your email address before logging in.');
+      } else if (errorMessage.includes('User not found')) {
+        throw new Error('No account found with this email address.');
+      } else {
+        throw new Error(errorMessage);
+      }
     }
   }
 
@@ -247,8 +294,9 @@ class AuthService {
   }
 
   private setAuthData(authResponse: AuthResponse): void {
-    // Calculate expiration time
-    const expiresAt = Date.now() + (authResponse.expires_in * 1000);
+    // Calculate expiration time (default to 1 hour if not provided)
+    const expiresIn = authResponse.expires_in || 3600;
+    const expiresAt = Date.now() + (expiresIn * 1000);
     
     this.tokens = {
       token: authResponse.access_token,
