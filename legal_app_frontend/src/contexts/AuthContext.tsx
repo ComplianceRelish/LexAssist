@@ -99,13 +99,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     try {
       const user = await authService.login(email, password);
+      
+      // Ensure user exists in database or create them if missing
+      try {
+        // First try to fetch user profile from API
+        await authService.refreshUser();
+        console.log('User profile fetched successfully');
+      } catch (profileError) {
+        console.warn('User profile not found in database, syncing with Supabase Auth');
+        // If profile fetch fails, create user record in database
+        if (user?.id) {
+          try {
+            // Create user record using the authenticated user data
+            await authService.updateProfile({
+              id: user.id,
+              email: user.email,
+              name: user.name || user.email.split('@')[0],
+              role: user.role || 'user',
+              userType: user.userType || 'client',
+              subscription: {
+                id: `sub_${Date.now()}`,
+                tier: 'free',
+                features: ['basic_legal_research', 'case_analysis'],
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days trial
+              }
+            });
+            console.log('Created user record in database');
+          } catch (createError) {
+            console.error('Failed to create user record:', createError);
+          }
+        }
+      }
+      
+      // Set the authenticated user
       setState(prev => ({
         ...prev,
         user,
         subscription: user.subscription || null,
         loading: false
       }));
-      return user; // Return user data
+      // navigate('/dashboard'); // Removed navigate function call
+      return user;
     } catch (error: any) {
       setState(prev => ({
         ...prev,
