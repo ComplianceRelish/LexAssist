@@ -1,6 +1,7 @@
 // CORRECTED: src/contexts/AuthContext.tsx
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authService } from '../services/auth.service';
+import { directLoginService } from '../services/direct-login.service';
 import { User, Subscription } from '../types';
 
 // This will be a pro tier subscription to assign to new users
@@ -104,57 +105,97 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       sessionStorage.removeItem('auth_tokens');
       sessionStorage.removeItem('auth_user');
       
-      // Perform login - this should set the token in authService
-      const user = await authService.login(email, password);
-      
-      console.log('Login successful, token acquired');
-      
-      // Verify we have a token before proceeding
-      const token = authService.getAccessToken();
-      if (!token) {
-        throw new Error('Authentication succeeded but no token was received');
-      }
-      
-      // Now that we have a valid token, fetch the user profile
       try {
-        // This will use the token to fetch the complete user profile
-        const profileData = await authService.refreshUser();
-        console.log('User profile fetched successfully');
+        // First try regular login
+        console.log('Attempting regular login...');
+        const user = await authService.login(email, password);
         
-        // Update our user object with the complete profile data
-        Object.assign(user, profileData);
-      } catch (profileError) {
-        console.warn('User profile not found in database, syncing with Supabase Auth');
-        // If profile fetch fails, create user record in database
+        console.log('Login successful, token acquired');
+        
+        // Verify we have a token before proceeding
+        const token = authService.getAccessToken();
+        if (!token) {
+          throw new Error('Authentication succeeded but no token was received');
+        }
+        
+        // Now that we have a valid token, fetch the user profile
         try {
-          // Create user with default subscription
-          await authService.updateProfile({
-            name: user.name || `${user.email.split('@')[0]}`,
-            email: user.email,
-            country: user.country || 'IN',
-            userType: user.userType || 'client',
-            subscription: {
-              id: 'default-subscription',
-              tier: 'pro',
-              expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-              features: ['advanced_search', 'download_pdf', 'citation_export', 'case_comparison']
-            }
-          });
-          console.log('Created user record in database');
-        } catch (createError) {
-          console.error('Failed to create user record:', createError);
+          // This will use the token to fetch the complete user profile
+          const profileData = await authService.refreshUser();
+          console.log('User profile fetched successfully');
+          
+          // Update our user object with the complete profile data
+          Object.assign(user, profileData);
+        } catch (profileError) {
+          console.warn('User profile not found in database, syncing with Supabase Auth');
+          // If profile fetch fails, create user record in database
+          try {
+            // Create user with default subscription
+            await authService.updateProfile({
+              name: user.name || `${user.email.split('@')[0]}`,
+              email: user.email,
+              country: user.country || 'IN',
+              userType: user.userType || 'client',
+              subscription: {
+                id: 'default-subscription',
+                tier: 'pro',
+                expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+                features: ['advanced_search', 'download_pdf', 'citation_export', 'case_comparison']
+              }
+            });
+            console.log('Created user record in database');
+          } catch (createError) {
+            console.error('Failed to create user record:', createError);
+          }
+        }
+        
+        // Set the authenticated user
+        setState(prev => ({
+          ...prev,
+          user,
+          subscription: user.subscription || null,
+          loading: false
+        }));
+        
+        return user;
+      } catch (loginError: any) {
+        // If regular login fails with email verification error, try direct login
+        if (loginError.message?.includes('Email not confirmed') || 
+            loginError.message?.includes('email verification')) {
+          
+          console.log('Regular login failed due to email verification, trying direct login...');
+          
+          try {
+            // Try direct login that bypasses email verification
+            const directLoginResponse = await directLoginService.directLogin(email, password);
+            
+            // Set auth data in the auth service
+            authService.setTokens({
+              token: directLoginResponse.access_token,
+              expiresAt: Date.now() + (directLoginResponse.expires_in * 1000)
+            });
+            
+            const user = directLoginResponse.user;
+            
+            // Set the authenticated user
+            setState(prev => ({
+              ...prev,
+              user,
+              subscription: user.subscription || null,
+              loading: false
+            }));
+            
+            console.log('Direct login successful');
+            return user;
+          } catch (directLoginError) {
+            console.error('Direct login failed:', directLoginError);
+            throw directLoginError;
+          }
+        } else {
+          // If it's not an email verification error, rethrow
+          throw loginError;
         }
       }
-      
-      // Set the authenticated user
-      setState(prev => ({
-        ...prev,
-        user,
-        subscription: user.subscription || null,
-        loading: false
-      }));
-      
-      return user;
     } catch (error: any) {
       setState(prev => ({
         ...prev,
