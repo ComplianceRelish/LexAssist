@@ -107,7 +107,7 @@ const LandingPage: React.FC = () => {
             </Heading>
             
             <Text fontSize="xl" color="gray.600" lineHeight="1.6">
-              Powered by <strong>InLegalBERT</strong> and cutting-edge AI, LexAssist provides 
+              Powered by <strong>AI Trained on Indian Legal Corpus</strong>, LexAssist provides 
               comprehensive legal analysis, case research, and document processing for modern 
               legal professionals.
             </Text>
@@ -206,7 +206,7 @@ const LandingPage: React.FC = () => {
                     </Box>
                     <Heading size="md" color={primaryColor}>AI-Powered Analysis</Heading>
                     <Text textAlign="center" color="gray.600">
-                      Advanced InLegalBERT model trained specifically on Indian legal corpus for precise analysis
+                      Advanced AI model trained specifically on Indian legal corpus for precise analysis
                     </Text>
                   </VStack>
                 </CardBody>
