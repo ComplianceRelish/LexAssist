@@ -170,22 +170,37 @@ class AuthService {
     try {
       console.log('Logging in user:', email);
       
-      // Create FormData for OAuth2PasswordRequestForm
-      const formData = new FormData();
-      formData.append('username', email);
-      formData.append('password', password);
+      // FastAPI OAuth2 expects x-www-form-urlencoded data, not FormData
+      const params = new URLSearchParams();
+      params.append('username', email);
+      params.append('password', password);
 
-      const response = await axios.post<AuthResponse>('/api/auth/login', formData, {
+      const response = await axios.post<AuthResponse>('/api/auth/login', params, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
       });
 
       console.log('Login response:', response.data);
+      
+      if (!response.data.access_token) {
+        throw new Error('No access token received from server');
+      }
+      
+      // Set auth data and store tokens
       this.setAuthData(response.data);
+      
+      // Verify we have a valid token after login
+      const token = this.getAccessToken();
+      if (!token) {
+        throw new Error('Token storage failed');
+      }
+      
+      console.log('Authentication successful, token stored');
       return this.currentUser!;
     } catch (error: any) {
       console.error('Login error:', error.response?.data || error.message);
+      this.clearAuth(); // Clear any partial auth state on failure
       throw new Error(error.response?.data?.detail || 'Authentication failed');
     }
   }
