@@ -202,24 +202,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setState(prev => ({ ...prev, error: null }));
   };
 
-  // Assign pro subscription to a user - helps bypass subscription requirement
-  // This function serves both as assignProSubscription and as autoLogin replacement
-  const assignProSubscription = async (user?: User): Promise<User> => {
-    // If no user is provided, create a default user for autoLogin functionality
-    const targetUser = user || {
-      id: 'auto-user-1',
-      name: 'Auto User',
-      email: 'auto@lexassist.com',
-      role: 'user'
-    };
+  // Assign pro subscription to an authenticated user
+  const assignProSubscription = async (user: User): Promise<User> => {
+    if (!user) {
+      throw new Error('Cannot assign subscription to undefined user');
+    }
     
     const userWithPro = {
-      ...targetUser,
+      ...user,
       subscription: defaultProSubscription
     };
     
     localStorage.setItem('lexAssistUser', JSON.stringify(userWithPro));
-    authService.setCurrentUser(userWithPro);
     
     setState(prev => ({
       ...prev,
@@ -229,6 +223,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }));
     
     return userWithPro;
+  };
+  
+  // Redirect to login instead of auto-login
+  const redirectToLogin = async (): Promise<User> => {
+    console.log('Auto-login is disabled. Redirecting to login...');
+    window.location.href = '/auth/login';
+    throw new Error('Please login to continue');
   };
 
   return (
@@ -240,7 +241,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       updateProfile,
       refreshUser,
       clearError,
-      autoLogin: assignProSubscription // Replace autoLogin with assignProSubscription
+      autoLogin: redirectToLogin // Use redirectToLogin instead of autoLogin
     }}>
       {!state.loading && children}
     </AuthContext.Provider>
