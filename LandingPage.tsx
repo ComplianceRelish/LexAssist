@@ -36,7 +36,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             <img src="/images/logo.png" alt="Lex Assist Logo" className="hero-logo" />
             <h1 className="hero-title">Welcome to Lex Assist</h1>
           </div>
-          <h2 className="hero-subtitle">AI-Powered Legal Research for Indian Lawyers</h2>
+          <h2 className="hero-subtitle">AI-Powered Legal Research for Law Professionals</h2>
           <p className="hero-description">
             Enter your case brief and instantly get relevant sections of law and case histories with judgments specific to your case.
           </p>

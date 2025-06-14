@@ -912,27 +912,96 @@ async def update_user_role(role_update: RoleUpdate, supabase: Client = Depends(g
         )
 
 @router.post("/refresh")
-async def refresh_token(supabase: Client = Depends(get_supabase_client)):
+async def refresh_token(request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
     """Refresh the authentication token."""
     try:
-        refresh_response = supabase.auth.refresh_session()
+        # Get refresh token from cookie or request body
+        token = None
+        content_type = request.headers.get('Content-Type', '')
         
-        if refresh_response.session:
-            return {
-                "access_token": refresh_response.session.access_token,
-                "token_type": "bearer",
-                "expires_in": 3600
-            }
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Failed to refresh token"
-            )
-    except Exception as e:
+        # Try to get token from request body if it's JSON
+        if 'application/json' in content_type:
+            try:
+                body = await request.json()
+                token = body.get('refresh_token', None)
+            except:
+                # If body can't be parsed as JSON, continue without it
+                pass
+        
+        # Try refreshing session
+        try:
+            refresh_response = supabase.auth.refresh_session()
+            
+            if refresh_response.session:
+                return {
+                    "access_token": refresh_response.session.access_token,
+                    "token_type": "bearer",
+                    "expires_in": 3600,
+                    "user": get_user_data(refresh_response.user.id, supabase)
+                }
+        except Exception as e:
+            # If refresh failed with current session, try getting a new session
+            # This allows recovery from expired tokens without forcing re-login
+            print(f"Session refresh failed: {e}, trying alternative authentication")
+            pass
+        
+        # If we have a user in session, return that user's data
+        try:
+            user = supabase.auth.get_user()
+            if user and user.user and user.user.id:
+                user_data = get_user_data(user.user.id, supabase)
+                if user_data:
+                    # Create new session
+                    session = supabase.auth.get_session()
+                    if session and session.access_token:
+                        return {
+                            "access_token": session.access_token,
+                            "token_type": "bearer",
+                            "expires_in": 3600,
+                            "user": user_data
+                        }
+        except Exception as e:
+            # If this fails, we'll return a 401 below
+            print(f"Failed to get user or session: {e}")
+            pass
+            
+        # If all else fails, return 401
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Token refresh failed: {str(e)}"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Failed to refresh token - please log in again"
         )
+    except HTTPException as he:
+        # Re-throw HTTP exceptions
+        raise he
+    except Exception as e:
+        # Log the error but return a user-friendly message
+        print(f"ERROR in refresh_token: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired, please log in again"
+        )
+
+# Helper function to get user data from database
+def get_user_data(user_id: str, supabase: Client):
+    """Get user profile data from the database"""
+    try:
+        user_response = supabase.table("users").select("*").eq("id", user_id).limit(1).execute()
+        if user_response.data and len(user_response.data) > 0:
+            user = user_response.data[0]
+            return {
+                "id": user["id"],
+                "email": user["email"],
+                "full_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+                "role": user.get("role", "user"),
+                "subscription_tier": user.get("subscription_tier", "free"),
+                "created_at": user.get("created_at"),
+                "email_verified": user.get("email_verified", False),
+                "phone_verified": user.get("phone_verified", False)
+            }
+        return None
+    except Exception as e:
+        print(f"Error fetching user data: {e}")
+        return None
 
 @router.post("/logout")
 async def logout(supabase: Client = Depends(get_supabase_client)):

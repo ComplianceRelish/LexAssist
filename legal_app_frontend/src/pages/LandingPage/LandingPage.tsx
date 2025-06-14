@@ -313,7 +313,7 @@ const LandingPage: React.FC = () => {
             <Text color="gray.400" textAlign="center">
               © 2025 {companyName}. All rights reserved. | 
               <Text as="span" color={goldColor} ml={2}>
-                Powered by InLegalBERT & Advanced AI
+                Powered by Advanced AI Backend
               </Text>
             </Text>
           </Flex>

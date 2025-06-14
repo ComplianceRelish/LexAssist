@@ -19,21 +19,44 @@ async def get_current_user(
     """
     try:
         # Verify the token with Supabase
-        user_response = supabase.auth.get_user(credentials.credentials)
-        
-        if not user_response.user:
+        if not credentials or not credentials.credentials:
+            logger.warning("Missing authentication credentials")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token",
+                detail="Missing authentication credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+            
+        try:
+            # First try the standard way
+            user_response = supabase.auth.get_user(credentials.credentials)
+            if user_response and user_response.user:
+                return user_response.user
+        except Exception as inner_e:
+            logger.warning(f"Standard auth failed, trying session: {str(inner_e)}")
+            # If that fails, try to get the current session
+            try:
+                session = supabase.auth.get_session()
+                if session and session.user:
+                    return session.user
+            except Exception as session_e:
+                logger.warning(f"Session retrieval failed: {str(session_e)}")
+                pass
         
-        return user_response.user
+        # If we reach here, we couldn't get a valid user
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except HTTPException as he:
+        # Re-raise HTTP exceptions
+        raise he
     except Exception as e:
         logger.error(f"Authentication error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Authentication error",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
