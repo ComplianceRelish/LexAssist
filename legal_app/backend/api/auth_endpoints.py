@@ -1176,6 +1176,17 @@ async def direct_login(
             detail=f"Direct login failed: {str(e)}"
         )
 
+
+@router.post("/admin-login", response_model=TokenResponse)
+async def admin_login(request: Request, response: Response, supabase: Client = Depends(get_supabase_client)):
+    """
+    Admin bypass login for unverified emails - redirects to direct-login endpoint
+    This endpoint exists to support the frontend's fallback login attempt
+    """
+    # Simply redirect to the direct-login endpoint
+    return await direct_login(request, response, supabase)
+
+
 # Helper function to get user data from database
 def get_user_data(user_id: str, supabase: Client):
     """Get user profile data from the database"""
