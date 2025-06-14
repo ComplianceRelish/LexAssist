@@ -10,9 +10,9 @@ import json
 import os
 
 # Import dependencies
-from api.auth_endpoints import verify_user_access
-from services.supabase_client import get_supabase_client
-from services.ai_service import streaming_ai_service, legal_ragflow_service
+from legal_app.backend.api.auth_endpoints import verify_user_access
+from legal_app.backend.services.supabase_client import get_supabase_client
+from legal_app.backend.services.ai_service import streaming_ai_service, legal_ragflow_service
 
 from fastapi import APIRouter
 router = APIRouter(prefix="/api", tags=["Legal"])

@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from api.auth_endpoints import router as auth_router
-from api.legal_endpoints import router as legal_router
+from legal_app.backend.api.auth_endpoints import router as auth_router
+from legal_app.backend.api.legal_endpoints import router as legal_router
 
 # Create FastAPI app
 app = FastAPI(
