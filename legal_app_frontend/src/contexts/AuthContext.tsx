@@ -57,7 +57,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const storedUser = localStorage.getItem('lexAssistUser');
         if (storedUser) {
           const user = JSON.parse(storedUser);
-          // Set the stored user in auth service
+          
+          // CRITICAL FIX: Detect and remove fake auto-user
+          if (user.id === 'auto-user-1') {
+            console.log('Detected auto-user in local storage, clearing invalid user data');
+            localStorage.removeItem('lexAssistUser');
+            localStorage.removeItem('lexassist_token');
+            setState(prev => ({ ...prev, loading: false }));
+            return;
+          }
+          
+          // Set the stored user in auth service only if it's a real user
           authService.setCurrentUser(user);
           setState(prev => ({
             ...prev,
@@ -69,6 +79,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setState(prev => ({ ...prev, loading: false }));
         }
       } catch (error) {
+        console.error('Auth initialization error:', error);
+        // Clear any potentially corrupted data
+        localStorage.removeItem('lexAssistUser');
+        localStorage.removeItem('lexassist_token');
+        
         setState(prev => ({
           ...prev,
           loading: false,
