@@ -227,11 +227,11 @@ class AuthService {
   public setCurrentUser(user: User): void {
     this.currentUser = user;
     this.saveToStorage();
-    // Create a mock token that won't expire for a year
-    this.tokens = {
-      token: 'auto-login-mock-token',
-      expiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000)
-    };
+    // We should login properly instead of using a mock token
+    // This method should only update user data, not create fake tokens
+    if (!this.tokens) {
+      console.warn('No auth token available - user should log in');
+    }
   }
 
   public async updateProfile(data: Partial<User>): Promise<User> {
