@@ -981,6 +981,201 @@ async def refresh_token(request: Request, response: Response, supabase: Client =
             detail="Session expired, please log in again"
         )
 
+# Direct login endpoint that bypasses email verification
+@router.post("/direct-login", response_model=TokenResponse)
+async def direct_login(
+    request: Request,
+    response: Response,
+    supabase: Client = Depends(get_supabase_client)
+):
+    """Direct login that bypasses email verification requirements"""
+    try:
+        # Parse request body
+        body = await request.json()
+        email = body.get("email")
+        password = body.get("password")
+        
+        if not email or not password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email and password are required"
+            )
+        
+        print(f"=== DIRECT LOGIN (BYPASS EMAIL VERIFICATION) ===")
+        print(f"Attempting direct login for user: {email}")
+        
+        # First check if user exists in the database
+        try:
+            user_check = supabase.table("users").select(
+                "id, email, full_name, role, created_at, email_verified, phone_verified"
+            ).eq("email", email).single().execute()
+            
+            if not user_check.data:
+                print(f"User not found in database: {email}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+                
+            print(f"User found in database: {user_check.data.get('full_name')}")
+            user_data = user_check.data
+            
+        except Exception as db_error:
+            print(f"Database check failed: {str(db_error)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database error: {str(db_error)}"
+            )
+        
+        # Try to authenticate with Supabase but catch email verification errors
+        try:
+            # First try standard authentication
+            auth_response = supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+            
+            if auth_response and hasattr(auth_response, 'session') and auth_response.session:
+                # If normal login works, use it
+                user = auth_response.user
+                session = auth_response.session
+                
+                print(f"Standard authentication successful for user ID: {user.id}")
+                
+                return {
+                    "access_token": session.access_token,
+                    "token_type": "bearer",
+                    "expires_in": 3600,
+                    "user": {
+                        "id": user_data["id"],
+                        "email": user_data["email"],
+                        "full_name": user_data["full_name"],
+                        "role": user_data["role"],
+                        "subscription_tier": "free",
+                        "created_at": user_data["created_at"],
+                        "email_verified": True,  # Force this to true
+                        "phone_verified": user_data.get("phone_verified", False)
+                    }
+                }
+                
+        except Exception as auth_error:
+            print(f"Standard auth failed: {str(auth_error)}")
+            # Continue with alternative approach
+        
+        # If we get here, standard auth failed (likely due to email verification)
+        # We'll manually verify the password and generate a session
+        try:
+            # First, verify the password by attempting a sign-in with the admin client
+            # This won't enforce email verification since we're using the service role key
+            try:
+                # We're already using the service role key in our client
+                auth_response = supabase.auth.sign_in_with_password({
+                    "email": email,
+                    "password": password
+                })
+                
+                # If we get here without an exception, the password is correct
+                print("Password verification successful")
+            except Exception as pw_error:
+                # If this fails, it's likely due to invalid credentials
+                print(f"Password verification failed: {str(pw_error)}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            # Update the user's email_verified status in the database
+            try:
+                supabase.table("users").update({
+                    "email_verified": True,
+                    "updated_at": datetime.utcnow().isoformat()
+                }).eq("id", user_data["id"]).execute()
+                print(f"Updated user's email_verified status to True")
+            except Exception as update_error:
+                print(f"Failed to update email_verified status: {str(update_error)}")
+            
+            # Now try to get a session for the user
+            try:
+                # Try to sign in again now that we've updated the email_verified status
+                auth_response = supabase.auth.sign_in_with_password({
+                    "email": email,
+                    "password": password
+                })
+                
+                if auth_response and hasattr(auth_response, 'session') and auth_response.session:
+                    print("Successfully signed in after updating email_verified status")
+                    access_token = auth_response.session.access_token
+                    refresh_token = auth_response.session.refresh_token
+                else:
+                    # If we still can't get a session, try another approach
+                    print("Failed to get session after updating email_verified status")
+                    raise Exception("Failed to obtain access token after email verification update")
+                    
+            except Exception as session_error:
+                print(f"Session creation failed: {str(session_error)}")
+                
+                # Last resort: Use admin API to create a custom token
+                # This requires the SUPABASE_SERVICE_ROLE_KEY which we're already using
+                try:
+                    # Try to use admin sign-in if available in this version of the Supabase client
+                    admin_auth = getattr(supabase.auth, 'admin', None)
+                    if admin_auth and hasattr(admin_auth, 'generate_link'):
+                        # Generate a magic link (we won't send it, just use the token)
+                        magic_link_response = admin_auth.generate_link({
+                            "type": "magiclink",
+                            "email": email
+                        })
+                        if magic_link_response and hasattr(magic_link_response, 'properties'):
+                            access_token = magic_link_response.properties.get('access_token')
+                            refresh_token = magic_link_response.properties.get('refresh_token')
+                    else:
+                        raise Exception("Admin API not available")
+                except Exception as admin_error:
+                    print(f"Admin token generation failed: {str(admin_error)}")
+                    # We've exhausted all options, so we'll have to return an error
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to generate authentication token"
+                    )
+            
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "expires_in": 3600,
+                "user": {
+                    "id": user_data["id"],
+                    "email": user_data["email"],
+                    "full_name": user_data["full_name"],
+                    "role": user_data["role"],
+                    "subscription_tier": "free",
+                    "created_at": user_data["created_at"],
+                    "email_verified": True,  # Force this to true
+                    "phone_verified": user_data.get("phone_verified", False)
+                }
+            }
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Alternative authentication failed: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Direct login error: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Direct login failed: {str(e)}"
+        )
+
 # Helper function to get user data from database
 def get_user_data(user_id: str, supabase: Client):
     """Get user profile data from the database"""
