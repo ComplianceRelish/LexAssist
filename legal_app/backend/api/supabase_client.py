@@ -40,4 +40,3 @@ def get_supabase_client() -> Client:
     except Exception as e:
         logger.error(f"Failed to initialize Supabase client: {str(e)}")
         raise
-        raise
