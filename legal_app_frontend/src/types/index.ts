@@ -3,6 +3,7 @@
 export interface User {
   id: string;
   name: string;
+  full_name?: string;     // ADD THIS LINE
   email: string;
   role: 'user' | 'admin' | 'super_admin';
   avatarUrl?: string;

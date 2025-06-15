@@ -194,7 +194,7 @@ const EnhancedUserDashboard: React.FC = () => {
       {/* Welcome Section */}
       <Box mb={6}>
         <Heading size="lg" color={primaryColor} fontFamily="Playfair Display, serif" mb={1}>
-          Welcome Back, {user?.name || 'User'}
+        Welcome Back, {user?.full_name || user?.name || 'User'}
         </Heading>
         <Text color="gray.600">
           {new Date().toLocaleDateString('en-US', { 

@@ -1,11 +1,13 @@
 // User and Authentication Types
+// types.ts - FIXED VERSION
 export interface User {
   id: string;
   email: string;
   name?: string;
+  full_name?: string;  // Added this line
   role: 'user' | 'admin' | 'super_admin';
   subscription: Subscription;
-}
+} // ← ADD THIS CLOSING BRACE
 
 // Component Props Types
 export interface HeaderProps {

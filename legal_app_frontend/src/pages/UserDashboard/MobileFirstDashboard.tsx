@@ -19,7 +19,11 @@ import {
   Tab, 
   TabPanel,
   Button,
-  Container
+  Container,
+  VStack,
+  HStack,
+  Card,
+  CardBody
 } from '@chakra-ui/react';
 import { FaFolder, FaFileAlt, FaClock, FaSearch, FaPlus } from 'react-icons/fa';
 import { useBrand } from '../../contexts/BrandContext';
@@ -59,8 +63,8 @@ const MobileFirstDashboard: React.FC<MobileFirstDashboardProps> = ({
 }) => {
   const { logoUrl } = useBrand();
   
-  // ✅ Fixed: Get user's name properly without firstName
-  const userName = user?.name || user?.email?.split('@')[0] || 'User';
+  // ✅ Fixed: Get user's name properly with proper typing
+  const userName = user?.full_name || user?.name || user?.email?.split('@')[0] || 'User';
   
   const [stats, setStats] = useState({
     activeCases: 0,
@@ -72,6 +76,7 @@ const MobileFirstDashboard: React.FC<MobileFirstDashboardProps> = ({
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const headerBg = useColorModeValue('gray.50', 'gray.900');
   const primaryColor = "rgb(7, 71, 94)";
+  const goldColor = "rgb(242, 190, 34)";
   
   // Mock data - will be replaced with real data later
   const cases: Case[] = [];
@@ -80,223 +85,322 @@ const MobileFirstDashboard: React.FC<MobileFirstDashboardProps> = ({
   
   const quickActions: QuickAction[] = [
     { icon: FaPlus, title: 'New Case Brief Entry', color: primaryColor },
-    { icon: FaFileAlt, title: 'Upload Document', color: "rgb(242, 190, 34)" },
+    { icon: FaFileAlt, title: 'Upload Document', color: goldColor },
     { icon: FaSearch, title: 'Legal Research', color: "purple.500" },
     { icon: FaClock, title: 'Add Reminder', color: "orange.500" },
   ];
 
   return (
-    <Container maxW="100%" p={0} bg={useColorModeValue('gray.50', 'gray.900')} minH="100vh">
-      <Box px={4} py={4}>
-        {/* Welcome Banner - Fixed for mobile */}
-        <Flex
-          direction="column"
-          align="center"
+    <Box bg={useColorModeValue('gray.50', 'gray.900')} minH="100vh">
+      {/* Mobile-Optimized Container */}
+      <Container maxW="100%" px={4} py={6}>
+        
+        {/* Welcome Header - Mobile Optimized */}
+        <Card
           bg={headerBg}
-          p={6}
-          borderRadius="xl"
+          borderRadius="2xl"
           mb={6}
-          boxShadow="sm"
+          boxShadow="lg"
           border="1px solid"
           borderColor={borderColor}
+          overflow="hidden"
         >
-          <Image
-            src={logoUrl || "/images/logo.png"}
-            alt="LexAssist Logo"
-            height="60px"
-            mb={3}
-          />
-          <Heading size="lg" color={primaryColor} textAlign="center" mb={2}>
-            Welcome Back, {userName}
-          </Heading>
-          <Text fontSize="sm" color="gray.600" textAlign="center">
-            {new Date().toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            })} • {stats.activeCases} cases active
-          </Text>
-        </Flex>
+          <CardBody p={6}>
+            <VStack spacing={4}>
+              <Image
+                src={logoUrl || "/images/logo.png"}
+                alt="LexAssist Logo"
+                height="50px"
+                borderRadius="md"
+              />
+              <VStack spacing={2}>
+                <Heading 
+                  size="xl" 
+                  color={primaryColor} 
+                  textAlign="center"
+                  fontFamily="Playfair Display, serif"
+                  lineHeight="1.2"
+                >
+                  Welcome Back, {userName}
+                </Heading>
+                <Text 
+                  fontSize="md" 
+                  color="gray.600" 
+                  textAlign="center"
+                  fontWeight="medium"
+                >
+                  {new Date().toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </Text>
+                <Badge 
+                  colorScheme="blue" 
+                  fontSize="sm" 
+                  px={3} 
+                  py={1} 
+                  borderRadius="full"
+                >
+                  {stats.activeCases} cases active
+                </Badge>
+              </VStack>
+            </VStack>
+          </CardBody>
+        </Card>
         
-        {/* Stats Cards - Mobile Optimized */}
-        <SimpleGrid columns={4} spacing={3} mb={6}>
-          <Stack
+        {/* Stats Cards - Mobile Optimized Grid */}
+        <SimpleGrid columns={2} spacing={4} mb={6}>
+          <Card
             bg={cardBg}
-            p={4}
-            borderRadius="lg"
-            shadow="sm"
+            borderRadius="xl"
+            boxShadow="md"
             borderTop="4px solid"
             borderTopColor={primaryColor}
-            align="center"
-            spacing={2}
-            minH="100px"
+            _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+            transition="all 0.3s ease"
           >
-            <Icon as={FaFolder} boxSize={5} color={primaryColor} />
-            <Text fontWeight="bold" fontSize="2xl" color={primaryColor}>
-              {stats.activeCases}
-            </Text>
-            <Text fontSize="xs" color="gray.500" textAlign="center" lineHeight="1.2">
-              Active<br />Cases
-            </Text>
-          </Stack>
+            <CardBody p={5}>
+              <VStack spacing={3}>
+                <Box 
+                  p={3} 
+                  bg={`${primaryColor}15`} 
+                  borderRadius="full"
+                >
+                  <Icon as={FaFolder} boxSize={6} color={primaryColor} />
+                </Box>
+                <Text fontWeight="bold" fontSize="3xl" color={primaryColor}>
+                  {stats.activeCases}
+                </Text>
+                <Text 
+                  fontSize="sm" 
+                  color="gray.600" 
+                  textAlign="center" 
+                  fontWeight="medium"
+                >
+                  Active Cases
+                </Text>
+              </VStack>
+            </CardBody>
+          </Card>
           
-          <Stack
+          <Card
             bg={cardBg}
-            p={4}
-            borderRadius="lg"
-            shadow="sm"
+            borderRadius="xl"
+            boxShadow="md"
             borderTop="4px solid"
             borderTopColor="orange.400"
-            align="center"
-            spacing={2}
-            minH="100px"
+            _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+            transition="all 0.3s ease"
           >
-            <Icon as={FaFileAlt} boxSize={5} color="orange.400" />
-            <Text fontWeight="bold" fontSize="2xl" color="orange.400">
-              {stats.deadlines}
-            </Text>
-            <Text fontSize="xs" color="gray.500" textAlign="center" lineHeight="1.2">
-              Pending<br />Deadlines
-            </Text>
-          </Stack>
+            <CardBody p={5}>
+              <VStack spacing={3}>
+                <Box 
+                  p={3} 
+                  bg="orange.50" 
+                  borderRadius="full"
+                >
+                  <Icon as={FaClock} boxSize={6} color="orange.400" />
+                </Box>
+                <Text fontWeight="bold" fontSize="3xl" color="orange.400">
+                  {stats.deadlines}
+                </Text>
+                <Text 
+                  fontSize="sm" 
+                  color="gray.600" 
+                  textAlign="center" 
+                  fontWeight="medium"
+                >
+                  Pending Deadlines
+                </Text>
+              </VStack>
+            </CardBody>
+          </Card>
           
-          <Stack
+          <Card
             bg={cardBg}
-            p={4}
-            borderRadius="lg"
-            shadow="sm"
+            borderRadius="xl"
+            boxShadow="md"
             borderTop="4px solid"
             borderTopColor="blue.400"
-            align="center"
-            spacing={2}
-            minH="100px"
+            _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+            transition="all 0.3s ease"
           >
-            <Icon as={FaSearch} boxSize={5} color="blue.400" />
-            <Text fontWeight="bold" fontSize="2xl" color="blue.400">
-              {stats.documents}
-            </Text>
-            <Text fontSize="xs" color="gray.500" textAlign="center" lineHeight="1.2">
-              Documents<br />Reviewed
-            </Text>
-          </Stack>
+            <CardBody p={5}>
+              <VStack spacing={3}>
+                <Box 
+                  p={3} 
+                  bg="blue.50" 
+                  borderRadius="full"
+                >
+                  <Icon as={FaFileAlt} boxSize={6} color="blue.400" />
+                </Box>
+                <Text fontWeight="bold" fontSize="3xl" color="blue.400">
+                  {stats.documents}
+                </Text>
+                <Text 
+                  fontSize="sm" 
+                  color="gray.600" 
+                  textAlign="center" 
+                  fontWeight="medium"
+                >
+                  Documents Reviewed
+                </Text>
+              </VStack>
+            </CardBody>
+          </Card>
           
-          <Stack
+          <Card
             bg={cardBg}
-            p={4}
-            borderRadius="lg"
-            shadow="sm"
+            borderRadius="xl"
+            boxShadow="md"
             borderTop="4px solid"
             borderTopColor="green.400"
-            align="center"
-            spacing={2}
-            minH="100px"
+            _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+            transition="all 0.3s ease"
           >
-            <Icon as={FaClock} boxSize={5} color="green.400" />
-            <Text fontWeight="bold" fontSize="2xl" color="green.400">
-              0%
-            </Text>
-            <Text fontSize="xs" color="gray.500" textAlign="center" lineHeight="1.2">
-              Success<br />Rate
-            </Text>
-          </Stack>
+            <CardBody p={5}>
+              <VStack spacing={3}>
+                <Box 
+                  p={3} 
+                  bg="green.50" 
+                  borderRadius="full"
+                >
+                  <Icon as={FaSearch} boxSize={6} color="green.400" />
+                </Box>
+                <Text fontWeight="bold" fontSize="3xl" color="green.400">
+                  0%
+                </Text>
+                <Text 
+                  fontSize="sm" 
+                  color="gray.600" 
+                  textAlign="center" 
+                  fontWeight="medium"
+                >
+                  Success Rate
+                </Text>
+              </VStack>
+            </CardBody>
+          </Card>
         </SimpleGrid>
         
-        {/* Main Action Button */}
-        <Button
-          leftIcon={<FaPlus />}
-          colorScheme="yellow"
-          bg="rgb(242, 190, 34)"
-          color="black"
-          size="lg"
-          width="full"
-          mb={6}
-          borderRadius="lg"
-          py={6}
-          fontSize="lg"
-          fontWeight="600"
-          _hover={{
-            bg: "rgb(220, 170, 20)",
-            transform: "translateY(-2px)",
-            boxShadow: "lg"
-          }}
-          onClick={() => {
-            // Handle new case brief entry
-            console.log('New Case Brief Entry clicked');
-          }}
-        >
-          + New Case Brief Entry
-        </Button>
+        {/* Main Action Button - Mobile Optimized */}
+        <Card bg={goldColor} borderRadius="2xl" mb={6} boxShadow="lg">
+          <CardBody p={0}>
+            <Button
+              leftIcon={<Icon as={FaPlus} boxSize={5} />}
+              bg="transparent"
+              color={primaryColor}
+              size="lg"
+              width="full"
+              height="70px"
+              borderRadius="2xl"
+              fontSize="lg"
+              fontWeight="700"
+              _hover={{
+                transform: "scale(1.02)",
+                boxShadow: "xl"
+              }}
+              transition="all 0.3s ease"
+              onClick={() => {
+                console.log('New Case Brief Entry clicked');
+              }}
+            >
+              New Case Brief Entry
+            </Button>
+          </CardBody>
+        </Card>
         
-        {/* Content Tabs */}
-        <Tabs variant="soft-rounded" colorScheme="blue" isFitted>
-          <TabList mb={4} bg={cardBg} p={1} borderRadius="lg">
-            <Tab 
-              _selected={{ color: 'white', bg: primaryColor }}
-              fontSize="sm"
-              fontWeight="medium"
-            >
-              Case Analytics
-            </Tab>
-            <Tab 
-              _selected={{ color: 'white', bg: primaryColor }}
-              fontSize="sm"
-              fontWeight="medium"
-            >
-              Recent Cases
-            </Tab>
-          </TabList>
-          
-          <TabPanels>
-            {/* Case Analytics Tab */}
-            <TabPanel p={0}>
-              <Box
-                bg={cardBg}
-                p={6}
-                borderRadius="lg"
-                boxShadow="sm"
-                textAlign="center"
-              >
-                <Text color="gray.500" fontSize="lg" mb={4}>
-                  No case data available yet
-                </Text>
-                <Text color="gray.400" fontSize="sm">
-                  Submit your first case brief to see analytics
-                </Text>
-              </Box>
-            </TabPanel>
-            
-            {/* Recent Cases Tab */}
-            <TabPanel p={0}>
-              <Box
-                bg={cardBg}
-                p={6}
-                borderRadius="lg"
-                boxShadow="sm"
-                textAlign="center"
-              >
-                <Text color="gray.500" fontSize="lg" mb={2}>
-                  No cases yet.
-                </Text>
-                <Text color="gray.400" fontSize="sm" mb={4}>
-                  Create your first case
-                </Text>
-                <Button
-                  size="sm"
-                  colorScheme="blue"
-                  variant="outline"
-                  onClick={() => {
-                    console.log('View all cases clicked');
-                  }}
+        {/* Content Tabs - Mobile Optimized */}
+        <Card bg={cardBg} borderRadius="2xl" boxShadow="lg">
+          <CardBody p={0}>
+            <Tabs variant="soft-rounded" colorScheme="blue">
+              <TabList mb={4} bg="gray.50" mx={4} mt={4} p={1} borderRadius="xl">
+                <Tab 
+                  _selected={{ color: 'white', bg: primaryColor }}
+                  fontSize="sm"
+                  fontWeight="600"
+                  flex={1}
+                  borderRadius="lg"
                 >
-                  View All Cases
-                </Button>
-              </Box>
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
-      </Box>
-    </Container>
+                  Case Analytics
+                </Tab>
+                <Tab 
+                  _selected={{ color: 'white', bg: primaryColor }}
+                  fontSize="sm"
+                  fontWeight="600"
+                  flex={1}
+                  borderRadius="lg"
+                >
+                  Recent Cases
+                </Tab>
+              </TabList>
+              
+              <TabPanels>
+                {/* Case Analytics Tab */}
+                <TabPanel px={6} pb={6}>
+                  <VStack spacing={4}>
+                    <Icon as={FaSearch} boxSize={12} color="gray.300" />
+                    <Text 
+                      color="gray.500" 
+                      fontSize="lg" 
+                      fontWeight="medium"
+                      textAlign="center"
+                    >
+                      No case data available yet
+                    </Text>
+                    <Text 
+                      color="gray.400" 
+                      fontSize="sm" 
+                      textAlign="center"
+                      lineHeight="1.5"
+                    >
+                      Submit your first case brief to see detailed analytics and insights
+                    </Text>
+                  </VStack>
+                </TabPanel>
+                
+                {/* Recent Cases Tab */}
+                <TabPanel px={6} pb={6}>
+                  <VStack spacing={4}>
+                    <Icon as={FaFolder} boxSize={12} color="gray.300" />
+                    <Text 
+                      color="gray.500" 
+                      fontSize="lg" 
+                      fontWeight="medium"
+                      textAlign="center"
+                    >
+                      No cases yet
+                    </Text>
+                    <Text 
+                      color="gray.400" 
+                      fontSize="sm" 
+                      textAlign="center"
+                      lineHeight="1.5"
+                      mb={4}
+                    >
+                      Create your first case to get started with legal analysis
+                    </Text>
+                    <Button
+                      size="md"
+                      colorScheme="blue"
+                      variant="outline"
+                      borderRadius="lg"
+                      px={6}
+                      onClick={() => {
+                        console.log('View all cases clicked');
+                      }}
+                    >
+                      Create First Case
+                    </Button>
+                  </VStack>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
+          </CardBody>
+        </Card>
+      </Container>
+    </Box>
   );
 };
 
