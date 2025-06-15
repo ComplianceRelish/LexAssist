@@ -30,7 +30,7 @@ import { Tabs, TabList, Tab, TabPanels, TabPanel } from '../../components/ui/Tab
 const LoginPage: React.FC<LoginProps> = ({ onLogin }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loading, error, clearError } = useAuth(); // ✅ Use AuthContext
+  const { login, loading, error, clearError, user } = useAuth(); // ✅ Use AuthContext
   
   // States for form fields and UI
   const [tabIndex, setTabIndex] = useState<number>(0);
@@ -63,14 +63,26 @@ const LoginPage: React.FC<LoginProps> = ({ onLogin }) => {
     clearError();
   }, [location, clearError]);
 
+  // 🔧 ADD THIS: Auto-redirect if already logged in
+  useEffect(() => {
+    if (user && !loading) {
+      console.log('User already logged in, redirecting to dashboard');
+      navigate('/dashboard');
+    }
+  }, [user, loading, navigate]);
+
   // Handle email login
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage(''); // Clear any success messages
     
     try {
-      await login(email, password);
-      // Navigation is handled in AuthContext
+      const loggedInUser = await login(email, password);
+      console.log('Login successful, redirecting to dashboard...');
+      
+      // 🔧 ADD THIS: Direct redirect after successful login
+      navigate('/dashboard');
+      
     } catch (err: any) {
       console.error('Login error:', err);
       // Error is handled in AuthContext

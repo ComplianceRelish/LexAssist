@@ -150,14 +150,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         
         // Set the authenticated user
-        setState(prev => ({
-          ...prev,
-          user,
-          subscription: user.subscription || null,
-          loading: false
-        }));
-        
-        return user;
+      setState(prev => ({
+        ...prev,
+        user,
+        subscription: user.subscription || null,
+        loading: false
+      }));
+      
+      // Don't redirect here - let the component handle it
+      console.log('Login successful, user state updated');
+      return user;
       } catch (loginError: any) {
         // If regular login fails with email verification error, try direct login
         if (loginError.message?.includes('Email not confirmed') || 
@@ -178,15 +180,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const user = directLoginResponse.user;
             
             // Set the authenticated user
-            setState(prev => ({
-              ...prev,
-              user,
-              subscription: user.subscription || null,
-              loading: false
-            }));
-            
-            console.log('Direct login successful');
-            return user;
+          setState(prev => ({
+            ...prev,
+            user,
+            subscription: user.subscription || null,
+            loading: false
+          }));
+          
+          // Don't redirect here - let the component handle it
+          console.log('Direct login successful, user state updated');
+          return user;
           } catch (directLoginError) {
             console.error('Direct login failed:', directLoginError);
             throw directLoginError;
