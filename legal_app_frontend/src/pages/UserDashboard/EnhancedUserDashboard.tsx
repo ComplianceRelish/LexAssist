@@ -1,4 +1,4 @@
-// src/pages/UserDashboard/EnhancedUserDashboard.tsx - NEW FILE
+// src/pages/UserDashboard/EnhancedUserDashboard.tsx - CORRECTED VERSION
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -45,6 +45,7 @@ import {
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Legend } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService, UserCase, UserDocument, UserStats, CaseBriefSubmission } from '../../services/api.service';
+import { authService } from '../../services/auth.service';
 
 const EnhancedUserDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -59,14 +60,13 @@ const EnhancedUserDashboard: React.FC = () => {
   const [userStats, setUserStats] = useState<UserStats | null>(null);
 
   // Case brief form state
-  const [briefForm, setBriefForm] = useState<CaseBriefSubmission>({
+  const [briefForm, setBriefForm] = useState({
     clientName: '',
     caseTitle: '',
     caseType: '',
     briefDescription: '',
-    urgencyLevel: 'medium',
+    urgencyLevel: 'medium' as 'low' | 'medium' | 'high',
     courtLevel: '',
-    userId: user?.id || '',
   });
 
   const cardBg = useColorModeValue('white', 'gray.800');
@@ -117,15 +117,37 @@ const EnhancedUserDashboard: React.FC = () => {
       });
       return;
     }
-
+  
     setSubmittingBrief(true);
     try {
+      // 🔧 FIX: Direct API call with proper backend format
       const submissionData = {
-        ...briefForm,
-        userId: user?.id || '',
+        user_id: user?.id || '',
+        title: briefForm.caseTitle,
+        brief_text: briefForm.briefDescription,
+        court: briefForm.courtLevel || '',
+        case_type: briefForm.caseType || '',
+        jurisdiction: "IN",
       };
-
-      await apiService.submitCaseBrief(submissionData);
+  
+      console.log('Submitting case brief:', submissionData);
+  
+      // Use direct axios call instead of apiService.submitCaseBrief
+      const response = await fetch('/api/legal/analyze-brief', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authService.getAccessToken()}`
+        },
+        body: JSON.stringify(submissionData)
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to submit case brief');
+      }
+  
+      const result = await response.json();
       
       toast({
         title: 'Case brief submitted successfully',
@@ -133,7 +155,7 @@ const EnhancedUserDashboard: React.FC = () => {
         status: 'success',
         duration: 5000,
       });
-
+  
       setShowCaseBriefModal(false);
       setBriefForm({
         clientName: '',
@@ -142,12 +164,12 @@ const EnhancedUserDashboard: React.FC = () => {
         briefDescription: '',
         urgencyLevel: 'medium',
         courtLevel: '',
-        userId: user?.id || '',
       });
       
       // Refresh data to show new case
       loadUserData();
     } catch (error: any) {
+      console.error('Case brief submission error:', error);
       toast({
         title: 'Error submitting case brief',
         description: error.message || 'Failed to submit case brief',
@@ -194,7 +216,7 @@ const EnhancedUserDashboard: React.FC = () => {
       {/* Welcome Section */}
       <Box mb={6}>
         <Heading size="lg" color={primaryColor} fontFamily="Playfair Display, serif" mb={1}>
-        Welcome Back, {user?.full_name || user?.name || 'User'}
+          Welcome Back, {user?.full_name || user?.name || 'User'}
         </Heading>
         <Text color="gray.600">
           {new Date().toLocaleDateString('en-US', { 
@@ -207,7 +229,7 @@ const EnhancedUserDashboard: React.FC = () => {
       </Box>
 
       {/* Stats Cards - Real Data */}
-      <SimpleGrid columns={4} spacing={6} mb={6}>
+      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={6}>
         <Card
           bg={cardBg}
           borderTop="4px solid"
@@ -224,7 +246,7 @@ const EnhancedUserDashboard: React.FC = () => {
                 </Text>
                 <Text fontSize="sm" color="green.500">
                   <Icon as={FaArrowUp} mr={1} />
-                  {userStats?.monthlyGrowth.cases || 0}%
+                  {userStats?.monthlyGrowth?.cases || 0}%
                 </Text>
               </Flex>
               <Text fontSize="xs" color="gray.500">from last month</Text>
@@ -272,7 +294,7 @@ const EnhancedUserDashboard: React.FC = () => {
                 </Text>
                 <Text fontSize="sm" color="green.500">
                   <Icon as={FaArrowUp} mr={1} />
-                  {userStats?.monthlyGrowth.documents || 0}%
+                  {userStats?.monthlyGrowth?.documents || 0}%
                 </Text>
               </Flex>
               <Text fontSize="xs" color="gray.500">this month</Text>
@@ -320,7 +342,7 @@ const EnhancedUserDashboard: React.FC = () => {
       </Box>
 
       {/* Two Column Layout */}
-      <Grid templateColumns="1fr 1fr" gap={6} mb={6}>
+      <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={6} mb={6}>
         {/* Case Analytics Chart - Real Data */}
         <Card bg={cardBg}>
           <CardBody>
@@ -352,7 +374,15 @@ const EnhancedUserDashboard: React.FC = () => {
                 </ResponsiveContainer>
               ) : (
                 <Center h="100%">
-                  <Text color="gray.500">No case data available yet</Text>
+                  <VStack spacing={4}>
+                    <Icon as={FaGavel} fontSize="4xl" color="gray.300" />
+                    <Text color="gray.500" textAlign="center">
+                      No case data available yet
+                    </Text>
+                    <Text fontSize="sm" color="gray.400" textAlign="center">
+                      Submit your first case brief to see analytics
+                    </Text>
+                  </VStack>
                 </Center>
               )}
             </Box>
@@ -401,7 +431,20 @@ const EnhancedUserDashboard: React.FC = () => {
                 ))
               ) : (
                 <Center p={8}>
-                  <Text color="gray.500">No cases yet. Create your first case brief!</Text>
+                  <VStack spacing={4}>
+                    <Icon as={FaGavel} fontSize="4xl" color="gray.300" />
+                    <Text color="gray.500" textAlign="center">
+                      No cases yet. Create your first case brief!
+                    </Text>
+                    <Button
+                      size="sm"
+                      colorScheme="blue"
+                      variant="outline"
+                      onClick={() => setShowCaseBriefModal(true)}
+                    >
+                      Create First Case
+                    </Button>
+                  </VStack>
                 </Center>
               )}
             </VStack>
@@ -468,10 +511,10 @@ const EnhancedUserDashboard: React.FC = () => {
                       onChange={(e) => setBriefForm({ ...briefForm, courtLevel: e.target.value })}
                     >
                       <option value="">Select court</option>
-                      <option value="district">District Court</option>
-                      <option value="high">High Court</option>
-                      <option value="supreme">Supreme Court</option>
-                      <option value="tribunal">Tribunal</option>
+                      <option value="District Court">District Court</option>
+                      <option value="High Court">High Court</option>
+                      <option value="Supreme Court">Supreme Court</option>
+                      <option value="Tribunal">Tribunal</option>
                     </Select>
                   </FormControl>
                 </HStack>
