@@ -1,4 +1,4 @@
-// src/pages/LandingPage/LandingPage.tsx - ENHANCED WITH LOGO AS HERO
+// src/pages/LandingPage/LandingPage.tsx - FIXED LOGO DUPLICATION
 import React from 'react';
 import {
   Box,
@@ -54,20 +54,11 @@ const LandingPage: React.FC = () => {
 
   return (
     <Box minH="100vh" bg={bgGradient}>
-      {/* Navigation Header - Logo Only */}
+      {/* Navigation Header - NO LOGO */}
       <Box bg="white" boxShadow="sm" position="sticky" top={0} zIndex={100}>
         <Container maxW="7xl" py={4}>
-          <Flex justify="space-between" align="center">
-            {/* Logo Only - Larger Size */}
-            <Image 
-              src={logoUrl} 
-              alt={`${companyName} Logo`} 
-              height="80px" 
-              cursor="pointer"
-              onClick={() => navigate('/')}
-              transition="all 0.3s ease"
-              _hover={{ transform: "scale(1.05)" }}
-            />
+          <Flex justify="flex-end" align="center">
+            {/* Only buttons, no logo */}
             <HStack spacing={4}>
               <Button
                 as={RouterLink}
@@ -97,17 +88,16 @@ const LandingPage: React.FC = () => {
       <Container maxW="7xl" py={20}>
         <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={12} alignItems="center">
           <VStack align="start" spacing={8}>
-            {/* Hero Logo - Large and Prominent */}
-            <Box textAlign={{ base: "center", lg: "left" }} w="full">
+            {/* Large Hero Logo - 2X Size */}
+            <Box textAlign={{ base: "center", lg: "left" }} w="full" mb={6}>
               <Image 
                 src={logoUrl} 
                 alt={`${companyName} Logo`} 
-                maxH="150px" 
+                maxH="300px"  /* 2X the previous 150px */
                 mx={{ base: "auto", lg: "0" }}
-                mb={6}
-                filter="drop-shadow(0 8px 16px rgba(0,0,0,0.15))"
+                filter="drop-shadow(0 12px 24px rgba(0,0,0,0.2))"
                 _hover={{ 
-                  transform: "scale(1.08)",
+                  transform: "scale(1.05)",
                   transition: "all 0.4s ease"
                 }}
                 transition="all 0.4s ease"
@@ -115,11 +105,12 @@ const LandingPage: React.FC = () => {
             </Box>
 
             <Badge bg={`${goldColor}20`} color={goldColor} px={4} py={2} borderRadius="full">
-              AI-Powered Legal Technology
+              AI-POWERED LEGAL TECHNOLOGY
             </Badge>
             
+            {/* Reduced Header Text Size by Half */}
             <Heading 
-              size="3xl" 
+              size="xl"  /* Changed from "3xl" to "xl" (half size) */
               color={primaryColor} 
               fontFamily="Playfair Display, serif"
               lineHeight="1.2"
