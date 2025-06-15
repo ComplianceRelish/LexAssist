@@ -120,8 +120,7 @@ const EnhancedUserDashboard: React.FC = () => {
   
     setSubmittingBrief(true);
     try {
-      // 🔧 FIX: Direct API call with proper backend format
-      const submissionData = {
+      const submissionData: any = {
         user_id: user?.id || '',
         title: briefForm.caseTitle,
         brief_text: briefForm.briefDescription,
@@ -132,26 +131,12 @@ const EnhancedUserDashboard: React.FC = () => {
   
       console.log('Submitting case brief:', submissionData);
   
-      // Use direct axios call instead of apiService.submitCaseBrief
-      const response = await fetch('/api/legal/analyze-brief', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authService.getAccessToken()}`
-        },
-        body: JSON.stringify(submissionData)
-      });
-  
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to submit case brief');
-      }
-  
-      const result = await response.json();
+      // 🔧 FIX: Use apiService which has the correct base URL
+      await apiService.submitCaseBrief(submissionData);
       
       toast({
         title: 'Case brief submitted successfully',
-        description: 'AI analysis with InLegalBERT is in progress. You will be notified when complete.',
+        description: 'AI analysis is in progress.',
         status: 'success',
         duration: 5000,
       });
@@ -166,13 +151,12 @@ const EnhancedUserDashboard: React.FC = () => {
         courtLevel: '',
       });
       
-      // Refresh data to show new case
       loadUserData();
     } catch (error: any) {
       console.error('Case brief submission error:', error);
       toast({
         title: 'Error submitting case brief',
-        description: error.message || 'Failed to submit case brief',
+        description: error.response?.data?.detail || error.message || 'Failed to submit case brief',
         status: 'error',
         duration: 5000,
       });

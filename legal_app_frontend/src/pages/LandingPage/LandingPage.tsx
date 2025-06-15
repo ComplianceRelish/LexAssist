@@ -1,4 +1,4 @@
-// src/pages/LandingPage/LandingPage.tsx - ENHANCED WITH PROPER BRANDING
+// src/pages/LandingPage/LandingPage.tsx - ENHANCED WITH LOGO AS HERO
 import React from 'react';
 import {
   Box,
@@ -54,16 +54,20 @@ const LandingPage: React.FC = () => {
 
   return (
     <Box minH="100vh" bg={bgGradient}>
-      {/* Navigation Header */}
+      {/* Navigation Header - Logo Only */}
       <Box bg="white" boxShadow="sm" position="sticky" top={0} zIndex={100}>
         <Container maxW="7xl" py={4}>
           <Flex justify="space-between" align="center">
-            <Flex align="center">
-              <Image src={logoUrl} alt={`${companyName} Logo`} height="50px" mr={4} />
-              <Heading size="lg" color={primaryColor} fontFamily="Playfair Display, serif">
-                {companyName}
-              </Heading>
-            </Flex>
+            {/* Logo Only - Larger Size */}
+            <Image 
+              src={logoUrl} 
+              alt={`${companyName} Logo`} 
+              height="80px" 
+              cursor="pointer"
+              onClick={() => navigate('/')}
+              transition="all 0.3s ease"
+              _hover={{ transform: "scale(1.05)" }}
+            />
             <HStack spacing={4}>
               <Button
                 as={RouterLink}
@@ -93,6 +97,23 @@ const LandingPage: React.FC = () => {
       <Container maxW="7xl" py={20}>
         <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={12} alignItems="center">
           <VStack align="start" spacing={8}>
+            {/* Hero Logo - Large and Prominent */}
+            <Box textAlign={{ base: "center", lg: "left" }} w="full">
+              <Image 
+                src={logoUrl} 
+                alt={`${companyName} Logo`} 
+                maxH="150px" 
+                mx={{ base: "auto", lg: "0" }}
+                mb={6}
+                filter="drop-shadow(0 8px 16px rgba(0,0,0,0.15))"
+                _hover={{ 
+                  transform: "scale(1.08)",
+                  transition: "all 0.4s ease"
+                }}
+                transition="all 0.4s ease"
+              />
+            </Box>
+
             <Badge bg={`${goldColor}20`} color={goldColor} px={4} py={2} borderRadius="full">
               AI-Powered Legal Technology
             </Badge>
