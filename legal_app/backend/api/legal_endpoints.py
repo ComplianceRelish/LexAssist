@@ -152,15 +152,9 @@ async def get_user_cases(
         )
     
     try:
-        # Query cases from the database
+        # NEW SYNTAX: No .error check needed, exceptions are raised automatically
         response = supabase.table("cases").select("*").eq("user_id", user_id).execute()
         
-        if response.error:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to retrieve cases: {response.error.message}"
-            )
-            
         # Return cases as a list
         return {"cases": response.data or []}
         
@@ -185,15 +179,9 @@ async def get_user_documents(
         )
     
     try:
-        # Query documents from the database
+        # NEW SYNTAX: Direct access to response.data
         response = supabase.table("documents").select("*").eq("user_id", user_id).execute()
         
-        if response.error:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to retrieve documents: {response.error.message}"
-            )
-            
         # Return documents as a list
         return {"documents": response.data or []}
         
@@ -201,6 +189,59 @@ async def get_user_documents(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving user documents: {str(e)}"
+        )
+
+@router.get("/users/{user_id}/stats")
+async def get_user_stats(
+    user_id: str,
+    current_user=Depends(verify_user_access),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """Get user's statistics"""
+    # Verify user is accessing their own data or is an admin
+    if current_user.id != user_id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this user's stats"
+        )
+    
+    try:
+        # Get user cases - NEW SYNTAX
+        cases_response = supabase.table("cases").select("id, status, created_at").eq("user_id", user_id).execute()
+        
+        # Get user documents - NEW SYNTAX  
+        docs_response = supabase.table("documents").select("id").eq("user_id", user_id).execute()
+        
+        # Get user brief analyses - NEW SYNTAX
+        try:
+            analyses_response = supabase.table("brief_analyses").select("id, created_at, status").eq("user_id", user_id).execute()
+            analyses = analyses_response.data or []
+        except:
+            # If brief_analyses table doesn't exist yet, default to empty
+            analyses = []
+        
+        # Calculate stats
+        cases = cases_response.data or []
+        docs = docs_response.data or []
+        
+        active_cases = sum(1 for case in cases if case.get("status") == "active")
+        
+        # Simple stats calculation
+        stats = {
+            "activeCases": active_cases,
+            "pendingDeadlines": 0,  # Would require more data
+            "documentsReviewed": len(docs),
+            "successRate": 0,  # Would require outcome data
+            "totalBriefsAnalyzed": len(analyses),
+            "monthlyGrowth": {"cases": 0, "documents": 0}  # Would require time-based analysis
+        }
+        
+        return stats
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving user stats: {str(e)}"
         )
 
 @router.get("/users/{user_id}/stats")
