@@ -85,7 +85,7 @@ const LandingPage: React.FC = () => {
       </Box>
 
       {/* Hero Section */}
-      <Container maxW="7xl" py={20}>
+      <Container maxW="7xl" py={12}>
         <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={12} alignItems="center">
           <VStack align="start" spacing={8}>
             {/* Large Hero Logo - 2X Size */}
@@ -114,7 +114,7 @@ const LandingPage: React.FC = () => {
               color={primaryColor} 
               fontFamily="Playfair Display, serif"
               lineHeight="1.2"
-              mt={{ base: 0, lg: -4 }}
+              mt={{ base: -2, lg: -6 }}
             >
               Advanced Legal Technology at Your Fingertips
             </Heading>
@@ -162,7 +162,7 @@ const LandingPage: React.FC = () => {
               border="1px"
               borderColor="gray.200"
               position="relative"
-              mt={{ base: 8, lg: -20 }}
+              mt={{ base: 4, lg: -28 }}
             >
               {/* Mock Dashboard Preview */}
               <VStack spacing={4} align="stretch">
