@@ -9,8 +9,13 @@ from pathlib import Path
 backend_dir = Path(__file__).parent / "legal_app" / "backend"
 sys.path.insert(0, str(backend_dir))
 
-# Import your FastAPI app
-from main import app  # Assuming your main FastAPI app is in legal_app/backend/main.py
+try:
+    # Import your FastAPI app
+    from main import app
+except ImportError:
+    # Fallback for different directory structure
+    sys.path.insert(0, str(Path(__file__).parent))
+    from legal_app.backend.main import app
 
 if __name__ == "__main__":
     import uvicorn
