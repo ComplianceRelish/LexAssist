@@ -8,6 +8,9 @@ export interface UserCase {
   title: string;
   clientName: string;
   caseType: string;
+  description?: string;
+  case_type?: string; // snake_case variant for backend compatibility
+  jurisdiction?: string;
   status: 'active' | 'pending' | 'closed' | 'urgent';
   court: string;
   nextHearing?: string;
@@ -25,6 +28,12 @@ export interface UserDocument {
   caseId?: string;
   userId: string;
   analysisStatus?: 'pending' | 'completed' | 'failed';
+}
+
+export interface CaseDiaryEntry {
+  entry_text: string;
+  entry_type?: string;
+  entry_date?: string; // YYYY-MM-DD
 }
 
 export interface UserStats {
@@ -226,6 +235,17 @@ class ApiService {
       return response.data;
     } catch (error) {
       console.error('Error creating case:', error);
+      throw error;
+    }
+  }
+
+  // ENHANCED: Create diary entry for a case
+  public async createCaseDiaryEntry(caseId: string, entryData: CaseDiaryEntry): Promise<any> {
+    try {
+      const response = await this.post(`/api/cases/${caseId}/entries`, entryData);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating diary entry:', error);
       throw error;
     }
   }

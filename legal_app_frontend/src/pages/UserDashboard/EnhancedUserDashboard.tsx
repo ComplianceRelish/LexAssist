@@ -157,8 +157,33 @@ const EnhancedUserDashboard: React.FC = () => {
         ...(briefData.notes && { notes: briefData.notes })
       };
 
+      // 1. Create / fetch a case record first so we have an ID for the diary entry
+      let createdCase;
+      try {
+        createdCase = await apiService.createCase({
+          title: submissionData.title,
+          description: submissionData.brief_text,
+          status: 'active',
+        });
+      } catch (caseErr: any) {
+        console.error('Error creating case record:', caseErr);
+      }
+
+      // 2. Submit the brief for AI analysis
       const result = await apiService.submitCaseBrief(submissionData);
-      
+
+      // 3. Persist diary entry if we have a case_id and analysis result
+      if (createdCase?.id && result?.ai_analysis) {
+        try {
+          await apiService.createCaseDiaryEntry(createdCase.id, {
+            entry_text: JSON.stringify(result.ai_analysis), // store JSON as text
+            entry_type: 'analysis',
+          });
+        } catch (diaryErr: any) {
+          console.error('Error creating diary entry:', diaryErr);
+        }
+      }
+
       console.log('Analysis result received:', result);
       
       if (result && result.analysis_id) {

@@ -183,6 +183,7 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
       let finalTranscript = '';
 
       recognition.onresult = (event: any) => {
+      let finalTranscript = '';
         console.log('Speech recognition result event received:', event);
         let interimTranscript = '';
         
