@@ -250,6 +250,19 @@ class ApiService {
     }
   }
 
+  // NEW: Upload document
+  public async uploadDocument(formData: FormData): Promise<any> {
+    try {
+      const response = await this.post('/api/documents', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      throw error;
+    }
+  }
+
   // ENHANCED: Get analysis results
   public async getAnalysisResults(analysisId: string): Promise<any> {
     try {

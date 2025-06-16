@@ -603,3 +603,152 @@ async def create_case(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating case: {str(e)}"
         )
+
+# ==============================================
+# 🆕 Case Diary Entry Endpoints
+# ==============================================
+
+class CaseDiaryEntryData(BaseModel):
+    entry_text: str
+    entry_type: Optional[str] = "analysis"
+    entry_date: Optional[str] = None  # YYYY-MM-DD
+
+@router.post("/cases/{case_id}/entries")
+async def add_case_diary_entry(
+    case_id: str,
+    entry: CaseDiaryEntryData,
+    background_tasks: BackgroundTasks,
+    current_user=Depends(verify_user_access),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """Append a diary entry to an existing case."""
+    # Verify ownership of the case
+    case_resp = supabase.table("cases").select("user_id").eq("id", case_id).single().execute()
+    if not case_resp.data:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if case_resp.data["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed to modify this case")
+
+    entry_id = str(uuid.uuid4())
+    entry_record = {
+        "id": entry_id,
+        "case_id": case_id,
+        "user_id": current_user.id,
+        "entry_text": entry.entry_text,
+        "entry_type": entry.entry_type,
+        "entry_date": entry.entry_date or datetime.now().date().isoformat(),
+        "created_at": datetime.now().isoformat(),
+    }
+    supabase.table("case_diary_entries").insert(entry_record).execute()
+    return entry_record
+
+@router.get("/cases/{case_id}/entries")
+async def list_case_diary_entries(
+    case_id: str,
+    current_user=Depends(verify_user_access),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """Return all diary entries for a case."""
+    # confirm ownership
+    case_resp = supabase.table("cases").select("user_id").eq("id", case_id).single().execute()
+    if not case_resp.data:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if case_resp.data["user_id"] != current_user.id:
+        raise HTTPException(status_code=403, detail="Not allowed to view this case")
+
+    entries_resp = supabase.table("case_diary_entries").select("*").eq("case_id", case_id).order("entry_date", desc=False).execute()
+    return {"entries": entries_resp.data or []}
+
+# ==============================================
+# 🆕 Document Upload & Processing
+# ==============================================
+
+class DocumentUploadResponse(BaseModel):
+    document_id: str
+    status: str = "processing"
+
+
+def _chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100):
+    words = text.split()
+    chunks = []
+    current = []
+    for word in words:
+        current.append(word)
+        if len(current) >= chunk_size:
+            chunks.append(" ".join(current))
+            current = current[-overlap:]
+    if current:
+        chunks.append(" ".join(current))
+    return chunks
+
+
+def _compute_embedding(text: str):
+    """Return vector embedding or zeros if model unavailable"""
+    try:
+        import openai, os
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        resp = openai.Embedding.create(model="text-embedding-ada-002", input=text)
+        return resp["data"][0]["embedding"]
+    except Exception as e:
+        logger.warning(f"Embedding service unavailable, using zero vector: {e}")
+        return [0.0] * 768
+
+
+def _process_document(doc_id: str, raw_text: str, supabase: Client):
+    """Background task: split text, store chunks & embeddings"""
+    try:
+        chunks = _chunk_text(raw_text)
+        for idx, chunk in enumerate(chunks):
+            chunk_id = str(uuid.uuid4())
+            supabase.table("document_chunks").insert({
+                "id": chunk_id,
+                "document_id": doc_id,
+                "chunk_index": idx,
+                "text": chunk,
+            }).execute()
+            embedding = _compute_embedding(chunk)
+            supabase.table("vector_references").insert({
+                "chunk_id": chunk_id,
+                "embedding": embedding,
+            }).execute()
+        # update document status to processed
+        supabase.table("documents").update({"status": "processed", "updated_at": datetime.now().isoformat()}).eq("id", doc_id).execute()
+    except Exception as e:
+        logger.error(f"Error processing document {doc_id}: {e}")
+        supabase.table("documents").update({"status": "failed", "updated_at": datetime.now().isoformat()}).eq("id", doc_id).execute()
+
+
+@router.post("/documents")
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    case_id: Optional[str] = Form(None),
+    current_user=Depends(verify_user_access),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """Upload a document and schedule chunking + embedding."""
+    try:
+        contents = (await file.read()).decode(errors="ignore")
+        doc_id = str(uuid.uuid4())
+        now = datetime.now().isoformat()
+
+        # Store metadata row
+        supabase.table("documents").insert({
+            "id": doc_id,
+            "user_id": current_user.id,
+            "case_id": case_id,
+            "title": title,
+            "filename": file.filename,
+            "size": len(contents),
+            "status": "processing",
+            "created_at": now,
+            "updated_at": now,
+        }).execute()
+
+        # Kick off background processing
+        background_tasks.add_task(_process_document, doc_id, contents, supabase)
+        return DocumentUploadResponse(document_id=doc_id)
+    except Exception as e:
+        logger.error(f"Document upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Document upload failed")

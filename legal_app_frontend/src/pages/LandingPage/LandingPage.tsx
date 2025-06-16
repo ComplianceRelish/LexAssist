@@ -114,6 +114,7 @@ const LandingPage: React.FC = () => {
               color={primaryColor} 
               fontFamily="Playfair Display, serif"
               lineHeight="1.2"
+              mt={{ base: 0, lg: -4 }}
             >
               Advanced Legal Technology at Your Fingertips
             </Heading>
@@ -161,6 +162,7 @@ const LandingPage: React.FC = () => {
               border="1px"
               borderColor="gray.200"
               position="relative"
+              mt={{ base: 8, lg: -20 }}
             >
               {/* Mock Dashboard Preview */}
               <VStack spacing={4} align="stretch">

@@ -11,6 +11,7 @@ import {
   FaMicrophone, FaMicrophoneSlash, FaStop, FaFileAudio, FaVolumeUp
 } from 'react-icons/fa';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiService } from '../../services/api.service';
 
 interface CaseBriefModalProps {
   isOpen: boolean;
@@ -40,6 +41,10 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
+
+  // Document upload state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
   const [microphoneError, setMicrophoneError] = useState('');
   const [recordingError, setRecordingError] = useState('');
@@ -338,8 +343,8 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
     return `${seconds}s`;
   };
 
-  const handleSubmit = () => {
-    console.log('Form submission attempt with data:', formData);
+  const handleSubmit = async () => {
+    console.log('Form submission attempt with data:', formData, selectedFile);
     if (!formData.title.trim() || !formData.brief_text.trim()) {
       toast({
         title: "Validation Error",
@@ -350,15 +355,48 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
       return;
     }
 
-    onSubmit({
-      title: formData.title.trim(),
-      brief_text: formData.brief_text.trim(),
-      court: formData.court || 'Not Specified',
-      case_type: formData.case_type || 'general',
-      urgency_level: formData.urgency_level,
-      speech_input: false, // This was speech-enabled input
-      user_id: user?.id
-    });
+    try {
+      // Upload the document first if present
+      let uploadedDocumentId: string | null = null;
+      if (selectedFile) {
+        setUploadingDocument(true);
+        const fd = new FormData();
+        fd.append('file', selectedFile);
+        fd.append('title', selectedFile.name);
+        // Optionally, include other metadata like description or case_id later
+        const uploadResp = await apiService.uploadDocument(fd);
+        uploadedDocumentId = uploadResp?.document_id || uploadResp?.documentId || null;
+        toast({
+          title: "Document uploaded",
+          description: "Your document is being processed",
+          status: "success",
+          duration: 3000
+        });
+      }
+
+      onSubmit({
+        title: formData.title.trim(),
+        brief_text: formData.brief_text.trim(),
+        court: formData.court || 'Not Specified',
+        case_type: formData.case_type || 'general',
+        urgency_level: formData.urgency_level,
+        speech_input: false,
+        user_id: user?.id,
+        document_id: uploadedDocumentId
+      });
+
+      setSelectedFile(null);
+    } catch (error: any) {
+      console.error('Error uploading document or submitting brief:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to upload document',
+        status: "error",
+        duration: 5000
+      });
+    } finally {
+      setUploadingDocument(false);
+    }
   };
 
   const requestMicrophonePermission = async () => {
@@ -550,6 +588,26 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                 </FormControl>
               </HStack>
 
+              {/* Document Upload */}
+              <FormControl>
+                <FormLabel>Attach Document (optional)</FormLabel>
+                <Input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt,image/*"
+                  capture="environment"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setSelectedFile(e.target.files[0]);
+                    }
+                  }}
+                />
+                {selectedFile && (
+                  <Text fontSize="sm" mt={1}>
+                    {selectedFile.name}
+                  </Text>
+                )}
+              </FormControl>
+
               {/* Urgency Level (no speech input needed) */}
               <FormControl>
                 <FormLabel>Urgency Level</FormLabel>
@@ -583,7 +641,7 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
             <Button 
               colorScheme="blue" 
               onClick={handleSubmit}
-              disabled={!formData.title.trim() || !formData.brief_text.trim() || isRecording}
+              disabled={!formData.title.trim() || !formData.brief_text.trim() || isRecording || uploadingDocument}
               size="lg"
             >
               Analyze Brief
