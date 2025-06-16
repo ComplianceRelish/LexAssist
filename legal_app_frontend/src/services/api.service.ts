@@ -195,9 +195,23 @@ class ApiService {
   }
 
   // ENHANCED: Case Brief Analysis with InLegalBERT
-  public async submitCaseBrief(briefData: CaseBriefSubmission): Promise<any> {
+  public async submitCaseBrief(briefData: any): Promise<any> {
     try {
-      const response = await this.post('/api/legal/analyze-brief', briefData);
+      // Transform the input data to match the backend's expected field names
+      const transformedData = {
+        user_id: briefData.user_id || briefData.userId,
+        title: briefData.title || briefData.caseTitle,
+        brief_text: briefData.brief_text || briefData.briefDescription,
+        court: briefData.court,
+        case_type: briefData.case_type || briefData.caseType,
+        jurisdiction: briefData.jurisdiction || 'IN',
+        urgency_level: briefData.urgency_level || briefData.urgencyLevel || 'medium',
+        speech_input: briefData.speech_input || briefData.speechInput || false
+      };
+      
+      console.log('Transformed case brief data:', transformedData);
+      
+      const response = await this.post('/api/legal/analyze-brief', transformedData);
       return response.data;
     } catch (error) {
       console.error('Error submitting case brief:', error);

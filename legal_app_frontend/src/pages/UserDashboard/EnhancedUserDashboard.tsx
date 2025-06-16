@@ -141,17 +141,16 @@ const EnhancedUserDashboard: React.FC = () => {
     try {
       console.log('Submitting case brief:', briefData);
       
-      // FIXED: Properly map briefData to CaseBriefSubmission interface
-      const submissionData: CaseBriefSubmission = {
-        userId: user?.id || '',
-        clientName: briefData.clientName || user?.full_name || user?.name || 'Unknown Client',
-        caseTitle: briefData.title || briefData.caseTitle || 'Untitled Case',
-        caseType: briefData.case_type || briefData.caseType || 'General',
-        briefDescription: briefData.brief_text || briefData.briefDescription || '',
+      // Properly map briefData to match backend's Pydantic model field names
+      const submissionData = {
+        user_id: briefData.user_id || user?.id || '',
+        title: briefData.title || 'Untitled Case',
+        brief_text: briefData.brief_text || '',
         court: briefData.court || 'Not Specified',
+        case_type: briefData.case_type || 'general',
         jurisdiction: briefData.jurisdiction || 'IN',
-        urgencyLevel: briefData.urgency_level || briefData.urgencyLevel || 'medium',
-        speechInput: briefData.speech_input || briefData.speechInput || false,
+        urgency_level: briefData.urgency_level || 'medium',
+        speech_input: briefData.speech_input || false,
         // Additional fields that might be required
         ...(briefData.documents && { documents: briefData.documents }),
         ...(briefData.tags && { tags: briefData.tags }),
