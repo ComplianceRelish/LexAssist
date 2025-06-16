@@ -6,6 +6,7 @@ This service provides an interface to the InLegalBERT model for legal text proce
 
 import os
 import logging
+import threading
 from typing import List, Dict, Any, Optional
 import torch
 from transformers import AutoTokenizer, AutoModel, pipeline
@@ -159,10 +160,6 @@ class LegalBertService:
         except Exception as e:
             logger.error(f"Error generating embeddings: {e}")
             raise
-        
-        # Get [CLS] token embedding (document representation)
-        embedding = outputs.last_hidden_state[:, 0, :].cpu().numpy()[0].tolist()
-        return embedding
     
     def fill_legal_mask(self, text: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Fill in [MASK] tokens in legal text"""
@@ -291,7 +288,6 @@ class LegalBertService:
                 
         return found_terms
 
-import threading
 
 # Singleton instance
 _legal_bert_service = None

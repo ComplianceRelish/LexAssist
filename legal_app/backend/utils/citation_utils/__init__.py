@@ -1,11 +1,4 @@
 """
-Citation Utilities for LexAssist
-
-This package provides tools for standardizing, parsing, and managing legal citations.
+Utils package initialization.
+This file marks the utils directory as a Python package.
 """
-
-from .citation_formatter import CitationFormatter
-
-__all__ = [
-    'CitationFormatter'
-]

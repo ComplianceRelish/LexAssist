@@ -1,6 +1,7 @@
 import re
 import json
 from collections import defaultdict
+from datetime import datetime  # Added missing import
 import uuid
 
 class CitationParser:

@@ -11,6 +11,7 @@ from typing import Dict, List, Any, Optional, Union
 from pydantic import BaseModel, Field
 import json
 import logging
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -194,8 +195,6 @@ class ResponseParser:
     def parse_statute_identification(raw_output: str) -> List[LawSection]:
         """Parse raw output into structured law sections"""
         try:
-            # This is a simplified implementation
-            # In a real system, this would use regex or more sophisticated parsing
             sections = []
             current_section = {}
             
@@ -206,7 +205,6 @@ class ResponseParser:
                     continue
                 
                 if line.startswith("Act:") or line.startswith("Act name:"):
-                    # Save previous section if exists
                     if current_section and 'act_name' in current_section:
                         sections.append(LawSection(
                             section_id=f"{current_section.get('act_name', 'Unknown')}-{current_section.get('section_number', 'Unknown')}",
@@ -217,8 +215,6 @@ class ResponseParser:
                             relevance_score=current_section.get('relevance_score', 0.0),
                             citations=current_section.get('citations', [])
                         ))
-                    
-                    # Start new section
                     current_section = {'act_name': line.split(':', 1)[1].strip()}
                 
                 elif line.startswith("Section:") or line.startswith("Section number:"):
@@ -233,13 +229,10 @@ class ResponseParser:
                 elif line.startswith("Relevance:") or line.startswith("Relevance score:"):
                     try:
                         relevance_text = line.split(':', 1)[1].strip()
-                        # Try to extract a numeric score if present
-                        import re
                         score_match = re.search(r'(\d+(\.\d+)?)', relevance_text)
                         if score_match:
                             current_section['relevance_score'] = float(score_match.group(1)) / 10 if float(score_match.group(1)) > 10 else float(score_match.group(1))
                         else:
-                            # Assign a score based on textual description
                             if 'high' in relevance_text.lower():
                                 current_section['relevance_score'] = 0.9
                             elif 'medium' in relevance_text.lower():
@@ -251,7 +244,6 @@ class ResponseParser:
                     except:
                         current_section['relevance_score'] = 0.5
             
-            # Add the last section if exists
             if current_section and 'act_name' in current_section:
                 sections.append(LawSection(
                     section_id=f"{current_section.get('act_name', 'Unknown')}-{current_section.get('section_number', 'Unknown')}",
@@ -267,15 +259,12 @@ class ResponseParser:
         
         except Exception as e:
             logger.error(f"Error parsing statute identification output: {e}")
-            # Return empty list on parsing error
             return []
     
     @staticmethod
     def parse_case_history(raw_output: str) -> List[CaseReference]:
         """Parse raw output into structured case references"""
         try:
-            # This is a simplified implementation
-            # In a real system, this would use regex or more sophisticated parsing
             cases = []
             current_case = {}
             
@@ -286,7 +275,6 @@ class ResponseParser:
                     continue
                 
                 if line.startswith("Case:") or line.startswith("Case name:"):
-                    # Save previous case if exists
                     if current_case and 'case_name' in current_case:
                         cases.append(CaseReference(
                             case_name=current_case.get('case_name', 'Unknown'),
@@ -297,8 +285,6 @@ class ResponseParser:
                             relevance_score=current_case.get('relevance_score', 0.0),
                             key_points=current_case.get('key_points', [])
                         ))
-                    
-                    # Start new case
                     current_case = {'case_name': line.split(':', 1)[1].strip()}
                 
                 elif line.startswith("Citation:"):
@@ -319,13 +305,10 @@ class ResponseParser:
                 elif line.startswith("Relevance:") or line.startswith("Relevance score:"):
                     try:
                         relevance_text = line.split(':', 1)[1].strip()
-                        # Try to extract a numeric score if present
-                        import re
                         score_match = re.search(r'(\d+(\.\d+)?)', relevance_text)
                         if score_match:
                             current_case['relevance_score'] = float(score_match.group(1)) / 10 if float(score_match.group(1)) > 10 else float(score_match.group(1))
                         else:
-                            # Assign a score based on textual description
                             if 'high' in relevance_text.lower():
                                 current_case['relevance_score'] = 0.9
                             elif 'medium' in relevance_text.lower():
@@ -339,15 +322,13 @@ class ResponseParser:
                 
                 elif line.startswith("Key points:") or line.startswith("Key Points:"):
                     current_case['key_points'] = []
-                    continue  # Skip this line and collect points in subsequent lines
+                    continue
                 
                 elif current_case.get('key_points') is not None and line.startswith("-"):
-                    # Collect key points
                     point = line.lstrip("- ").strip()
                     if point:
                         current_case['key_points'].append(point)
             
-            # Add the last case if exists
             if current_case and 'case_name' in current_case:
                 cases.append(CaseReference(
                     case_name=current_case.get('case_name', 'Unknown'),
@@ -363,9 +344,140 @@ class ResponseParser:
         
         except Exception as e:
             logger.error(f"Error parsing case history output: {e}")
-            # Return empty list on parsing error
             return []
     
     @staticmethod
     def parse_legal_analysis(raw_output: str) -> LegalAnalysis:
-(Content truncated due to size limit. Use line ranges to read in chunks)
+        """Parse raw output into structured legal analysis"""
+        try:
+            analysis_data = {
+                'summary': '',
+                'key_issues': [],
+                'legal_principles': [],
+                'recommendations': [],
+                'risk_assessment': {}
+            }
+            
+            current_section = None
+            lines = raw_output.strip().split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                if line.lower().startswith("summary:"):
+                    current_section = 'summary'
+                    analysis_data['summary'] = line.split(':', 1)[1].strip()
+                
+                elif line.lower().startswith("key issues:") or line.lower().startswith("key legal issues:"):
+                    current_section = 'key_issues'
+                    continue
+                
+                elif line.lower().startswith("legal principles:") or line.lower().startswith("applicable legal principles:"):
+                    current_section = 'legal_principles'
+                    continue
+                
+                elif line.lower().startswith("recommendations:"):
+                    current_section = 'recommendations'
+                    continue
+                
+                elif line.lower().startswith("risks:") or line.lower().startswith("risk assessment:"):
+                    current_section = 'risk_assessment'
+                    continue
+                
+                elif line.startswith("-") or line.startswith("•") or line.startswith("*"):
+                    item = line.lstrip("-•* ").strip()
+                    if item and current_section in ['key_issues', 'legal_principles', 'recommendations']:
+                        analysis_data[current_section].append(item)
+                
+                elif current_section == 'summary' and not analysis_data['summary']:
+                    analysis_data['summary'] = line
+                
+                elif current_section == 'risk_assessment':
+                    if ':' in line:
+                        key, value = line.split(':', 1)
+                        analysis_data['risk_assessment'][key.strip()] = value.strip()
+            
+            if not analysis_data['summary']:
+                analysis_data['summary'] = "No summary available"
+            
+            return LegalAnalysis(
+                summary=analysis_data['summary'],
+                key_issues=analysis_data['key_issues'],
+                legal_principles=analysis_data['legal_principles'],
+                recommendations=analysis_data['recommendations'] if analysis_data['recommendations'] else None,
+                risk_assessment=analysis_data['risk_assessment'] if analysis_data['risk_assessment'] else None
+            )
+        
+        except Exception as e:
+            logger.error(f"Error parsing legal analysis output: {e}")
+            return LegalAnalysis(
+                summary="Error parsing analysis",
+                key_issues=[],
+                legal_principles=[]
+            )
+
+# Context Manager
+class LegalContextManager:
+    """Manages legal context for model interactions"""
+    
+    def __init__(self):
+        self.context_stack = []
+    
+    def push_context(self, context: LegalContext):
+        """Push a new context onto the stack"""
+        self.context_stack.append(context)
+    
+    def pop_context(self) -> Optional[LegalContext]:
+        """Pop the most recent context from the stack"""
+        if self.context_stack:
+            return self.context_stack.pop()
+        return None
+    
+    def get_current_context(self) -> Optional[LegalContext]:
+        """Get the current context without removing it"""
+        if self.context_stack:
+            return self.context_stack[-1]
+        return None
+    
+    def merge_contexts(self, base_context: LegalContext, override_context: LegalContext) -> LegalContext:
+        """Merge two contexts, with override taking precedence"""
+        merged_data = base_context.dict()
+        
+        for key, value in override_context.dict().items():
+            if value is not None:
+                merged_data[key] = value
+        
+        return LegalContext(**merged_data)
+
+# Model Registry
+class ModelRegistry:
+    """Registry for managing multiple legal models"""
+    
+    def __init__(self):
+        self.models: Dict[str, LegalModelInterface] = {}
+    
+    def register_model(self, name: str, model: LegalModelInterface):
+        """Register a model with the registry"""
+        self.models[name] = model
+        logger.info(f"Registered model: {name}")
+    
+    def get_model(self, name: str) -> Optional[LegalModelInterface]:
+        """Get a model by name"""
+        return self.models.get(name)
+    
+    def list_models(self) -> List[str]:
+        """List all registered model names"""
+        return list(self.models.keys())
+    
+    def get_model_info(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get information about a model"""
+        model = self.get_model(name)
+        if model:
+            return model.get_model_info()
+        return None
+
+# Singleton instances for global use
+context_manager = LegalContextManager()
+model_registry = ModelRegistry()

@@ -1,4 +1,5 @@
 import os
+import re  # Added missing import
 import torch
 from transformers import AutoModel, AutoTokenizer, AutoConfig
 from typing import List, Dict, Optional, Union

@@ -2,43 +2,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalFooter,
-  ModalBody,
-  ModalCloseButton,
-  Button,
-  FormControl,
-  FormLabel,
-  Input,
-  Textarea,
-  Select,
-  VStack,
-  HStack,
-  IconButton,
-  Text,
-  useToast,
-  Box,
-  Spinner,
-  Progress,
-  Alert,
-  AlertIcon,
-  Badge,
-  Collapse,
-  useDisclosure,
-  Flex,
-  Divider
+  Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
+  Button, FormControl, FormLabel, Input, Textarea, Select, VStack, HStack, IconButton,
+  Text, useToast, Box, Spinner, Progress, Alert, AlertIcon, Badge, Collapse, useDisclosure,
+  Flex, Divider, Circle
 } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
 import { 
-  FaMicrophone, 
-  FaMicrophoneSlash, 
-  FaStop, 
-  FaPlay,
-  FaChevronDown,
-  FaChevronUp,
-  FaFileAudio
+  FaMicrophone, FaMicrophoneSlash, FaStop, FaChevronDown, FaChevronUp, FaFileAudio, FaVolumeUp
 } from 'react-icons/fa';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -55,17 +26,16 @@ interface TranscriptionHistoryItem {
   timestamp: string;
 }
 
-const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubmit }) => {
-  // Existing state
-  const [formData, setFormData] = useState({
-    title: '',
-    brief_text: '',
-    court: '',
-    case_type: '',
-    urgency_level: 'medium'
-  });
+const pulseAnimation = keyframes`
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+`;
 
-  // Speech recording state
+const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState({
+    title: '', brief_text: '', court: '', case_type: '', urgency_level: 'medium'
+  });
   const [isRecording, setIsRecording] = useState(false);
   const [speechToText, setSpeechToText] = useState("");
   const [isProcessingSpeech, setIsProcessingSpeech] = useState(false);
@@ -73,84 +43,183 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
   const [confidenceScore, setConfidenceScore] = useState(0);
   const [legalTermsDetected, setLegalTermsDetected] = useState<string[]>([]);
   const [transcriptionHistory, setTranscriptionHistory] = useState<TranscriptionHistoryItem[]>([]);
-  
-  // UI state
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [isPermissionGranted, setIsPermissionGranted] = useState(false);
+  const [microphoneError, setMicrophoneError] = useState('');
   const { isOpen: isAdvancedOpen, onToggle: toggleAdvanced } = useDisclosure();
   const [recordingError, setRecordingError] = useState('');
   
-  // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   
   const toast = useToast();
   const { user } = useAuth();
 
-  // Cleanup on component unmount
   useEffect(() => {
-    return () => {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-    };
+    checkMicrophonePermissions();
+    return () => cleanup();
   }, []);
 
-  // Reset form when modal closes
+  useEffect(() => {
+    return () => cleanup();
+  }, []);
+
   useEffect(() => {
     if (!isOpen) {
       resetForm();
     }
   }, [isOpen]);
 
+  const cleanup = () => {
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    if (recognitionRef.current) recognitionRef.current.stop();
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+    if (audioContextRef.current) audioContextRef.current.close();
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+  };
+
+  const checkMicrophonePermissions = async () => {
+    try {
+      const permission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+      
+      if (permission.state === 'granted') {
+        setIsPermissionGranted(true);
+        setMicrophoneError('');
+      } else if (permission.state === 'denied') {
+        setIsPermissionGranted(false);
+        setMicrophoneError('Microphone access denied. Please enable in browser settings.');
+      } else {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach(track => track.stop());
+          setIsPermissionGranted(true);
+          setMicrophoneError('');
+        } catch (error) {
+          setIsPermissionGranted(false);
+          setMicrophoneError('Please allow microphone access to use speech input.');
+        }
+      }
+    } catch (error) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        setIsPermissionGranted(true);
+        setMicrophoneError('');
+      } catch (error) {
+        setIsPermissionGranted(false);
+        setMicrophoneError('Could not access microphone. Please check browser permissions.');
+      }
+    }
+  };
+
   const resetForm = () => {
-    setFormData({
-      title: '',
-      brief_text: '',
-      court: '',
-      case_type: '',
-      urgency_level: 'medium'
-    });
+    setFormData({ title: '', brief_text: '', court: '', case_type: '', urgency_level: 'medium' });
     setSpeechToText('');
     setRecordingDuration(0);
     setConfidenceScore(0);
     setLegalTermsDetected([]);
     setRecordingError('');
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
+    setAudioLevel(0);
+    cleanup();
+  };
+
+  const startAudioLevelMonitoring = (stream: MediaStream) => {
+    try {
+      const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+      audioContextRef.current = new AudioContextClass();
+      analyserRef.current = audioContextRef.current!.createAnalyser();
+      const microphone = audioContextRef.current!.createMediaStreamSource(stream);
+      
+      analyserRef.current.fftSize = 256;
+      microphone.connect(analyserRef.current);
+      
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      
+      const updateAudioLevel = () => {
+        if (analyserRef.current && audioContextRef.current && isRecording) {
+          analyserRef.current.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+          setAudioLevel(average);
+          animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
+        }
+      };
+      
+      updateAudioLevel();
+    } catch (error) {
+      console.error('Error setting up audio level monitoring:', error);
     }
   };
 
-  // Speech recognition functions
   const startSpeechRecording = async () => {
-    try {
-      setRecordingError('');
-      
-      // Check if browser supports speech recognition
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      
-      if (!SpeechRecognition) {
-        // Fallback to audio recording for server-side processing
-        await startAudioRecording();
+    if (!isPermissionGranted) {
+      await checkMicrophonePermissions();
+      if (!isPermissionGranted) {
+        toast({
+          title: "Microphone Access Required",
+          description: "Please enable microphone access in your browser settings",
+          status: "error",
+          duration: 5000
+        });
         return;
       }
+    }
 
-      // Use browser's speech recognition for real-time transcription
-      const recognition = new SpeechRecognition();
+    try {
+      setRecordingError('');
+      setMicrophoneError('');
+      
+      const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      
+      if (SpeechRecognitionClass) {
+        await startWebSpeechRecognition(SpeechRecognitionClass);
+      } else {
+        await startAudioRecording();
+      }
+    } catch (error) {
+      console.error('Error starting speech recording:', error);
+      setRecordingError('Could not start recording. Please try again.');
+      toast({
+        title: "Recording Error",
+        description: "Could not start speech recognition. Trying audio recording...",
+        status: "warning",
+        duration: 3000
+      });
+      await startAudioRecording();
+    }
+  };
+
+  const startWebSpeechRecognition = async (SpeechRecognitionClass: any) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      
+      streamRef.current = stream;
+      startAudioLevelMonitoring(stream);
+
+      const recognition = new SpeechRecognitionClass();
       recognitionRef.current = recognition;
 
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = 'en-IN'; // Indian English
+      recognition.lang = 'en-IN';
       recognition.maxAlternatives = 3;
 
       let finalTranscript = '';
       let interimTranscript = '';
 
-      recognition.onresult = (event) => {
+      recognition.onresult = (event: any) => {
         interimTranscript = '';
         
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -163,21 +232,16 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
           }
         }
         
-        // Update the brief text in real-time
         const fullTranscript = finalTranscript + interimTranscript;
         setSpeechToText(fullTranscript);
-        setFormData(prev => ({
-          ...prev,
-          brief_text: fullTranscript,
-          speech_input: true
-        }));
+        setFormData(prev => ({ ...prev, brief_text: fullTranscript }));
       };
 
       recognition.onstart = () => {
         setIsRecording(true);
         startRecordingTimer();
         toast({
-          title: "Recording Started",
+          title: "🎤 Recording Started",
           description: "Speak your case brief details clearly",
           status: "info",
           duration: 2000
@@ -187,48 +251,48 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
       recognition.onend = () => {
         setIsRecording(false);
         stopRecordingTimer();
+        setAudioLevel(0);
         
         if (finalTranscript.trim()) {
           processTranscriptWithAI(finalTranscript.trim());
         }
+        
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+        }
       };
 
-      recognition.onerror = (event) => {
+      recognition.onerror = (event: any) => {
         setIsRecording(false);
         stopRecordingTimer();
+        setAudioLevel(0);
         setRecordingError(`Speech recognition error: ${event.error}`);
         
-        // Fallback to audio recording
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+        }
         startAudioRecording();
       };
 
       recognition.start();
 
     } catch (error) {
-      toast({
-        title: "Recording Error",
-        description: "Could not start speech recognition. Trying audio recording...",
-        status: "warning",
-        duration: 3000
-      });
-      
-      // Fallback to audio recording
-      await startAudioRecording();
+      console.error('Web Speech Recognition error:', error);
+      throw error;
     }
   };
 
   const startAudioRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100
-        }
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 44100 }
       });
       
+      streamRef.current = stream;
+      startAudioLevelMonitoring(stream);
+      
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'
       });
       
       mediaRecorderRef.current = mediaRecorder;
@@ -241,24 +305,26 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
         await processAudioToText(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
 
-      mediaRecorder.start(1000); // Collect data every second
+      mediaRecorder.start(1000);
       setIsRecording(true);
       startRecordingTimer();
       
       toast({
-        title: "Audio Recording Started",
+        title: "🎙️ Audio Recording Started",
         description: "Speak your case brief details",
         status: "info",
         duration: 2000
       });
 
     } catch (error) {
+      console.error('Audio recording error:', error);
       setRecordingError('Could not access microphone. Please check permissions.');
+      setMicrophoneError('Could not access microphone. Please check browser permissions.');
       toast({
         title: "Recording Error",
         description: "Could not access microphone",
@@ -269,22 +335,36 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
   };
 
   const stopSpeechRecording = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    
+    if (recognitionRef.current) recognitionRef.current.stop();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
     
     setIsRecording(false);
     stopRecordingTimer();
+    setAudioLevel(0);
+    
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
   };
 
   const startRecordingTimer = () => {
     setRecordingDuration(0);
     recordingTimerRef.current = setInterval(() => {
-      setRecordingDuration(prev => prev + 1);
+      setRecordingDuration(prev => {
+        if (prev >= 300) {
+          stopSpeechRecording();
+          toast({
+            title: "Recording Stopped",
+            description: "Maximum recording time reached (5 minutes)",
+            status: "warning",
+            duration: 3000
+          });
+          return prev;
+        }
+        return prev + 1;
+      });
     }, 1000);
   };
 
@@ -299,12 +379,12 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
     setIsProcessingSpeech(true);
     
     try {
-      const formData = new FormData();
-      formData.append('audio_file', audioBlob, 'recording.webm');
+      const formDataToSend = new FormData();
+      formDataToSend.append('audio_file', audioBlob, 'recording.webm');
 
       const response = await fetch('/api/legal/speech-to-brief', {
         method: 'POST',
-        body: formData,
+        body: formDataToSend,
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -317,7 +397,6 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
         setConfidenceScore(result.confidence_score || 0);
         setLegalTermsDetected(result.legal_terms_detected || []);
         
-        // Add to transcription history
         setTranscriptionHistory(prev => [...prev, {
           id: Date.now(),
           text: result.transcribed_text,
@@ -325,18 +404,16 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
           timestamp: new Date().toLocaleTimeString()
         }]);
         
-        // Auto-fill form with speech data
         setFormData(prev => ({
           ...prev,
           brief_text: result.formatted_brief?.formatted_text || result.transcribed_text,
           title: result.suggestions?.title || prev.title,
           case_type: result.suggestions?.case_type || prev.case_type,
-          court: result.suggestions?.court || prev.court,
-          speech_input: true
+          court: result.suggestions?.court || prev.court
         }));
 
         toast({
-          title: "Speech Processed Successfully",
+          title: "✅ Speech Processed Successfully",
           description: `Transcribed with ${result.confidence_score}% confidence`,
           status: "success",
           duration: 3000
@@ -345,10 +422,11 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
         throw new Error('Failed to process speech');
       }
     } catch (error) {
+      console.error('Speech processing error:', error);
       setRecordingError('Could not process speech to text');
       toast({
         title: "Processing Error",
-        description: "Could not process speech to text",
+        description: "Could not process speech to text. Please try again.",
         status: "error",
         duration: 3000
       });
@@ -359,7 +437,6 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
 
   const processTranscriptWithAI = async (transcript: string) => {
     try {
-      // Use AI to improve and structure the transcript
       const response = await fetch('/api/legal/format-speech-text', {
         method: 'POST',
         headers: {
@@ -375,7 +452,6 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
       if (response.ok) {
         const result = await response.json();
         
-        // Update form with AI-enhanced content
         setFormData(prev => ({
           ...prev,
           title: result.suggested_title || prev.title,
@@ -414,10 +490,19 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
 
   const clearSpeechInput = () => {
     setSpeechToText('');
-    setFormData(prev => ({ ...prev, brief_text: '', speech_input: false }));
+    setFormData(prev => ({ ...prev, brief_text: '' }));
     setConfidenceScore(0);
     setLegalTermsDetected([]);
     setTranscriptionHistory([]);
+  };
+
+  const requestMicrophonePermission = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      await checkMicrophonePermissions();
+    } catch (error) {
+      setMicrophoneError('Microphone access denied. Please enable in browser settings.');
+    }
   };
 
   return (
@@ -439,54 +524,112 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
         
         <ModalBody>
           <VStack spacing={6}>
-            {/* Speech Input Section */}
             <Box w="full" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
               <HStack justify="space-between" mb={3}>
                 <Text fontWeight="bold" fontSize="lg">🎤 Speech Input</Text>
                 <HStack spacing={2}>
-                  {!isRecording ? (
-                    <IconButton
-                      icon={<FaMicrophone />}
-                      colorScheme="red"
-                      size="lg"
-                      onClick={startSpeechRecording}
-                      aria-label="Start Recording"
-                      disabled={isProcessingSpeech}
-                      isLoading={isProcessingSpeech}
-                    />
+                  {!isPermissionGranted ? (
+                    <Button
+                      size="sm"
+                      colorScheme="blue"
+                      variant="outline"
+                      onClick={requestMicrophonePermission}
+                      leftIcon={<FaMicrophoneSlash />}
+                    >
+                      Enable Microphone
+                    </Button>
+                  ) : !isRecording ? (
+                    <Box position="relative">
+                      <IconButton
+                        icon={<FaMicrophone />}
+                        colorScheme="red"
+                        size="lg"
+                        onClick={startSpeechRecording}
+                        aria-label="Start Recording"
+                        disabled={isProcessingSpeech || !isPermissionGranted}
+                        isLoading={isProcessingSpeech}
+                        _hover={{ transform: 'scale(1.05)' }}
+                        transition="all 0.2s"
+                      />
+                      {audioLevel > 0 && (
+                        <Circle
+                          position="absolute"
+                          top="-2px"
+                          right="-2px"
+                          size="12px"
+                          bg="green.400"
+                          css={{ animation: `${pulseAnimation} 1s infinite` }}
+                        />
+                      )}
+                    </Box>
                   ) : (
-                    <IconButton
-                      icon={<FaStop />}
-                      colorScheme="gray"
-                      size="lg"
-                      onClick={stopSpeechRecording}
-                      aria-label="Stop Recording"
-                    />
+                    <HStack>
+                      <Box position="relative">
+                        <IconButton
+                          icon={<FaVolumeUp />}
+                          colorScheme="green"
+                          size="sm"
+                          variant="ghost"
+                          aria-label="Audio Level"
+                          opacity={0.3 + (audioLevel / 255) * 0.7}
+                        />
+                      </Box>
+                      
+                      <IconButton
+                        icon={<FaStop />}
+                        colorScheme="gray"
+                        size="lg"
+                        onClick={stopSpeechRecording}
+                        aria-label="Stop Recording"
+                        css={{ animation: `${pulseAnimation} 1s infinite` }}
+                        bg="red.500"
+                        color="white"
+                        _hover={{ bg: 'red.600' }}
+                      />
+                    </HStack>
                   )}
                   
                   {speechToText && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={clearSpeechInput}
-                    >
+                    <Button size="sm" variant="outline" onClick={clearSpeechInput}>
                       Clear
                     </Button>
                   )}
                 </HStack>
               </HStack>
+
+              {microphoneError && (
+                <Alert status="warning" size="sm" mb={3}>
+                  <AlertIcon />
+                  <Text fontSize="sm">{microphoneError}</Text>
+                </Alert>
+              )}
               
-              {/* Recording Status */}
               {isRecording && (
                 <Box mb={3}>
                   <HStack justify="space-between" mb={2}>
-                    <Text color="red.500" fontSize="sm" fontWeight="bold">
-                      🔴 Recording Active
-                    </Text>
+                    <HStack>
+                      <Circle size="12px" bg="red.500" css={{ animation: `${pulseAnimation} 1s infinite` }} />
+                      <Text color="red.500" fontSize="sm" fontWeight="bold">
+                        Recording Active
+                      </Text>
+                    </HStack>
                     <Text color="gray.600" fontSize="sm">
                       Duration: {formatDuration(recordingDuration)}
                     </Text>
                   </HStack>
+                  
+                  <Box mb={2}>
+                    <Progress 
+                      value={Math.min((audioLevel / 255) * 100, 100)} 
+                      colorScheme="green" 
+                      size="sm" 
+                      bg="gray.200"
+                    />
+                    <Text fontSize="xs" color="gray.500" mt={1}>
+                      Audio Level
+                    </Text>
+                  </Box>
+                  
                   <Progress value={Math.min((recordingDuration / 300) * 100, 100)} colorScheme="red" size="sm" />
                   <Text fontSize="xs" color="gray.500" mt={1}>
                     Maximum recording time: 5 minutes
@@ -494,7 +637,6 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                 </Box>
               )}
               
-              {/* Processing Status */}
               {isProcessingSpeech && (
                 <Box mb={3}>
                   <HStack>
@@ -506,7 +648,6 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                 </Box>
               )}
               
-              {/* Error Display */}
               {recordingError && (
                 <Alert status="error" size="sm" mb={3}>
                   <AlertIcon />
@@ -514,7 +655,6 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                 </Alert>
               )}
               
-              {/* Transcription Result */}
               {speechToText && (
                 <Box>
                   <HStack justify="space-between" mb={2}>
@@ -545,7 +685,6 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                     </Text>
                   </Box>
                   
-                  {/* Legal Terms Detected */}
                   {legalTermsDetected.length > 0 && (
                     <Box mt={2}>
                       <Text fontSize="xs" color="gray.600" mb={1}>
@@ -563,7 +702,6 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                 </Box>
               )}
               
-              {/* Advanced Speech Options */}
               <Box mt={3}>
                 <Button
                   size="xs"
@@ -582,6 +720,7 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                       <li>Use legal terminology when applicable</li>
                       <li>Pause between different topics or sections</li>
                       <li>Spell out important names or case numbers</li>
+                      <li>Ensure quiet environment for better accuracy</li>
                     </ul>
                     
                     {transcriptionHistory.length > 0 && (
@@ -601,7 +740,6 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
 
             <Divider />
 
-            {/* Existing Form Fields */}
             <VStack spacing={4} w="full">
               <FormControl isRequired>
                 <FormLabel>Case Title</FormLabel>
@@ -624,6 +762,11 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                 />
                 <Text fontSize="xs" color="gray.500" mt={1}>
                   {formData.brief_text.length} characters
+                  {speechToText && (
+                    <Badge ml={2} colorScheme="green" variant="outline" fontSize="xs">
+                      Speech Input
+                    </Badge>
+                  )}
                 </Text>
               </FormControl>
 
