@@ -167,6 +167,8 @@ class ApiService {
 
   // ENHANCED: User-specific data methods
   public async getUserCases(userId: string): Promise<UserCase[]> {
+  // Tries user-scoped route first, falls back to generic filter query
+
     try {
       const response = await this.get<{ cases: UserCase[] }>(`/api/users/${userId}/cases`);
       return response.data.cases || [];
@@ -177,6 +179,8 @@ class ApiService {
   }
 
   public async getUserDocuments(userId: string): Promise<UserDocument[]> {
+  // Tries user-scoped route first, falls back to generic filter query
+
     try {
       const response = await this.get<{ documents: UserDocument[] }>(`/api/users/${userId}/documents`);
       return response.data.documents || [];

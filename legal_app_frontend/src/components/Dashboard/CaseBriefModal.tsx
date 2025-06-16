@@ -188,37 +188,34 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
       let finalTranscript = '';
 
       recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-        console.log('Speech recognition result event received:', event);
         let interimTranscript = '';
+        let aggregateFinal = '';
+        console.log('Speech recognition result event received:', event);
         
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
-          console.log(`Result ${i}: transcript = "${transcript}", isFinal = ${event.results[i].isFinal}`);
-          
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
-            console.log(`Final transcript for ${fieldName}: "${finalTranscript}"`); 
-            // Update the specific field with final transcript
-            setFormData(prev => {
-              const updatedData = {
-                ...prev,
-                [fieldName]: fieldName === 'brief_text' 
-                  ? (prev[fieldName] + ' ' + transcript).trim()
-                  : transcript.trim()
-              };
-              console.log(`Updated form data for ${fieldName}:`, updatedData);
-              return updatedData;
-            });
+          const isFinal = event.results[i].isFinal;
+          console.log(`Chunk ${i}: "${transcript}" (final: ${isFinal})`);
+
+          if (isFinal) {
+            aggregateFinal += transcript + ' ';
           } else {
             interimTranscript = transcript;
-            console.log(`Interim transcript: "${interimTranscript}"`);
           }
         }
         
-        // Show interim results
+        // Update interim display
         setInterimText(interimTranscript);
-        console.log('Setting interimText state:', interimTranscript);
+
+        // Once we have final text, push it into the form state
+        if (aggregateFinal.trim()) {
+          const cleaned = aggregateFinal.trim();
+          setFormData(prev => {
+            const newVal = fieldName === 'brief_text' ? `${prev[fieldName]} ${cleaned}`.trim() : cleaned;
+            console.log(`Setting ${fieldName} to:`, newVal);
+            return { ...prev, [fieldName]: newVal };
+          });
+        }
       };
 
       recognition.onstart = () => {
