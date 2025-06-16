@@ -183,30 +183,40 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
       let finalTranscript = '';
 
       recognition.onresult = (event: any) => {
+        console.log('Speech recognition result event received:', event);
         let interimTranscript = '';
         
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
+          console.log(`Result ${i}: transcript = "${transcript}", isFinal = ${event.results[i].isFinal}`);
           
           if (event.results[i].isFinal) {
             finalTranscript += transcript + ' ';
+            console.log(`Final transcript for ${fieldName}: "${finalTranscript}"`); 
             // Update the specific field with final transcript
-            setFormData(prev => ({
-              ...prev,
-              [fieldName]: fieldName === 'brief_text' 
-                ? (prev[fieldName] + ' ' + transcript).trim()
-                : transcript.trim()
-            }));
+            setFormData(prev => {
+              const updatedData = {
+                ...prev,
+                [fieldName]: fieldName === 'brief_text' 
+                  ? (prev[fieldName] + ' ' + transcript).trim()
+                  : transcript.trim()
+              };
+              console.log(`Updated form data for ${fieldName}:`, updatedData);
+              return updatedData;
+            });
           } else {
             interimTranscript = transcript;
+            console.log(`Interim transcript: "${interimTranscript}"`);
           }
         }
         
         // Show interim results
         setInterimText(interimTranscript);
+        console.log('Setting interimText state:', interimTranscript);
       };
 
       recognition.onstart = () => {
+        console.log(`Speech recognition started for field: ${fieldName}`);
         setIsRecording(true);
         startRecordingTimer();
         
@@ -216,6 +226,7 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
           court: 'Court Level',
           case_type: 'Case Type'
         };
+        console.log('Current form data before recording:', formData);
         
         toast({
           title: `🎤 Recording for ${fieldLabels[fieldName]}`,
@@ -226,6 +237,8 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
       };
 
       recognition.onend = () => {
+        console.log(`Speech recognition ended for field: ${fieldName}`);
+        console.log('Final form data after recording:', formData);
         setIsRecording(false);
         setActiveField(null);
         setInterimText('');
@@ -325,6 +338,7 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
   };
 
   const handleSubmit = () => {
+    console.log('Form submission attempt with data:', formData);
     if (!formData.title.trim() || !formData.brief_text.trim()) {
       toast({
         title: "Validation Error",
@@ -448,7 +462,10 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                 <InputGroup>
                   <Input
                     value={formData.title}
-                    onChange={(e) => setFormData({...formData, title: e.target.value})}
+                    onChange={(e) => {
+                      console.log('Title changed manually:', e.target.value);
+                      setFormData({...formData, title: e.target.value});
+                    }}
                     placeholder="Enter a descriptive title for your case"
                     size="lg"
                     pr="12"
@@ -465,7 +482,10 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                 <Box position="relative">
                   <Textarea
                     value={formData.brief_text}
-                    onChange={(e) => setFormData({...formData, brief_text: e.target.value})}
+                    onChange={(e) => {
+                      console.log('Brief text changed manually:', e.target.value);
+                      setFormData({...formData, brief_text: e.target.value});
+                    }}
                     placeholder="Describe your legal case in detail. Include key facts, parties involved, and main legal issues..."
                     rows={8}
                     resize="vertical"

@@ -40,13 +40,14 @@ export interface UserStats {
 }
 
 export interface CaseBriefSubmission {
-  clientName: string;
-  caseTitle: string;
-  caseType: string;
-  briefDescription: string;
-  urgencyLevel: 'low' | 'medium' | 'high';
-  courtLevel: string;
-  userId: string;
+  user_id: string;
+  title: string;
+  brief_text: string;
+  court: string | null;
+  case_type: string | null;
+  jurisdiction?: string;
+  urgency_level: 'low' | 'medium' | 'high' | 'urgent';
+  speech_input?: boolean;
   documents?: File[];
 }
 
