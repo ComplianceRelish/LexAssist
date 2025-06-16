@@ -1,4 +1,4 @@
-// src/pages/UserDashboard/EnhancedUserDashboard.tsx - CORRECTED VERSION
+// src/pages/UserDashboard/EnhancedUserDashboard.tsx - COMPLETE CORRECTED VERSION
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -13,39 +13,77 @@ import {
   useToast,
   Spinner,
   Center,
+  VStack,
+  Flex,
+  Badge,
+  Icon,
   Modal,
   ModalOverlay,
   ModalContent,
   ModalHeader,
   ModalBody,
+  ModalFooter,
   ModalCloseButton,
-  VStack,
-  FormControl,
-  FormLabel,
-  Input,
-  Textarea,
-  Select,
-  HStack,
-  Flex,
-  Badge,
-  Icon,
+  Alert,
+  AlertIcon,
+  Divider,
+  Progress,
+  List,
+  ListItem,
+  ListIcon,
 } from '@chakra-ui/react';
 import { 
   FaArrowUp, 
   FaExclamationCircle, 
   FaCheckCircle, 
   FaGavel,
-  FaExclamationTriangle,
-  FaHourglassHalf,
   FaFileUpload,
-  FaCalendarCheck,
-  FaCommentAlt,
-  FaChevronRight
+  FaChevronRight,
+  FaLightbulb,
+  FaBalanceScale,
+  FaClock,
+  FaCheckDouble
 } from 'react-icons/fa';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Legend } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService, UserCase, UserDocument, UserStats, CaseBriefSubmission } from '../../services/api.service';
-import { authService } from '../../services/auth.service';
+import CaseBriefModal from '../../components/Dashboard/CaseBriefModal';
+
+interface BriefAnalysisResult {
+  analysis_id: string;
+  status: string;
+  law_codes: Array<{
+    act_name: string;
+    section: string;
+    description: string;
+    relevance: string;
+  }>;
+  precedent_cases: Array<{
+    case_name: string;
+    citation: string;
+    court: string;
+    year: string;
+    relevance_score: number;
+    judgment_summary: string;
+  }>;
+  ai_analysis: {
+    case_summary: string;
+    legal_issues: string[];
+    strengths: string[];
+    weaknesses: string[];
+    timeline_estimate: string;
+    success_probability: number;
+    estimated_costs: string;
+    procedural_steps: string[];
+  };
+  recommendations: Array<{
+    type: string;
+    priority: string;
+    title: string;
+    description: string;
+    action_items: string[];
+  }>;
+}
 
 const EnhancedUserDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -53,27 +91,18 @@ const EnhancedUserDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCaseBriefModal, setShowCaseBriefModal] = useState(false);
   const [submittingBrief, setSubmittingBrief] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<BriefAnalysisResult | null>(null);
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   
-  // User-specific state - NO DUMMY DATA
+  // User-specific state
   const [userCases, setUserCases] = useState<UserCase[]>([]);
   const [userDocuments, setUserDocuments] = useState<UserDocument[]>([]);
   const [userStats, setUserStats] = useState<UserStats | null>(null);
-
-  // Case brief form state
-  const [briefForm, setBriefForm] = useState({
-    clientName: '',
-    caseTitle: '',
-    caseType: '',
-    briefDescription: '',
-    urgencyLevel: 'medium' as 'low' | 'medium' | 'high',
-    courtLevel: '',
-  });
 
   const cardBg = useColorModeValue('white', 'gray.800');
   const primaryColor = "#1A365D";
   const goldColor = "#D4AF37";
 
-  // Load user-specific data on component mount
   useEffect(() => {
     if (user?.id) {
       loadUserData();
@@ -95,6 +124,7 @@ const EnhancedUserDashboard: React.FC = () => {
       setUserDocuments(documents);
       setUserStats(stats);
     } catch (error: any) {
+      console.error('Error loading dashboard data:', error);
       toast({
         title: 'Error loading dashboard data',
         description: error.message || 'Failed to load user data',
@@ -106,57 +136,53 @@ const EnhancedUserDashboard: React.FC = () => {
     }
   };
 
-  const handleCaseBriefSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!briefForm.clientName || !briefForm.caseTitle || !briefForm.briefDescription) {
-      toast({
-        title: 'Please fill in all required fields',
-        status: 'warning',
-        duration: 3000,
-      });
-      return;
-    }
-  
+  const handleCaseBriefSubmit = async (briefData: any) => {
     setSubmittingBrief(true);
     try {
-      const submissionData: any = {
-        user_id: user?.id || '',
-        title: briefForm.caseTitle,
-        brief_text: briefForm.briefDescription,
-        court: briefForm.courtLevel || '',
-        case_type: briefForm.caseType || '',
-        jurisdiction: "IN",
+      console.log('Submitting case brief:', briefData);
+      
+      // FIXED: Properly map briefData to CaseBriefSubmission interface
+      const submissionData: CaseBriefSubmission = {
+        userId: user?.id || '',
+        clientName: briefData.clientName || user?.full_name || user?.name || 'Unknown Client',
+        caseTitle: briefData.title || briefData.caseTitle || 'Untitled Case',
+        caseType: briefData.case_type || briefData.caseType || 'General',
+        briefDescription: briefData.brief_text || briefData.briefDescription || '',
+        court: briefData.court || 'Not Specified',
+        jurisdiction: briefData.jurisdiction || 'IN',
+        urgencyLevel: briefData.urgency_level || briefData.urgencyLevel || 'medium',
+        speechInput: briefData.speech_input || briefData.speechInput || false,
+        // Additional fields that might be required
+        ...(briefData.documents && { documents: briefData.documents }),
+        ...(briefData.tags && { tags: briefData.tags }),
+        ...(briefData.notes && { notes: briefData.notes })
       };
-  
-      console.log('Submitting case brief:', submissionData);
-  
-      // 🔧 FIX: Use apiService which has the correct base URL
-      await apiService.submitCaseBrief(submissionData);
+
+      const result = await apiService.submitCaseBrief(submissionData);
       
-      toast({
-        title: 'Case brief submitted successfully',
-        description: 'AI analysis is in progress.',
-        status: 'success',
-        duration: 5000,
-      });
-  
+      console.log('Analysis result received:', result);
+      
+      if (result && result.analysis_id) {
+        setAnalysisResult(result);
+        setShowAnalysisModal(true);
+        
+        toast({
+          title: '✅ Case Brief Analyzed Successfully!',
+          description: 'AI analysis completed. Review the results below.',
+          status: 'success',
+          duration: 5000,
+        });
+      } else {
+        throw new Error('No analysis results received');
+      }
+
       setShowCaseBriefModal(false);
-      setBriefForm({
-        clientName: '',
-        caseTitle: '',
-        caseType: '',
-        briefDescription: '',
-        urgencyLevel: 'medium',
-        courtLevel: '',
-      });
-      
-      loadUserData();
+      loadUserData(); // Refresh dashboard data
     } catch (error: any) {
       console.error('Case brief submission error:', error);
       toast({
-        title: 'Error submitting case brief',
-        description: error.response?.data?.detail || error.message || 'Failed to submit case brief',
+        title: 'Error analyzing case brief',
+        description: error.response?.data?.detail || error.message || 'Failed to analyze case brief',
         status: 'error',
         duration: 5000,
       });
@@ -165,7 +191,6 @@ const EnhancedUserDashboard: React.FC = () => {
     }
   };
 
-  // Generate chart data from real user cases
   const generateChartData = () => {
     if (!userCases.length) return [];
     
@@ -178,7 +203,7 @@ const EnhancedUserDashboard: React.FC = () => {
     return Object.entries(monthlyData).map(([month, count]) => ({
       name: month,
       active: count,
-      closed: Math.floor(Number(count) * 0.7), // Approximate closed cases
+      closed: Math.floor(Number(count) * 0.7),
     }));
   };
 
@@ -212,7 +237,7 @@ const EnhancedUserDashboard: React.FC = () => {
         </Text>
       </Box>
 
-      {/* Stats Cards - Real Data */}
+      {/* Stats Cards */}
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={6}>
         <Card
           bg={cardBg}
@@ -320,6 +345,8 @@ const EnhancedUserDashboard: React.FC = () => {
           onClick={() => setShowCaseBriefModal(true)}
           _hover={{ bg: `${goldColor}90` }}
           leftIcon={<Icon as={FaFileUpload} />}
+          isLoading={submittingBrief}
+          loadingText="Analyzing..."
         >
           + New Case Brief Entry
         </Button>
@@ -327,7 +354,7 @@ const EnhancedUserDashboard: React.FC = () => {
 
       {/* Two Column Layout */}
       <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={6} mb={6}>
-        {/* Case Analytics Chart - Real Data */}
+        {/* Case Analytics Chart */}
         <Card bg={cardBg}>
           <CardBody>
             <Flex justify="space-between" align="center" mb={4}>
@@ -373,7 +400,7 @@ const EnhancedUserDashboard: React.FC = () => {
           </CardBody>
         </Card>
 
-        {/* Recent Cases - Real Data */}
+        {/* Recent Cases */}
         <Card bg={cardBg}>
           <CardBody>
             <Flex justify="space-between" align="center" mb={4}>
@@ -437,113 +464,222 @@ const EnhancedUserDashboard: React.FC = () => {
       </Grid>
 
       {/* Case Brief Modal */}
-      <Modal isOpen={showCaseBriefModal} onClose={() => setShowCaseBriefModal(false)} size="xl">
+      <CaseBriefModal
+        isOpen={showCaseBriefModal}
+        onClose={() => setShowCaseBriefModal(false)}
+        onSubmit={handleCaseBriefSubmit}
+      />
+
+      {/* Analysis Results Modal */}
+      <Modal isOpen={showAnalysisModal} onClose={() => setShowAnalysisModal(false)} size="6xl">
         <ModalOverlay />
-        <ModalContent>
-          <ModalHeader color={primaryColor}>New Case Brief Entry</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody pb={6}>
-            <Box mb={4} p={4} bg="blue.50" borderRadius="md" borderLeft="4px solid" borderLeftColor={primaryColor}>
-              <Text fontSize="sm" color="gray.700">
-                <strong>AI Analysis Powered by InLegalBERT:</strong> Once you submit this brief, 
-                our AI will analyze it using specialized legal language models and provide relevant 
-                law sections, precedents, and case recommendations.
-              </Text>
-            </Box>
+        <ModalContent maxW="90vw" maxH="90vh">
+          <ModalHeader bg={primaryColor} color="white" borderTopRadius="md">
+            <Flex align="center">
+              <Icon as={FaCheckDouble} mr={3} />
+              Case Brief Analysis Results
+            </Flex>
+          </ModalHeader>
+          <ModalCloseButton color="white" />
+          <ModalBody p={6} maxH="70vh" overflowY="auto">
+            {analysisResult && (
+              <VStack spacing={6} align="stretch">
+                {/* Success Alert */}
+                <Alert status="success" borderRadius="md">
+                  <AlertIcon />
+                  <Box>
+                    <Text fontWeight="bold">Analysis Complete!</Text>
+                    <Text fontSize="sm">
+                      Your case brief has been analyzed using AI and legal databases.
+                    </Text>
+                  </Box>
+                </Alert>
 
-            <form onSubmit={handleCaseBriefSubmit}>
-              <VStack spacing={4}>
-                <FormControl isRequired>
-                  <FormLabel>Client Name</FormLabel>
-                  <Input
-                    value={briefForm.clientName}
-                    onChange={(e) => setBriefForm({ ...briefForm, clientName: e.target.value })}
-                    placeholder="Enter client name"
-                  />
-                </FormControl>
+                {/* Case Summary */}
+                <Card>
+                  <CardBody>
+                    <Heading size="md" color={primaryColor} mb={3}>
+                      <Icon as={FaBalanceScale} mr={2} />
+                      Case Summary
+                    </Heading>
+                    <Text>{analysisResult.ai_analysis.case_summary}</Text>
+                    
+                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mt={4}>
+                      <Box p={3} bg="blue.50" borderRadius="md">
+                        <Text fontSize="sm" color="gray.600">Timeline Estimate</Text>
+                        <Text fontWeight="bold" color="blue.600">
+                          <Icon as={FaClock} mr={1} />
+                          {analysisResult.ai_analysis.timeline_estimate}
+                        </Text>
+                      </Box>
+                      <Box p={3} bg="green.50" borderRadius="md">
+                        <Text fontSize="sm" color="gray.600">Success Probability</Text>
+                        <Text fontWeight="bold" color="green.600">
+                          {Math.round(analysisResult.ai_analysis.success_probability * 100)}%
+                        </Text>
+                      </Box>
+                      <Box p={3} bg="orange.50" borderRadius="md">
+                        <Text fontSize="sm" color="gray.600">Estimated Costs</Text>
+                        <Text fontWeight="bold" color="orange.600">
+                          {analysisResult.ai_analysis.estimated_costs}
+                        </Text>
+                      </Box>
+                    </SimpleGrid>
+                  </CardBody>
+                </Card>
 
-                <FormControl isRequired>
-                  <FormLabel>Case Title</FormLabel>
-                  <Input
-                    value={briefForm.caseTitle}
-                    onChange={(e) => setBriefForm({ ...briefForm, caseTitle: e.target.value })}
-                    placeholder="e.g., Property Dispute - Land Acquisition"
-                  />
-                </FormControl>
+                {/* Legal Issues & Analysis */}
+                <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={6}>
+                  <Card>
+                    <CardBody>
+                      <Heading size="sm" color={primaryColor} mb={3}>Legal Issues Identified</Heading>
+                      <List spacing={2}>
+                        {analysisResult.ai_analysis.legal_issues.map((issue, index) => (
+                          <ListItem key={index}>
+                            <ListIcon as={FaCheckCircle} color="blue.500" />
+                            <Text fontSize="sm">{issue}</Text>
+                          </ListItem>
+                        ))}
+                      </List>
+                    </CardBody>
+                  </Card>
 
-                <HStack spacing={4} w="full">
-                  <FormControl>
-                    <FormLabel>Case Type</FormLabel>
-                    <Select
-                      value={briefForm.caseType}
-                      onChange={(e) => setBriefForm({ ...briefForm, caseType: e.target.value })}
-                    >
-                      <option value="">Select case type</option>
-                      <option value="civil">Civil</option>
-                      <option value="criminal">Criminal</option>
-                      <option value="corporate">Corporate</option>
-                      <option value="property">Property</option>
-                      <option value="family">Family</option>
-                      <option value="constitutional">Constitutional</option>
-                    </Select>
-                  </FormControl>
+                  <Card>
+                    <CardBody>
+                      <Heading size="sm" color={primaryColor} mb={3}>Strengths & Weaknesses</Heading>
+                      <VStack align="stretch" spacing={3}>
+                        <Box>
+                          <Text fontSize="sm" fontWeight="bold" color="green.600" mb={1}>Strengths:</Text>
+                          {analysisResult.ai_analysis.strengths.map((strength, index) => (
+                            <Text key={index} fontSize="xs" color="green.700">• {strength}</Text>
+                          ))}
+                        </Box>
+                        <Box>
+                          <Text fontSize="sm" fontWeight="bold" color="red.600" mb={1}>Weaknesses:</Text>
+                          {analysisResult.ai_analysis.weaknesses.map((weakness, index) => (
+                            <Text key={index} fontSize="xs" color="red.700">• {weakness}</Text>
+                          ))}
+                        </Box>
+                      </VStack>
+                    </CardBody>
+                  </Card>
+                </Grid>
 
-                  <FormControl>
-                    <FormLabel>Court Level</FormLabel>
-                    <Select
-                      value={briefForm.courtLevel}
-                      onChange={(e) => setBriefForm({ ...briefForm, courtLevel: e.target.value })}
-                    >
-                      <option value="">Select court</option>
-                      <option value="District Court">District Court</option>
-                      <option value="High Court">High Court</option>
-                      <option value="Supreme Court">Supreme Court</option>
-                      <option value="Tribunal">Tribunal</option>
-                    </Select>
-                  </FormControl>
-                </HStack>
+                {/* Applicable Laws */}
+                {analysisResult.law_codes.length > 0 && (
+                  <Card>
+                    <CardBody>
+                      <Heading size="md" color={primaryColor} mb={3}>
+                        <Icon as={FaBalanceScale} mr={2} />
+                        Applicable Laws & Sections
+                      </Heading>
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                        {analysisResult.law_codes.map((law, index) => (
+                          <Box key={index} p={4} border="1px solid" borderColor="gray.200" borderRadius="md">
+                            <Text fontWeight="bold" color={primaryColor}>{law.act_name}</Text>
+                            <Text fontSize="sm" color="blue.600" mb={2}>{law.section}</Text>
+                            <Text fontSize="sm" mb={2}>{law.description}</Text>
+                            <Text fontSize="xs" color="gray.600" fontStyle="italic">{law.relevance}</Text>
+                          </Box>
+                        ))}
+                      </SimpleGrid>
+                    </CardBody>
+                  </Card>
+                )}
 
-                <FormControl>
-                  <FormLabel>Urgency Level</FormLabel>
-                  <Select
-                    value={briefForm.urgencyLevel}
-                    onChange={(e) => setBriefForm({ ...briefForm, urgencyLevel: e.target.value as 'low' | 'medium' | 'high' })}
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </Select>
-                </FormControl>
+                {/* Precedent Cases */}
+                {analysisResult.precedent_cases.length > 0 && (
+                  <Card>
+                    <CardBody>
+                      <Heading size="md" color={primaryColor} mb={3}>
+                        <Icon as={FaGavel} mr={2} />
+                        Relevant Precedent Cases
+                      </Heading>
+                      <VStack spacing={4} align="stretch">
+                        {analysisResult.precedent_cases.map((case_, index) => (
+                          <Box key={index} p={4} border="1px solid" borderColor="gray.200" borderRadius="md">
+                            <Flex justify="space-between" align="start" mb={2}>
+                              <Box>
+                                <Text fontWeight="bold" color={primaryColor}>{case_.case_name}</Text>
+                                <Text fontSize="sm" color="gray.600">{case_.citation} | {case_.court} ({case_.year})</Text>
+                              </Box>
+                              <Badge colorScheme="blue" variant="outline">
+                                {Math.round(case_.relevance_score * 100)}% relevance
+                              </Badge>
+                            </Flex>
+                            <Text fontSize="sm">{case_.judgment_summary}</Text>
+                          </Box>
+                        ))}
+                      </VStack>
+                    </CardBody>
+                  </Card>
+                )}
 
-                <FormControl isRequired>
-                  <FormLabel>Case Brief Description</FormLabel>
-                  <Textarea
-                    value={briefForm.briefDescription}
-                    onChange={(e) => setBriefForm({ ...briefForm, briefDescription: e.target.value })}
-                    placeholder="Provide detailed description of the case, key facts, legal issues, and any specific questions you need assistance with..."
-                    rows={6}
-                  />
-                </FormControl>
+                {/* Recommendations */}
+                <Card>
+                  <CardBody>
+                    <Heading size="md" color={primaryColor} mb={3}>
+                      <Icon as={FaLightbulb} mr={2} />
+                      Recommendations & Next Steps
+                    </Heading>
+                    <VStack spacing={4} align="stretch">
+                      {analysisResult.recommendations.map((rec, index) => (
+                        <Box key={index} p={4} bg={
+                          rec.priority === 'high' ? 'red.50' : 
+                          rec.priority === 'medium' ? 'yellow.50' : 'blue.50'
+                        } borderRadius="md" borderLeft="4px solid" borderLeftColor={
+                          rec.priority === 'high' ? 'red.500' : 
+                          rec.priority === 'medium' ? 'yellow.500' : 'blue.500'
+                        }>
+                          <Flex justify="space-between" align="center" mb={2}>
+                            <Text fontWeight="bold">{rec.title}</Text>
+                            <Badge colorScheme={
+                              rec.priority === 'high' ? 'red' : 
+                              rec.priority === 'medium' ? 'yellow' : 'blue'
+                            }>
+                              {rec.priority} priority
+                            </Badge>
+                          </Flex>
+                          <Text fontSize="sm" mb={2}>{rec.description}</Text>
+                          <List spacing={1}>
+                            {rec.action_items.map((item, itemIndex) => (
+                              <ListItem key={itemIndex}>
+                                <ListIcon as={FaCheckCircle} color="green.500" />
+                                <Text fontSize="xs">{item}</Text>
+                              </ListItem>
+                            ))}
+                          </List>
+                        </Box>
+                      ))}
+                    </VStack>
+                  </CardBody>
+                </Card>
 
-                <HStack spacing={4} w="full" pt={4}>
-                  <Button variant="outline" onClick={() => setShowCaseBriefModal(false)} flex={1}>
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    bg={primaryColor}
-                    color="white"
-                    isLoading={submittingBrief}
-                    loadingText="Submitting for AI Analysis..."
-                    flex={1}
-                    _hover={{ bg: "#2A4A6B" }}
-                  >
-                    Submit for Analysis
-                  </Button>
-                </HStack>
+                {/* Procedural Steps */}
+                <Card>
+                  <CardBody>
+                    <Heading size="md" color={primaryColor} mb={3}>Procedural Steps</Heading>
+                    <List spacing={2}>
+                      {analysisResult.ai_analysis.procedural_steps.map((step, index) => (
+                        <ListItem key={index}>
+                          <ListIcon as={FaCheckCircle} color="blue.500" />
+                          <Text fontSize="sm">{step}</Text>
+                        </ListItem>
+                      ))}
+                    </List>
+                  </CardBody>
+                </Card>
               </VStack>
-            </form>
+            )}
           </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" mr={3} onClick={() => setShowAnalysisModal(false)}>
+              Close Analysis
+            </Button>
+            <Button variant="outline" onClick={() => window.print()}>
+              Print Report
+            </Button>
+          </ModalFooter>
         </ModalContent>
       </Modal>
     </Box>

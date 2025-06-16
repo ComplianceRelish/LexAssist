@@ -1,5 +1,4 @@
 // legal_app_frontend/src/components/Dashboard/CaseBriefModal.tsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton,
@@ -34,8 +33,13 @@ const pulseAnimation = keyframes`
 
 const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
-    title: '', brief_text: '', court: '', case_type: '', urgency_level: 'medium'
+    title: '', 
+    brief_text: '', 
+    court: '', 
+    case_type: '', 
+    urgency_level: 'medium'
   });
+  
   const [isRecording, setIsRecording] = useState(false);
   const [speechToText, setSpeechToText] = useState("");
   const [isProcessingSpeech, setIsProcessingSpeech] = useState(false);
@@ -524,6 +528,7 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
         
         <ModalBody>
           <VStack spacing={6}>
+            {/* Speech Input Section */}
             <Box w="full" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
               <HStack justify="space-between" mb={3}>
                 <Text fontWeight="bold" fontSize="lg">🎤 Speech Input</Text>
@@ -701,45 +706,11 @@ const CaseBriefModal: React.FC<CaseBriefModalProps> = ({ isOpen, onClose, onSubm
                   )}
                 </Box>
               )}
-              
-              <Box mt={3}>
-                <Button
-                  size="xs"
-                  variant="link"
-                  onClick={toggleAdvanced}
-                  rightIcon={isAdvancedOpen ? <FaChevronUp /> : <FaChevronDown />}
-                >
-                  Advanced Options
-                </Button>
-                
-                <Collapse in={isAdvancedOpen} animateOpacity>
-                  <Box mt={2} p={2} bg="white" borderRadius="md" fontSize="xs">
-                    <Text color="gray.600" mb={1}>Speech Recognition Tips:</Text>
-                    <ul style={{ paddingLeft: '16px', color: 'gray.500' }}>
-                      <li>Speak clearly and at a moderate pace</li>
-                      <li>Use legal terminology when applicable</li>
-                      <li>Pause between different topics or sections</li>
-                      <li>Spell out important names or case numbers</li>
-                      <li>Ensure quiet environment for better accuracy</li>
-                    </ul>
-                    
-                    {transcriptionHistory.length > 0 && (
-                      <Box mt={2}>
-                        <Text color="gray.600" mb={1}>Transcription History:</Text>
-                        {transcriptionHistory.slice(-3).map((item) => (
-                          <Text key={item.id} fontSize="xs" color="gray.500">
-                            {item.timestamp}: {item.text.substring(0, 50)}...
-                          </Text>
-                        ))}
-                      </Box>
-                    )}
-                  </Box>
-                </Collapse>
-              </Box>
             </Box>
 
             <Divider />
 
+            {/* Form Fields */}
             <VStack spacing={4} w="full">
               <FormControl isRequired>
                 <FormLabel>Case Title</FormLabel>
