@@ -36,12 +36,24 @@ class LegalAIService:
     def __init__(self):
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-        self.deepseek_base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+        
+        # FIXED: Correct base URL without /v1
+        self.deepseek_base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
         
         self.openai_model = "gpt-4"
-        self.deepseek_model = "deepseek-chat"
+        self.deepseek_model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
         
-        self.http_client = httpx.AsyncClient(timeout=30.0)
+        # FIXED: Increased timeout to 120 seconds
+        self.http_client = httpx.AsyncClient(timeout=120.0)
+        
+        # Add validation and logging
+        if not self.deepseek_api_key:
+            logger.warning("DEEPSEEK_API_KEY not found in environment variables")
+        else:
+            logger.info(f"DeepSeek API key loaded: {self.deepseek_api_key[:10]}...")
+        
+        logger.info(f"DeepSeek base URL: {self.deepseek_base_url}")
+        logger.info(f"DeepSeek model: {self.deepseek_model}")
     
     def _select_provider(self, query_type: LegalQueryType, jurisdiction: str) -> AIProvider:
         """Select the best AI provider based on query type and jurisdiction"""
@@ -154,8 +166,11 @@ class LegalAIService:
             return await self._query_openai(request)
     
     async def _query_deepseek(self, request: AIRequest) -> Dict:
-        """Query DeepSeek API"""
+        """Query DeepSeek API with improved error handling"""
         try:
+            if not self.deepseek_api_key:
+                raise ValueError("DEEPSEEK_API_KEY not configured")
+            
             system_prompt = self._build_legal_system_prompt(request.jurisdiction, request.user_role)
             user_prompt = self._build_user_prompt(request)
             
@@ -174,27 +189,50 @@ class LegalAIService:
                 "Content-Type": "application/json"
             }
             
+            # FIXED: Correct endpoint construction
+            endpoint = f"{self.deepseek_base_url}/chat/completions"
+            logger.info(f"Making DeepSeek API call to: {endpoint}")
+            
             response = await self.http_client.post(
-                f"{self.deepseek_base_url}/chat/completions",
+                endpoint,
                 json=payload,
                 headers=headers
             )
             
-            response.raise_for_status()
+            # FIXED: Better error handling
+            if response.status_code != 200:
+                error_text = response.text
+                logger.error(f"DeepSeek API error {response.status_code}: {error_text}")
+                raise httpx.HTTPStatusError(f"API returned {response.status_code}: {error_text}", request=response.request, response=response)
+            
             result = response.json()
+            
+            if "choices" not in result or not result["choices"]:
+                logger.error(f"Invalid DeepSeek response format: {result}")
+                raise ValueError(f"Invalid response format: {result}")
             
             content = result["choices"][0]["message"]["content"]
             
             # Parse and structure the response
             return self._parse_ai_response(content, request.query_type)
             
+        except httpx.TimeoutException:
+            logger.error("DeepSeek API timeout after 120 seconds")
+            raise Exception("DeepSeek API timeout - request took too long")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"DeepSeek HTTP error: {e}")
+            raise Exception(f"DeepSeek API HTTP error: {e}")
         except Exception as e:
-            logger.error(f"DeepSeek query failed: {str(e)}")
-            raise
+            logger.error(f"DeepSeek query failed with detailed error: {str(e)}")
+            logger.error(f"Request details - Model: {self.deepseek_model}, Endpoint: {self.deepseek_base_url}")
+            raise Exception(f"DeepSeek API error: {str(e)}")
     
     async def _query_openai(self, request: AIRequest) -> Dict:
         """Query OpenAI API"""
         try:
+            if not self.openai_api_key:
+                raise ValueError("OPENAI_API_KEY not configured")
+            
             system_prompt = self._build_legal_system_prompt(request.jurisdiction, request.user_role)
             user_prompt = self._build_user_prompt(request)
             
@@ -365,9 +403,12 @@ class StreamingAIService(LegalAIService):
             "Content-Type": "application/json"
         }
         
+        # FIXED: Correct streaming endpoint
+        endpoint = f"{self.deepseek_base_url}/chat/completions"
+        
         async with self.http_client.stream(
             "POST", 
-            f"{self.deepseek_base_url}/chat/completions",
+            endpoint,
             json=payload,
             headers=headers
         ) as response:

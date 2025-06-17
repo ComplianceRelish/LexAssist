@@ -2,8 +2,9 @@ services:
   - type: web
     name: lexassist-backend
     runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python -m uvicorn app:app --host 0.0.0.0 --port $PORT"
+    plan: standard  # Required for ML models
+    buildCommand: "pip install --no-cache-dir -r requirements.txt && python -c 'import nltk; nltk.download(\"punkt\"); nltk.download(\"stopwords\")'"
+    startCommand: "gunicorn wsgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 300 --workers 1 --max-requests 1000"
     envVars:
       - key: PORT
         value: 10000
@@ -12,6 +13,10 @@ services:
       - key: SUPABASE_ANON_KEY
         value: eyJhbGciOiJIUzI1NiIsImtpZCI6Ilp1eDFLZ3VsUkx6cU5JM3QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL21ldXlpa3Rwa2VvbXNrcW9ybm51LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzQ5MzY0NDExLCJpYXQiOjE3NDkzNjA4MTEsImVtYWlsIjoicmVsaXNoZm9vZHNAcHJvdG9uLm1lIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJjb3VudHJ5IjoiSU4iLCJjb3VudHJ5X2NvZGUiOiIrOTEiLCJlbWFpbCI6InJlbGlzaGZvb2RzQHByb3Rvbi5tZSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmdWxsX25hbWUiOiJNb3R0eSBQaGlsaXAiLCJwaG9uZSI6Iis5MTk0NDYwMTIzMjQiLCJwaG9uZV92ZXJpZmllZCI6ZmFsc2UsInN1YiI6ImRiNTliYWVjLWVjNjEtNGI5OC1iZGI4LTgyMWJmMzMyZWM4YiIsInVzZXJfdHlwZSI6ImNsaWVudCJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzQ5MzYwODExfV0sInNlc3Npb25faWQiOiI2MTQ2MGRhMC1jYzdhLTQ5NzUtOTg4Zi02NjYxMTY1M2RhNTYiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ
       - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY  # Critical for AI functionality
         sync: false
       - key: OPENAI_API_KEY
         sync: false
@@ -33,7 +38,20 @@ services:
         sync: false
       - key: INLEGALBERT_MODEL_PATH
         value: law-ai/InLegalBERT
+      # ML Model Cache Paths
+      - key: TRANSFORMERS_CACHE
+        value: /app/huggingface/transformers
+      - key: HF_HOME
+        value: /app/huggingface
+      - key: TORCH_HOME
+        value: /app/huggingface/torch
+      - key: WHISPER_CACHE
+        value: /app/huggingface/whisper
     disk:
       name: huggingface-cache
       mountPath: /app/huggingface
-      sizeGB: 2
+      sizeGB: 3  # Increased from 2GB
+
+databases:  # Optional: Add if you need Redis
+  - name: redis
+    plan: starter
