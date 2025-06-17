@@ -94,6 +94,7 @@ const EnhancedUserDashboard: React.FC = () => {
   const [submittingBrief, setSubmittingBrief] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<BriefAnalysisResult | null>(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+  const [showAllCasesModal, setShowAllCasesModal] = useState(false);  // new state to control full case list modal
   
   // User-specific state
   const [userCases, setUserCases] = useState<UserCase[]>([]);
@@ -266,12 +267,13 @@ const EnhancedUserDashboard: React.FC = () => {
       {/* Stats Cards */}
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={6}>
         <Card
-          bg={cardBg}
-          borderTop="4px solid"
-          borderTopColor={primaryColor}
-          _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
-          transition="all 0.3s ease"
-        >
+           bg={cardBg}
+           borderTop="4px solid"
+           borderTopColor={primaryColor}
+           _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg', cursor: 'pointer' }}
+           transition="all 0.3s ease"
+           onClick={() => setShowAllCasesModal(true)}
+         >
           <CardBody>
             <VStack align="start" spacing={2}>
               <Text fontSize="sm" color="gray.600">Active Cases</Text>
@@ -431,7 +433,7 @@ const EnhancedUserDashboard: React.FC = () => {
           <CardBody>
             <Flex justify="space-between" align="center" mb={4}>
               <Heading size="md" color={primaryColor}>Recent Cases</Heading>
-              <Button variant="link" color={primaryColor} size="sm" rightIcon={<FaChevronRight />}>
+              <Button variant="link" color={primaryColor} size="sm" rightIcon={<FaChevronRight />} onClick={() => setShowAllCasesModal(true)}>
                 View All
               </Button>
             </Flex>
@@ -495,6 +497,59 @@ const EnhancedUserDashboard: React.FC = () => {
         onClose={() => setShowCaseBriefModal(false)}
         onSubmit={handleCaseBriefSubmit}
       />
+
+      {/* All Cases Modal */}
+      <Modal isOpen={showAllCasesModal} onClose={() => setShowAllCasesModal(false)} size="4xl" scrollBehavior="inside">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>All Cases</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {userCases.length > 0 ? (
+              <VStack spacing={4} align="stretch">
+                {userCases.map((case_) => (
+                  <Flex
+                    key={case_.id}
+                    align="center"
+                    p={3}
+                    bg="gray.50"
+                    borderRadius="lg"
+                    borderLeft="4px solid"
+                    borderLeftColor={primaryColor}
+                  >
+                    <Box p={2} bg={primaryColor} borderRadius="md" color="white" mr={4}>
+                      <Icon as={FaGavel} />
+                    </Box>
+                    <Box flex="1">
+                      <Text fontWeight="semibold">{case_.title}</Text>
+                      <Text fontSize="sm" color="gray.600">
+                        {case_.caseType} - {case_.court}
+                      </Text>
+                    </Box>
+                    <VStack align="end" spacing={1}>
+                      <Badge colorScheme={case_.status === 'active' ? 'blue' : 'orange'}>
+                        {case_.status}
+                      </Badge>
+                      <Text fontSize="xs" color="gray.500">
+                        {case_.nextHearing ? `Hearing: ${new Date(case_.nextHearing).toLocaleDateString()}` : 'No hearing scheduled'}
+                      </Text>
+                    </VStack>
+                  </Flex>
+                ))}
+              </VStack>
+            ) : (
+              <Center p={8}>
+                <Text>No cases yet.</Text>
+              </Center>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" mr={3} onClick={() => setShowAllCasesModal(false)}>
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       {/* Analysis Results Modal */}
       <Modal isOpen={showAnalysisModal} onClose={() => setShowAnalysisModal(false)} size="6xl">
