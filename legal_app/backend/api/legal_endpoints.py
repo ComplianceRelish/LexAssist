@@ -17,6 +17,16 @@ from api.supabase_client import get_supabase_client
 
 # Import services with fallback handling
 try:
+    from services.ai_service import LegalAIService, AIRequest, LegalQueryType
+    AI_SERVICE_AVAILABLE = True
+    ai_service = LegalAIService()
+except ImportError as e:
+    logging.warning(f"AI service not available: {e}")
+    AI_SERVICE_AVAILABLE = False
+    ai_service = None
+
+# Import services with fallback handling
+try:
     from services.speech_service import whisper_service
     SPEECH_SERVICE_AVAILABLE = True
 except ImportError as e:
@@ -270,11 +280,58 @@ async def analyze_legal_brief(
         ).eq("id", current_user.id).single().execute()
         
         user_data = user_response.data
-        
-        # === FALLBACK ANALYSIS ===
+
+        # Lightweight pattern match to identify applicable laws and precedent cases
         law_codes = await identify_law_codes_fallback(brief, user_data)
         precedent_cases = await find_precedent_cases_fallback(brief, user_data)
-        ai_analysis = await perform_comprehensive_analysis_fallback(brief, user_data, law_codes, precedent_cases)
+        
+        # === AI SERVICE ANALYSIS (preferred) ===
+        ai_analysis: Dict = {}
+        timeline_estimate: str = None
+        success_probability: float = None
+
+        if AI_SERVICE_AVAILABLE and ai_service and getattr(ai_service, "openai_api_key", None):
+            try:
+                ai_request = AIRequest(
+                    query=brief.brief_text,
+                    query_type=LegalQueryType.CASE_ANALYSIS,
+                    jurisdiction=brief.jurisdiction or "IN",
+                    user_role=getattr(current_user, "role", "lawyer"),
+                    context=json.dumps({
+                        "title": brief.title,
+                        "court": brief.court,
+                        "case_type": brief.case_type
+                    })
+                )
+                ai_result = await ai_service.process_legal_query(ai_request)
+                # Map keys for consistency with frontend expectations
+                ai_analysis = {
+                    "case_summary": ai_result.get("case_summary") or ai_result.get("content"),
+                    "legal_issues": ai_result.get("legal_issues", []),
+                    "strengths": ai_result.get("strengths", []),
+                    "weaknesses": ai_result.get("weaknesses", []),
+                    "legal_strategy": ai_result.get("legal_strategy"),
+                    "timeline_estimate": ai_result.get("timeline_estimate"),
+                    "success_probability": ai_result.get("success_probability"),
+                    "procedural_steps": ai_result.get("procedural_steps", []),
+                    "evidence_requirements": ai_result.get("evidence_requirements", [])
+                }
+                timeline_estimate = ai_analysis.get("timeline_estimate")
+                success_probability = ai_analysis.get("success_probability")
+            except Exception as e:
+                logger.warning(f"AI service failed, falling back: {e}")
+                ai_analysis = {}
+
+        # === FALLBACK ANALYSIS ===
+        if not ai_analysis:
+            ai_analysis = await perform_comprehensive_analysis_fallback(
+                brief,
+                user_data,
+                law_codes,
+                precedent_cases
+            )
+            timeline_estimate = ai_analysis.get("timeline_estimate")
+            success_probability = ai_analysis.get("success_probability")
         recommendations = await generate_recommendations_fallback(brief, ai_analysis, precedent_cases)
         
         # Create comprehensive brief record
