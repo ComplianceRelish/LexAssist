@@ -94,7 +94,9 @@ const EnhancedUserDashboard: React.FC = () => {
   const [submittingBrief, setSubmittingBrief] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<BriefAnalysisResult | null>(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
-  const [showAllCasesModal, setShowAllCasesModal] = useState(false);  // new state to control full case list modal
+  const [showAllCasesModal, setShowAllCasesModal] = useState(false);  // cases list modal
+  const [showStatsModal, setShowStatsModal] = useState(false);       // key stats modal
+  const [showDeadlinesModal, setShowDeadlinesModal] = useState(false);
   
   // User-specific state
   const [userCases, setUserCases] = useState<UserCase[]>([]);
@@ -348,14 +350,16 @@ const EnhancedUserDashboard: React.FC = () => {
         >
           <CardBody>
             <VStack align="start" spacing={2}>
-              <Text fontSize="sm" color="gray.600">Success Rate</Text>
+              <Text fontSize="sm" color="gray.600">Key Stats</Text>
               <Flex justify="space-between" align="end" w="full">
-                <Text fontSize="3xl" fontWeight="bold" color="green.600">
-                  {userStats?.successRate || 0}%
+                <Text fontSize="lg" fontWeight="bold" color="green.600">
+                  Success Rate: {userStats?.successRate || 0}%
                 </Text>
-                <Text fontSize="sm" color="green.500">
-                  <Icon as={FaCheckCircle} mr={1} />
-                  Good
+                <Text fontSize="sm" fontWeight="bold" color={primaryColor} mt={1}>
+                  Briefs Analyzed: {userStats?.totalBriefsAnalyzed || 0}
+                </Text>
+                <Text fontSize="sm" color="gray.600">
+                  Avg. Turnaround: {userStats?.averageTurnaroundDays || 0} days
                 </Text>
               </Flex>
               <Text fontSize="xs" color="gray.500">last 12 months</Text>
@@ -547,6 +551,62 @@ const EnhancedUserDashboard: React.FC = () => {
             <Button colorScheme="blue" mr={3} onClick={() => setShowAllCasesModal(false)}>
               Close
             </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Pending Deadlines Modal */}
+      <Modal isOpen={showDeadlinesModal} onClose={() => setShowDeadlinesModal(false)} size="lg" scrollBehavior="inside">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Upcoming Deadlines (next 14 days)</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {userStats?.upcomingDeadlines && userStats.upcomingDeadlines.length > 0 ? (
+              <VStack spacing={4} align="stretch">
+                {userStats.upcomingDeadlines.map((d, idx) => {
+                  const due = new Date(d.due_date);
+                  const diffDays = Math.ceil((due.getTime() - Date.now()) / 86400000);
+                  const color = diffDays <= 1 ? 'red.500' : diffDays <= 7 ? 'orange.500' : 'yellow.500';
+                  return (
+                    <Flex key={idx} p={3} bg="gray.50" borderRadius="md" align="center">
+                      <Icon as={FaClock} mr={3} color={color} />
+                      <Box flex="1">
+                        <Text fontWeight="semibold">{d.title}</Text>
+                        <Text fontSize="sm" color="gray.600">{new Date(d.due_date).toLocaleDateString()} ({d.type})</Text>
+                      </Box>
+                      <Badge colorScheme={diffDays <= 1 ? 'red' : diffDays <= 7 ? 'orange' : 'yellow'}>
+                        {diffDays}d
+                      </Badge>
+                    </Flex>
+                  );
+                })}
+              </VStack>
+            ) : (
+              <Center p={6}><Text>No upcoming deadlines.</Text></Center>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={() => setShowDeadlinesModal(false)}>Close</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Key Stats Modal */}
+      <Modal isOpen={showStatsModal} onClose={() => setShowStatsModal(false)} size="md">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Key Statistics</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={3} align="stretch">
+              <Flex justify="space-between"><Text>Success Rate</Text><Text fontWeight="bold">{userStats?.successRate || 0}%</Text></Flex>
+              <Flex justify="space-between"><Text>Total Briefs Analyzed</Text><Text fontWeight="bold">{userStats?.totalBriefsAnalyzed || 0}</Text></Flex>
+              <Flex justify="space-between"><Text>Average Turnaround</Text><Text fontWeight="bold">{userStats?.averageTurnaroundDays || 0} days</Text></Flex>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={() => setShowStatsModal(false)}>Close</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

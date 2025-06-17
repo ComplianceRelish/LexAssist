@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, 
 from fastapi.responses import StreamingResponse
 from supabase import Client
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import json
 import os
@@ -183,8 +183,8 @@ async def get_user_stats(
         )
     
     try:
-        cases_response = supabase.table("cases").select("id, status, created_at").eq("user_id", user_id).execute()
-        docs_response = supabase.table("documents").select("id").eq("user_id", user_id).execute()
+        cases_response = supabase.table("cases").select("id, status, created_at, updated_at, next_hearing, outcome, title").eq("user_id", user_id).execute()
+        docs_response = supabase.table("documents").select("id, case_id").eq("user_id", user_id).execute()
         
         analyses = []
         try:
@@ -198,12 +198,50 @@ async def get_user_stats(
         docs = docs_response.data or []
         
         active_cases = sum(1 for case in cases if case.get("status") == "active")
-        
+
+        # === Pending deadlines (next 14 days) ===
+        today = datetime.utcnow().date()
+        window = today + timedelta(days=14)
+        upcoming_deadlines = []
+        for case in cases:
+            nh = case.get("next_hearing") or case.get("nextHearing")
+            if nh:
+                try:
+                    nh_date = datetime.fromisoformat(nh.replace("Z", "")).date()
+                    if today <= nh_date <= window:
+                        upcoming_deadlines.append({
+                            "case_id": case.get("id"),
+                            "title": case.get("title"),
+                            "due_date": nh,
+                            "type": "hearing"
+                        })
+                except Exception:
+                    pass
+        pending_deadlines = len(upcoming_deadlines)
+
+        # === Success rate ===
+        closed_cases = [c for c in cases if c.get("status") == "closed"]
+        won_cases = [c for c in closed_cases if c.get("outcome") == "won"] if closed_cases else []
+        success_rate = round(len(won_cases) / len(closed_cases) * 100, 2) if closed_cases else 0
+
+        # === Average turnaround ===
+        turnaround_days = []
+        for c in closed_cases:
+            try:
+                created = datetime.fromisoformat(c.get("created_at")).date()
+                updated = datetime.fromisoformat(c.get("updated_at")).date()
+                turnaround_days.append((updated - created).days)
+            except Exception:
+                pass
+        average_turnaround = round(sum(turnaround_days) / len(turnaround_days), 1) if turnaround_days else 0
+
         stats = {
             "activeCases": active_cases,
-            "pendingDeadlines": 0,
+            "pendingDeadlines": pending_deadlines,
+            "upcomingDeadlines": upcoming_deadlines,
             "documentsReviewed": len(docs),
-            "successRate": 85,
+            "successRate": success_rate,
+            "averageTurnaroundDays": average_turnaround,
             "totalBriefsAnalyzed": len(analyses),
             "monthlyGrowth": {"cases": 12, "documents": 8}
         }

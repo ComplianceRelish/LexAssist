@@ -41,7 +41,14 @@ export interface UserStats {
   pendingDeadlines: number;
   documentsReviewed: number;
   successRate: number;
+  averageTurnaroundDays: number;
   totalBriefsAnalyzed: number;
+  upcomingDeadlines: Array<{
+    case_id: string;
+    title: string;
+    due_date: string;
+    type: string;
+  }>;
   monthlyGrowth: {
     cases: number;
     documents: number;
@@ -200,8 +207,10 @@ class ApiService {
       return {
         activeCases: 0,
         pendingDeadlines: 0,
+        upcomingDeadlines: [],
         documentsReviewed: 0,
         successRate: 0,
+        averageTurnaroundDays: 0,
         totalBriefsAnalyzed: 0,
         monthlyGrowth: { cases: 0, documents: 0 }
       };
