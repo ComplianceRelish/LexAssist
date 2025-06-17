@@ -30,9 +30,23 @@ async def create_case(
             "updated_at": datetime.utcnow().isoformat()
         }
         
-        result = supabase.table("cases").insert(case_record).execute()
-        
-        # Supabase may return an empty `data` array when the API is configured with
+        # First attempt: try inserting all fields
+        try:
+            result = supabase.table("cases").insert(case_record).execute()
+        except Exception as insert_err:
+            msg = str(insert_err)
+            # Handle PostgREST unknown-column error (PGRST204)
+            if "column" in msg and "cases" in msg:
+                import re
+                col_match = re.search(r"'([^']+)' column", msg)
+                if col_match:
+                    unknown_col = col_match.group(1)
+                    logger.warning(f"Retrying insert without unknown column '{unknown_col}'")
+                    case_record.pop(unknown_col, None)
+                    result = supabase.table("cases").insert(case_record).execute()
+            else:
+                # Re-raise if it's a different error
+                raise
         # `return=minimal` (the default). In that scenario, fall back to the UUID we
         # generated locally so the caller still receives a valid case identifier.
         inserted_id = case_record["id"]

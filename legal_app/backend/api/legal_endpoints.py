@@ -240,7 +240,20 @@ async def analyze_legal_brief(
                     "created_at": datetime.now().isoformat(),
                     "updated_at": datetime.now().isoformat(),
                 }
-                supabase.table("cases").insert(case_record).execute()
+                try:
+                    supabase.table("cases").insert(case_record).execute()
+                except Exception as insert_err:
+                    msg = str(insert_err)
+                    if "column" in msg and "cases" in msg:
+                        import re, logging as _lg
+                        col_match = re.search(r"'([^']+)' column", msg)
+                        if col_match:
+                            unknown_col = col_match.group(1)
+                            _lg.warning(f"Retrying case insert without unknown column '{unknown_col}'")
+                            case_record.pop(unknown_col, None)
+                            supabase.table("cases").insert(case_record).execute()
+                    else:
+                        raise
             except Exception as db_err:
                 logger.warning(f"Could not create case record: {db_err}")
         else:
