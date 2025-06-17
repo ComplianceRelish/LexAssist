@@ -52,6 +52,7 @@ import CaseBriefModal from '../../components/Dashboard/CaseBriefModal';
 interface BriefAnalysisResult {
   analysis_id: string;
   status: string;
+  case_id: string;
   law_codes: Array<{
     act_name: string;
     section: string;
@@ -73,7 +74,7 @@ interface BriefAnalysisResult {
     weaknesses: string[];
     timeline_estimate: string;
     success_probability: number;
-    estimated_costs: string;
+
     procedural_steps: string[];
   };
   recommendations: Array<{
@@ -150,7 +151,8 @@ const EnhancedUserDashboard: React.FC = () => {
         case_type: briefData.case_type || 'general',
         jurisdiction: briefData.jurisdiction || 'IN',
         urgency_level: briefData.urgency_level || 'medium',
-        speech_input: briefData.speech_input || false,
+        speech_input: briefData.speech_input || briefData.speechInput || false,
+        case_id: briefData.case_id || briefData.caseId,
         // Additional fields that might be required
         ...(briefData.documents && { documents: briefData.documents }),
         ...(briefData.tags && { tags: briefData.tags }),
@@ -528,7 +530,7 @@ const EnhancedUserDashboard: React.FC = () => {
                     </Heading>
                     <Text>{analysisResult.ai_analysis.case_summary}</Text>
                     
-                    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mt={4}>
+                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
                       <Box p={3} bg="blue.50" borderRadius="md">
                         <Text fontSize="sm" color="gray.600">Timeline Estimate</Text>
                         <Text fontWeight="bold" color="blue.600">
@@ -540,12 +542,6 @@ const EnhancedUserDashboard: React.FC = () => {
                         <Text fontSize="sm" color="gray.600">Success Probability</Text>
                         <Text fontWeight="bold" color="green.600">
                           {Math.round(analysisResult.ai_analysis.success_probability * 100)}%
-                        </Text>
-                      </Box>
-                      <Box p={3} bg="orange.50" borderRadius="md">
-                        <Text fontSize="sm" color="gray.600">Estimated Costs</Text>
-                        <Text fontWeight="bold" color="orange.600">
-                          {analysisResult.ai_analysis.estimated_costs}
                         </Text>
                       </Box>
                     </SimpleGrid>

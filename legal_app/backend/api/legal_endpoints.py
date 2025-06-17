@@ -80,6 +80,8 @@ class CaseBriefSubmission(BaseModel):
     jurisdiction: str = "IN"
     urgency_level: str = "medium"
     speech_input: bool = False
+    case_id: Optional[str] = None  # Existing case identifier, if re-submitting
+
 
 class LegalQuery(BaseModel):
     query: str
@@ -90,6 +92,7 @@ class LegalQuery(BaseModel):
 class BriefAnalysisResponse(BaseModel):
     analysis_id: str
     status: str
+    case_id: str = None  # Newly created or existing case
     law_codes: List[Dict] = []
     precedent_cases: List[Dict] = []
     ai_analysis: Dict = {}
@@ -217,7 +220,37 @@ async def analyze_legal_brief(
     try:
         analysis_id = str(uuid.uuid4())
         logger.info(f"Starting analysis for brief: {brief.title}")
-        
+
+        # ----------------------------------------
+        # 🆕 Determine or create Case record
+        # ----------------------------------------
+        case_id = brief.case_id
+        if not case_id:
+            try:
+                case_id = str(uuid.uuid4())
+                case_record = {
+                    "id": case_id,
+                    "user_id": current_user.id,
+                    "title": brief.title,
+                    "case_type": brief.case_type,
+                    "court": brief.court,
+                    "jurisdiction": brief.jurisdiction,
+                    "urgency_level": brief.urgency_level,
+                    "status": "active",
+                    "created_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now().isoformat(),
+                }
+                supabase.table("cases").insert(case_record).execute()
+            except Exception as db_err:
+                logger.warning(f"Could not create case record: {db_err}")
+        else:
+            try:
+                supabase.table("cases").update({
+                    "updated_at": datetime.now().isoformat()
+                }).eq("id", case_id).execute()
+            except Exception as db_err:
+                logger.warning(f"Could not update case timestamp: {db_err}")
+
         # Get user details for context
         user_response = supabase.table("users").select(
             "id, country, role, full_name, legal_system, jurisdiction_type"
@@ -235,6 +268,7 @@ async def analyze_legal_brief(
         brief_record = {
             "id": analysis_id,
             "user_id": brief.user_id,
+    "case_id": case_id,
             "title": brief.title,
             "brief_text": brief.brief_text,
             "court": brief.court,
@@ -266,10 +300,20 @@ async def analyze_legal_brief(
         except Exception as db_error:
             logger.warning(f"Could not store in brief_analyses table: {str(db_error)}")
         
+        # Update case status to analyzed
+        try:
+            supabase.table("cases").update({
+                "updated_at": datetime.now().isoformat(),
+                "status": "analyzed"
+            }).eq("id", case_id).execute()
+        except Exception as db_err:
+            logger.warning(f"Could not update case status: {db_err}")
+
         # Return comprehensive response
         return BriefAnalysisResponse(
             analysis_id=analysis_id,
             status="completed",
+            case_id=case_id,
             law_codes=law_codes,
             precedent_cases=precedent_cases,
             ai_analysis=ai_analysis,
@@ -397,7 +441,7 @@ async def perform_comprehensive_analysis_fallback(brief: CaseBriefSubmission, us
             "legal_strategy": f"Focus on {brief.case_type or 'applicable'} law provisions and relevant precedents",
             "timeline_estimate": timeline_estimate,
             "success_probability": success_probability,
-            "estimated_costs": "₹2,00,000 - ₹5,00,000",
+
             "procedural_steps": [
                 "File initial petition/complaint",
                 "Gather and organize evidence",

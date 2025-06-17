@@ -57,6 +57,7 @@ export interface CaseBriefSubmission {
   jurisdiction?: string;
   urgency_level: 'low' | 'medium' | 'high' | 'urgent';
   speech_input?: boolean;
+  case_id?: string;
   documents?: File[];
 }
 
@@ -219,7 +220,8 @@ class ApiService {
         case_type: briefData.case_type || briefData.caseType,
         jurisdiction: briefData.jurisdiction || 'IN',
         urgency_level: briefData.urgency_level || briefData.urgencyLevel || 'medium',
-        speech_input: briefData.speech_input || briefData.speechInput || false
+        speech_input: briefData.speech_input || briefData.speechInput || false,
+        case_id: briefData.case_id || briefData.caseId
       };
       
       console.log('Transformed case brief data:', transformedData);
