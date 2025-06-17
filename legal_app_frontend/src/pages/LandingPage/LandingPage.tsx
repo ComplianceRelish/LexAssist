@@ -162,7 +162,7 @@ const LandingPage: React.FC = () => {
               border="1px"
               borderColor="gray.200"
               position="relative"
-              mt={{ base: 4, lg: -28 }}
+              mt={{ base: 4, lg: -36 }}
             >
               {/* Mock Dashboard Preview */}
               <VStack spacing={4} align="stretch">

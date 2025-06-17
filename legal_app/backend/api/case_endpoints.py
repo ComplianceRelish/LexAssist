@@ -31,7 +31,19 @@ async def create_case(
         }
         
         result = supabase.table("cases").insert(case_record).execute()
-        return {"case_id": result.data[0]["id"], "status": "created"}
+        
+        # Supabase may return an empty `data` array when the API is configured with
+        # `return=minimal` (the default). In that scenario, fall back to the UUID we
+        # generated locally so the caller still receives a valid case identifier.
+        inserted_id = case_record["id"]
+        if result and getattr(result, "data", None):
+            try:
+                inserted_id = result.data[0].get("id", inserted_id)
+            except (IndexError, AttributeError, TypeError):
+                # Keep the locally-generated id if the response structure is unexpected
+                pass
+        
+        return {"id": inserted_id, "case_id": inserted_id, "status": "created"}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
