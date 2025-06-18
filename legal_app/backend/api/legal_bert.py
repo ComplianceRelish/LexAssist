@@ -5,7 +5,12 @@ API endpoints for InLegalBERT model functionality
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
-from ..services.legal_bert_service import get_legal_bert_service, LegalBertService
+# Fix relative import issue
+try:
+    from services.legal_bert_service import get_legal_bert_service, LegalBertService
+except ImportError:
+    # Fallback import path for different contexts
+    from legal_app.backend.services.legal_bert_service import get_legal_bert_service, LegalBertService
 
 router = APIRouter()
 

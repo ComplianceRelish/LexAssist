@@ -24,12 +24,19 @@ from .role_based_access_control import (
 
 # Import Twilio service
 try:
-    from ..services.twilio_service import twilio_service
+    # Fix relative import with absolute import path
+    from services.twilio_service import twilio_service
     TWILIO_AVAILABLE = True
     print("✅ Twilio service loaded successfully")
 except ImportError as e:
-    print(f"❌ Twilio service not available: {e}")
-    TWILIO_AVAILABLE = False
+    try:
+        # Alternative import path
+        from legal_app.backend.services.twilio_service import twilio_service
+        TWILIO_AVAILABLE = True
+        print("✅ Twilio service loaded successfully")
+    except ImportError as e:
+        print(f"❌ Twilio service not available: {e}")
+        TWILIO_AVAILABLE = False
 
 # Check if Twilio is disabled via environment
 if os.getenv('DISABLE_TWILIO', '').lower() == 'true':
