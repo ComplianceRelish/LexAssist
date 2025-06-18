@@ -3,8 +3,14 @@ services:
     name: lexassist-backend
     runtime: python
     plan: standard  # Required for ML models
-    buildCommand: "pip install --no-cache-dir -r legal_app/backend/requirements.txt && pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && pip install twilio && python -c 'import nltk; nltk.download(\"punkt\"); nltk.download(\"stopwords\")'"
-    startCommand: "gunicorn wsgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 300 --workers 1 --max-requests 1000"
+    buildCommand: >
+      pip install --upgrade pip &&
+      pip install torch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 --index-url https://download.pytorch.org/whl/cpu &&
+      pip install transformers==4.30.2 sentence-transformers==2.2.2 huggingface-hub==0.16.4 twilio==8.0.0 &&
+      pip install -r legal_app/backend/requirements.txt &&
+      pip install nltk spacy &&
+      python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
+    startCommand: "cd legal_app/backend && gunicorn main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 300 --workers 1 --max-requests 1000"
     envVars:
       - key: PORT
         value: 10000
