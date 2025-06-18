@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiService, LegalTextAnalysisResponse } from '../../services/api.service';
 import './StatuteHighlighter.css';
-import { Tooltip, CircularProgress, Box, Typography, Chip, Alert } from '@mui/material';
-import GavelIcon from '@mui/icons-material/Gavel';
+import { OverlayTrigger, Tooltip, Spinner, Alert, Badge } from 'react-bootstrap';
+import { FaGavel } from 'react-icons/fa';
 
 interface StatuteHighlighterProps {
   text: string;
@@ -126,21 +126,23 @@ const StatuteHighlighter: React.FC<StatuteHighlighterProps> = ({
       
       // Add highlighted statute
       fragments.push(
-        <Tooltip 
+        <OverlayTrigger
           key={`statute-${index}`}
-          title={
-            <Box p={1}>
-              <Typography variant="subtitle2">{statute.act} {statute.section}</Typography>
-              <Typography variant="body2">{statute.title}</Typography>
-            </Box>
+          placement="top"
+          overlay={
+            <Tooltip id={`tooltip-${index}`}>
+              <div className="p-1">
+                <div className="fw-bold">{statute.act} {statute.section}</div>
+                <div>{statute.title}</div>
+              </div>
+            </Tooltip>
           }
-          arrow
         >
           <span className="highlighted-statute">
             {text.substring(statute.startIndex, statute.endIndex)}
-            <GavelIcon fontSize="small" className="statute-icon" />
+            <FaGavel size="sm" className="statute-icon" />
           </span>
-        </Tooltip>
+        </OverlayTrigger>
       );
       
       lastIndex = statute.endIndex;
@@ -156,19 +158,19 @@ const StatuteHighlighter: React.FC<StatuteHighlighterProps> = ({
 
   if (isAnalyzing) {
     return (
-      <Box textAlign="center" my={2}>
-        <CircularProgress size={20} /> 
-        <Typography variant="body2" color="textSecondary" ml={1} component="span">
+      <div className="text-center my-2">
+        <Spinner animation="border" size="sm" />
+        <span className="ms-2 text-muted">
           Identifying statutes...
-        </Typography>
-      </Box>
+        </span>
+      </div>
     );
   }
 
   if (error) {
     return (
       <div>
-        <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>
+        <Alert variant="warning" className="mb-2">{error}</Alert>
         <div>{text}</div>
       </div>
     );
@@ -180,25 +182,25 @@ const StatuteHighlighter: React.FC<StatuteHighlighterProps> = ({
         {highlightedText}
       </div>
       {statutes.length > 0 && (
-        <Box mt={2}>
-          <Typography variant="subtitle2" gutterBottom>Referenced Statutes:</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+        <div className="mt-3">
+          <h6 className="mb-2">Referenced Statutes:</h6>
+          <div className="d-flex flex-wrap gap-2">
             {statutes.map((statute, index) => (
-              <Chip 
+              <Badge 
                 key={`chip-${index}`}
-                icon={<GavelIcon />}
-                label={`${statute.act} ${statute.section}`}
-                color="primary"
-                variant="outlined"
-                size="small"
+                bg="primary"
+                className="p-2"
                 title={statute.title}
-              />
+              >
+                <FaGavel className="me-1" />
+                {`${statute.act} ${statute.section}`}
+              </Badge>
             ))}
-          </Box>
-        </Box>
+          </div>
+        </div>
       )}
       {!inlegalBERTAvailable && (
-        <Alert severity="info" sx={{ mt: 2 }}>
+        <Alert variant="info" className="mt-2">
           InLegalBERT is currently unavailable. Statute highlighting is disabled.
         </Alert>
       )}

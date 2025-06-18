@@ -61,14 +61,17 @@ class LegalAIService:
         # inlegalBERT integration
         self.inlegalbert_available = False
         try:
-            # Check if inlegalBERT processor is available from legal_endpoints
-            from api.legal_endpoints import inlegalbert_processor, INLEGAL_BERT_PROCESSOR_AVAILABLE
-            self.inlegalbert_processor = inlegalbert_processor
-            self.inlegalbert_available = INLEGAL_BERT_PROCESSOR_AVAILABLE
-            if self.inlegalbert_available:
-                logger.info("✅ inlegalBERT processor integrated with AI service")
-            else:
-                logger.warning("⚠️ inlegalBERT processor not available for integration")
+            # Import the processor directly instead of from legal_endpoints
+            from services.inlegalbert_processor import InLegalBERTProcessor
+            # Create our own instance if needed
+            self.inlegalbert_processor = InLegalBERTProcessor()
+            try:
+                self.inlegalbert_processor.initialize()
+                self.inlegalbert_available = True
+                logger.info("✅ inlegalBERT processor initialized and integrated with AI service")
+            except Exception as init_error:
+                logger.warning(f"⚠️ inlegalBERT processor initialization failed: {init_error}")
+                self.inlegalbert_processor = None
         except ImportError as e:
             logger.warning(f"⚠️ Could not import inlegalBERT processor: {e}")
             self.inlegalbert_processor = None
