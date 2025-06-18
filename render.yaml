@@ -1,50 +1,44 @@
 services:
   - type: web
-    name: lexassist-backend
+    name: lexassist
     runtime: python
-    plan: "pro plus"  # 1GB RAM - Required for InLegalBERT + Whisper
-    rootDir: legal_app/backend
-    buildCommand: |
-      export TRANSFORMERS_CACHE=/tmp/huggingface
-      export HF_HOME=/tmp/huggingface  
-      export HF_DATASETS_CACHE=/tmp/huggingface/datasets
-      export TOKENIZERS_PARALLELISM=false
-      python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
-    startCommand: |
-      mkdir -p /tmp/huggingface/{models,tokenizers,datasets,transformers,torch,whisper}
-      chmod -R 777 /tmp/huggingface
-      export TRANSFORMERS_CACHE=/tmp/huggingface
-      export HF_HOME=/tmp/huggingface
-      export HF_DATASETS_CACHE=/tmp/huggingface/datasets
-      export TOKENIZERS_PARALLELISM=false
-      gunicorn main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 1 --max-requests 50 --max-requests-jitter 5 --timeout 120
-    disk:
-      name: huggingface-cache
-      mountPath: /app/cache
-      sizeGB: 3
+    buildCommand: ./render-build.sh
+    startCommand: gunicorn wsgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
     envVars:
-      # HuggingFace and model caching - use /tmp for better permissions
       - key: TRANSFORMERS_CACHE
         value: /tmp/huggingface
       - key: HF_HOME
         value: /tmp/huggingface
       - key: HF_DATASETS_CACHE
         value: /tmp/huggingface/datasets
-      # Memory optimization
+      - key: HUGGINGFACE_HUB_CACHE
+        value: /tmp/huggingface/hub
+      - key: TORCH_HOME
+        value: /tmp/torch
+      - key: TORCH_CACHE
+        value: /tmp/torch
+      - key: PYTORCH_TRANSFORMERS_CACHE
+        value: /tmp/torch
+      - key: PYTORCH_PRETRAINED_BERT_CACHE
+        value: /tmp/torch
       - key: PYTORCH_CUDA_ALLOC_CONF
         value: max_split_size_mb:32,garbage_collection_threshold:0.6
-      - key: MALLOC_TRIM_THRESHOLD_
-        value: 65536
-      - key: USE_HALF_PRECISION
-        value: "true"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
       - key: TOKENIZERS_PARALLELISM
         value: "false"
-      # Load smaller models when possible
+      - key: USE_HALF_PRECISION
+        value: "true"
+      - key: INLEGALBERT_MAX_LENGTH
+        value: "256"
+      - key: MALLOC_TRIM_THRESHOLD_
+        value: "65536"
       - key: WHISPER_MODEL_SIZE
         value: "tiny"
-      # Application settings
       - key: PORT
-        value: 10000
+        value: "10000"
       - key: SUPABASE_URL
         value: https://meuyiktpkeomskqornnu.supabase.co
       - key: SUPABASE_ANON_KEY
@@ -53,7 +47,7 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: DEEPSEEK_API_KEY  # Critical for AI functionality
+      - key: DEEPSEEK_API_KEY
         sync: false
       - key: OPENAI_API_KEY
         sync: false
@@ -73,24 +67,111 @@ services:
         sync: false
       - key: HUGGINGFACE_TOKEN
         sync: false
-      # ML Model Cache Paths - removed duplicates
-      - key: TORCH_HOME
-        value: /tmp/huggingface/torch
       - key: WHISPER_CACHE
         value: /tmp/huggingface/whisper
+    disk:
+      name: huggingface-cache
+      mountPath: /app/cache
+      sizeGB: 3
+
+  - type: web
+    name: lexassist-backend
+    runtime: python
+    plan: "pro plus"
+    rootDir: legal_app/backend
+    buildCommand: |
+      export TRANSFORMERS_CACHE=/tmp/huggingface
+      export HF_HOME=/tmp/huggingface  
+      export HF_DATASETS_CACHE=/tmp/huggingface/datasets
+      export TOKENIZERS_PARALLELISM=false
+      python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
+    startCommand: |
+      mkdir -p /tmp/huggingface/{models,tokenizers,datasets,transformers,torch,whisper}
+      chmod -R 777 /tmp/huggingface
+      export TRANSFORMERS_CACHE=/tmp/huggingface
+      export HF_HOME=/tmp/huggingface
+      export HF_DATASETS_CACHE=/tmp/huggingface/datasets
+      export TOKENIZERS_PARALLELISM=false
+      gunicorn main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 1 --max-requests 50 --max-requests-jitter 5 --timeout 120
+    envVars:
+      - key: TRANSFORMERS_CACHE
+        value: /tmp/huggingface
+      - key: HF_HOME
+        value: /tmp/huggingface
+      - key: HF_DATASETS_CACHE
+        value: /tmp/huggingface/datasets
+      - key: HUGGINGFACE_HUB_CACHE
+        value: /tmp/huggingface/hub
+      - key: TORCH_HOME
+        value: /tmp/torch
+      - key: TORCH_CACHE
+        value: /tmp/torch
+      - key: PYTORCH_TRANSFORMERS_CACHE
+        value: /tmp/torch
+      - key: PYTORCH_PRETRAINED_BERT_CACHE
+        value: /tmp/torch
+      - key: PYTORCH_CUDA_ALLOC_CONF
+        value: max_split_size_mb:32,garbage_collection_threshold:0.6
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"
+      - key: USE_HALF_PRECISION
+        value: "true"
+      - key: INLEGALBERT_MAX_LENGTH
+        value: "256"
+      - key: MALLOC_TRIM_THRESHOLD_
+        value: "65536"
+      - key: WHISPER_MODEL_SIZE
+        value: "tiny"
+      - key: PORT
+        value: "10000"
+      - key: SUPABASE_URL
+        value: https://meuyiktpkeomskqornnu.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsImtpZCI6Ilp1eDFLZ3VsUkx6cU5JM3QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL21ldXlpa3Rwa2VvbXNrcW9ybm51LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzQ5MzY0NDExLCJpYXQiOjE3NDkzNjA4MTEsImVtYWlsIjoicmVsaXNoZm9vZHNAcHJvdG9uLm1lIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJjb3VudHJ5IjoiSU4iLCJjb3VudHJ5X2NvZGUiOiIrOTEiLCJlbWFpbCI6InJlbGlzaGZvb2RzQHByb3Rvbi5tZSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmdWxsX25hbWUiOiJNb3R0eSBQaGlsaXAiLCJwaG9uZSI6Iis5MTk0NDYwMTIzMjQiLCJwaG9uZV92ZXJpZmllZCI6ZmFsc2UsInN1YiI6ImRiNTliYWVjLWVjNjEtNGI5OC1iZGI4LTgyMWJmMzMyZWM4YiIsInVzZXJfdHlwZSI6ImNsaWVudCJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzQ5MzYwODExfV0sInNlc3Npb25faWQiOiI2MTQ2MGRhMC1jYzdhLTQ5NzUtOTg4Zi02NjYxMTY1M2RhNTYiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: ASSEMBLY_AI_API_KEY
+        sync: false
+      - key: NEO4J_USERNAME
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_API_ACCOUNT_KEY
+        sync: false
+      - key: REDIS_API_USER_KEY
+        sync: false
+      - key: HUGGINGFACE_TOKEN
+        sync: false
+      - key: WHISPER_CACHE
+        value: /tmp/huggingface/whisper
+    disk:
+      name: huggingface-cache
+      mountPath: /app/cache
+      sizeGB: 3
+
   - type: web
     name: lexassist-web
-    env: python
+    runtime: python
     region: singapore
     buildCommand: ./render-build.sh
     startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 4
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
-    cache:
-      directories:
-        - ~/.cache/pip
-        - /tmp
 
 databases:  # Optional: Add if you need Redis
   - name: redis
