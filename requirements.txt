@@ -1,19 +1,38 @@
 # From the root of your repository
+# Core web dependencies
 flask==2.0.1
 werkzeug==2.0.3
 flask-cors==3.0.10
+gunicorn==20.1.0
+fastapi>=0.68.0
+uvicorn>=0.15.0
+pydantic>=1.7.4
+
+# Database & Storage
 supabase>=2.3.1
 redis==4.3.4
-gunicorn==20.1.0
+
+# ML & AI libraries
+torch==2.0.0
+torchvision==0.15.0
+torchaudio==2.0.0
+transformers==4.30.2
+sentence-transformers==2.2.2
+huggingface-hub==0.16.4
+openai-whisper==20231117
+
+# NLP tools
+nltk==3.8.1
+spacy==3.7.2
+
+# Communication & Utilities
+twilio==8.0.0
 python-dotenv==0.19.2
 requests==2.28.2
 markupsafe==2.0.1
 itsdangerous==2.0.1
 jinja2==3.0.3
 importlib-metadata==4.13.0
-fastapi>=0.68.0
-uvicorn>=0.15.0
-pydantic>=1.7.4
 python-jose[cryptography]>=3.3.0
 python-multipart>=0.0.5
 email-validator>=1.1.1

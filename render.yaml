@@ -5,12 +5,12 @@ services:
     plan: standard  # Required for ML models
     rootDir: legal_app/backend
     buildCommand: |
-      pip install --upgrade pip &&
-      pip install torch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 --index-url https://download.pytorch.org/whl/cpu &&
-      pip install transformers==4.30.2 sentence-transformers==2.2.2 huggingface-hub==0.16.4 twilio==8.0.0 &&
-      pip install -r requirements.txt &&
       python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
     startCommand: "gunicorn main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
+    disk:
+      name: huggingface-cache
+      mountPath: /app/huggingface
+      sizeGB: 3
     envVars:
       - key: PORT
         value: 10000
@@ -53,10 +53,6 @@ services:
         value: /app/huggingface/torch
       - key: WHISPER_CACHE
         value: /app/huggingface/whisper
-    disk:
-      name: huggingface-cache
-      mountPath: /app/huggingface
-      sizeGB: 3  # Increased from 2GB
 
 databases:  # Optional: Add if you need Redis
   - name: redis
