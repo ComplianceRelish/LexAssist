@@ -3,27 +3,14 @@ services:
     name: lexassist-backend
     runtime: python
     plan: standard  # Required for ML models
+    rootDir: legal_app/backend
     buildCommand: |
-      # Debug information
-      echo "Working directory: $(pwd)" &&
-      # Install core dependencies explicitly first
       pip install --upgrade pip &&
-      pip install -U setuptools wheel &&
-      # Install PyTorch CPU explicitly
       pip install torch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 --index-url https://download.pytorch.org/whl/cpu &&
-      # Install ML libraries explicitly
-      pip install transformers==4.30.2 sentence-transformers==2.2.2 huggingface-hub==0.16.4 &&
-      # Install other critical dependencies
-      pip install twilio==8.0.0 openai-whisper==20231117 spacy==3.7.2 nltk==3.8.1 &&
-      # Install requirements.txt after core dependencies
-      pip install -r legal_app/backend/requirements.txt &&
-      # Download NLTK data
-      python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")' &&
-      # Create wsgi.py file in root directory
-      echo 'import sys; sys.path.append("legal_app/backend"); from legal_app.backend.main import app' > wsgi.py &&
-      # Verify installations
-      pip freeze | grep torch && pip freeze | grep transformers && pip freeze | grep twilio
-    startCommand: "gunicorn wsgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 300 --workers 1 --max-requests 1000"
+      pip install transformers==4.30.2 sentence-transformers==2.2.2 huggingface-hub==0.16.4 twilio==8.0.0 &&
+      pip install -r requirements.txt &&
+      python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
+    startCommand: "gunicorn main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
     envVars:
       - key: PORT
         value: 10000
