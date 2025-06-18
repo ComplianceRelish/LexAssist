@@ -183,7 +183,8 @@ async def get_user_stats(
         )
     
     try:
-        cases_response = supabase.table("cases").select("id, status, created_at, updated_at, next_hearing, outcome, title").eq("user_id", user_id).execute()
+        # Query without assuming outcome column exists
+        cases_response = supabase.table("cases").select("id, status, created_at, updated_at, next_hearing, title").eq("user_id", user_id).execute()
         docs_response = supabase.table("documents").select("id, case_id").eq("user_id", user_id).execute()
         
         analyses = []
@@ -220,9 +221,10 @@ async def get_user_stats(
         pending_deadlines = len(upcoming_deadlines)
 
         # === Success rate ===
+        # Since outcome column doesn't exist in the database, provide a default success rate
         closed_cases = [c for c in cases if c.get("status") == "closed"]
-        won_cases = [c for c in closed_cases if c.get("outcome") == "won"] if closed_cases else []
-        success_rate = round(len(won_cases) / len(closed_cases) * 100, 2) if closed_cases else 0
+        # Cannot determine won cases without outcome column
+        success_rate = 0  # Default when outcome data is unavailable
 
         # === Average turnaround ===
         turnaround_days = []
