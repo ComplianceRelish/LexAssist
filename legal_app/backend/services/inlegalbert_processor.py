@@ -59,9 +59,32 @@ class InLegalBERTProcessor(LegalModelInterface):
         self.model = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.initialized = False
-        self.max_length = 512
+        # Get max_length from environment variable with fallback
+        self.max_length = int(os.environ.get("INLEGALBERT_MAX_LENGTH", "256"))  # Reduced from 512
         self.use_half_precision = os.environ.get("USE_HALF_PRECISION", "true").lower() == "true"
         self.lazy_loading = True  # Only load model when needed
+        
+        # Set cache directories to /tmp for better permissions
+        self._setup_cache_dirs()
+    
+    def _setup_cache_dirs(self):
+        """Setup cache directories with proper permissions"""
+        try:
+            cache_dirs = ["/tmp/huggingface", "/tmp/huggingface/models", "/tmp/huggingface/tokenizers"]
+            for cache_dir in cache_dirs:
+                os.makedirs(cache_dir, exist_ok=True)
+                os.chmod(cache_dir, 0o777)
+            
+            # Set environment variables
+            os.environ.setdefault("TRANSFORMERS_CACHE", "/tmp/huggingface")
+            os.environ.setdefault("HF_HOME", "/tmp/huggingface")
+            os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+            
+            logger.info(f"Cache directories setup: {cache_dirs}")
+        except Exception as e:
+            logger.warning(f"Could not setup cache directories: {e}")
+            # Fallback to default behavior
+            pass
     
     def initialize(self, model_path: Optional[str] = None, **kwargs) -> None:
         """Initialize the InLegalBERT model"""
@@ -87,17 +110,24 @@ class InLegalBERTProcessor(LegalModelInterface):
             model_kwargs = {
                 "local_files_only": False,
                 "low_cpu_mem_usage": True,  # Reduces peak memory usage during loading
+                "torch_dtype": torch.float16 if self.use_half_precision else torch.float32,
+                "device_map": "auto" if torch.cuda.is_available() else None,
             }
+            
+            # Filter out None values
+            model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None}
             
             self.model = AutoModel.from_pretrained(model_name, **model_kwargs)
             
-            # Use half precision if enabled (reduces memory by ~50%)
-            if self.use_half_precision:
+            # Only convert to half precision if not already done during loading
+            if self.use_half_precision and not hasattr(self.model, '_half_precision_applied'):
                 logger.info("Converting model to half precision (FP16)")
                 self.model = self.model.half()
+                self.model._half_precision_applied = True
             
             # Move model to device and set to evaluation mode
-            self.model.to(self.device)
+            if not torch.cuda.is_available() or model_kwargs.get("device_map") != "auto":
+                self.model.to(self.device)
             self.model.eval()
             
             # Set max length from kwargs if provided
@@ -105,7 +135,8 @@ class InLegalBERTProcessor(LegalModelInterface):
                 self.max_length = kwargs['max_length']
             
             self.initialized = True
-            logger.info("InLegalBERT model initialized successfully")
+            logger.info(f"InLegalBERT model initialized successfully on {self.device}")
+            logger.info(f"Model max_length: {self.max_length}, Half precision: {self.use_half_precision}")
             
             # Force garbage collection after initialization
             gc.collect()
@@ -611,5 +642,3 @@ Comparable Case Outcomes:
                 model_version=self.MODEL_VERSION,
                 metadata={"error": str(e)}
             )
-    
-

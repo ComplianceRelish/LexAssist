@@ -5,30 +5,36 @@ services:
     plan: pro  # Upgraded for more memory
     rootDir: legal_app/backend
     buildCommand: |
-      mkdir -p /app/huggingface/models
-      chmod -R 777 /app/huggingface
       python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
-    startCommand: "gunicorn main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
+    startCommand: "gunicorn main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 1 --max-requests 100 --max-requests-jitter 10"
     disk:
       name: huggingface-cache
-      mountPath: /app/huggingface
+      mountPath: /app/cache
       sizeGB: 3
     envVars:
-      # HuggingFace and model caching
+      # HuggingFace and model caching - use /tmp for better permissions
       - key: TRANSFORMERS_CACHE
-        value: /app/huggingface/models
+        value: /tmp/huggingface
       - key: HF_HOME
-        value: /app/huggingface
+        value: /tmp/huggingface
+      - key: HF_DATASETS_CACHE
+        value: /tmp/huggingface/datasets
       # Memory optimization
       - key: PYTORCH_CUDA_ALLOC_CONF
-        value: max_split_size_mb:32
+        value: max_split_size_mb:32,garbage_collection_threshold:0.6
       - key: MALLOC_TRIM_THRESHOLD_
         value: 65536
       - key: USE_HALF_PRECISION
         value: "true"
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"
       # Load smaller models when possible
       - key: WHISPER_MODEL_SIZE
-        value: tiny
+        value: "tiny"
+      - key: INLEGALBERT_MODEL_PATH
+        value: law-ai/InLegalBERT
+      - key: INLEGALBERT_MAX_LENGTH
+        value: "256"
       # Application settings
       - key: PORT
         value: 10000
@@ -60,17 +66,15 @@ services:
         sync: false
       - key: HUGGINGFACE_TOKEN
         sync: false
-      - key: INLEGALBERT_MODEL_PATH
-        value: law-ai/InLegalBERT
       # ML Model Cache Paths
       - key: TRANSFORMERS_CACHE
-        value: /app/huggingface/transformers
+        value: /tmp/huggingface/transformers
       - key: HF_HOME
-        value: /app/huggingface
+        value: /tmp/huggingface
       - key: TORCH_HOME
-        value: /app/huggingface/torch
+        value: /tmp/huggingface/torch
       - key: WHISPER_CACHE
-        value: /app/huggingface/whisper
+        value: /tmp/huggingface/whisper
 
 databases:  # Optional: Add if you need Redis
   - name: redis
