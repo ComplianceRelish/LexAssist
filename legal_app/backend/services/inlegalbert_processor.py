@@ -55,9 +55,10 @@ class InLegalBERTProcessor(LegalModelInterface):
     MODEL_VERSION = "1.0.0"
     
     def __init__(self):
+        self.disabled = False
         self.tokenizer = None
         self.model = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
         self.initialized = False
         # Get max_length from environment variable with fallback
         self.max_length = int(os.environ.get("INLEGALBERT_MAX_LENGTH", "256"))  # Reduced from 512
@@ -90,8 +91,6 @@ class InLegalBERTProcessor(LegalModelInterface):
         """Initialize the InLegalBERT model"""
         try:
             # Clean memory before loading model
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
             gc.collect()
             
             model_name = model_path or self.MODEL_NAME
@@ -105,14 +104,20 @@ class InLegalBERTProcessor(LegalModelInterface):
                 use_fast=True  # Fast tokenizer uses less memory
             )
             
-            # Load model with memory optimizations
-            logger.info("Loading model...")
+            # Load model with ultra-aggressive memory optimizations
+            logger.info("Loading model with maximum memory optimization...")
             model_kwargs = {
                 "local_files_only": False,
                 "low_cpu_mem_usage": True,  # Reduces peak memory usage during loading
                 "torch_dtype": torch.float16 if self.use_half_precision else torch.float32,
-                "device_map": "auto" if torch.cuda.is_available() else None,
+                "device_map": {"": "cpu"},  # Force CPU to avoid GPU memory issues
+                "offload_folder": "/tmp/huggingface/offload",  # Offload unused layers
+                "offload_state_dict": True,  # Offload state dict to disk
+                "max_memory": {0: "400MB"},  # Limit memory usage per device
             }
+            
+            # Create offload directory
+            os.makedirs("/tmp/huggingface/offload", exist_ok=True)
             
             # Filter out None values
             model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None}
@@ -125,14 +130,12 @@ class InLegalBERTProcessor(LegalModelInterface):
                 self.model = self.model.half()
                 self.model._half_precision_applied = True
             
-            # Move model to device and set to evaluation mode
-            if not torch.cuda.is_available() or model_kwargs.get("device_map") != "auto":
-                self.model.to(self.device)
+            # Force CPU usage for maximum memory control
+            self.model.to(self.device)
             self.model.eval()
             
-            # Set max length from kwargs if provided
-            if 'max_length' in kwargs:
-                self.max_length = kwargs['max_length']
+            # Aggressive memory cleanup
+            gc.collect()
             
             self.initialized = True
             logger.info(f"InLegalBERT model initialized successfully on {self.device}")
@@ -140,8 +143,6 @@ class InLegalBERTProcessor(LegalModelInterface):
             
             # Force garbage collection after initialization
             gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
         
         except Exception as e:
             logger.error(f"Error initializing InLegalBERT model: {e}")
@@ -219,8 +220,7 @@ class InLegalBERTProcessor(LegalModelInterface):
         
         # Clean up GPU memory
         del inputs, outputs
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        gc.collect()
         
         return embeddings
         
@@ -260,8 +260,6 @@ class InLegalBERTProcessor(LegalModelInterface):
             
         # Force garbage collection
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
             
         logger.info("InLegalBERT resources cleaned up")
         self.initialized = False
@@ -274,8 +272,6 @@ class InLegalBERTProcessor(LegalModelInterface):
         based on availability and task requirements. Implements memory optimization.
         """
         # Log memory status before processing
-        if torch.cuda.is_available():
-            logger.info(f"GPU memory before processing: {torch.cuda.memory_allocated()/1024**2:.2f}MB")
         import os
         import requests
         from datetime import datetime
