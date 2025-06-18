@@ -7,12 +7,14 @@ It provides specialized legal text processing capabilities for Indian legal docu
 
 import time
 import logging
+import os
+import gc
 from typing import Dict, List, Any, Optional, Union
 import torch
 from transformers import AutoTokenizer, AutoModel
 import numpy as np
 
-from ..utils.model_context_protocol import (
+from utils.model_context_protocol import (
     LegalModelInterface,
     ModelRequest,
     ModelResponse,
@@ -58,18 +60,43 @@ class InLegalBERTProcessor(LegalModelInterface):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.initialized = False
         self.max_length = 512
+        self.use_half_precision = os.environ.get("USE_HALF_PRECISION", "true").lower() == "true"
+        self.lazy_loading = True  # Only load model when needed
     
     def initialize(self, model_path: Optional[str] = None, **kwargs) -> None:
         """Initialize the InLegalBERT model"""
         try:
+            # Clean memory before loading model
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+            
             model_name = model_path or self.MODEL_NAME
             logger.info(f"Initializing InLegalBERT model from {model_name}")
             
-            # Load tokenizer and model
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = AutoModel.from_pretrained(model_name)
+            # Load tokenizer with low memory footprint
+            logger.info("Loading tokenizer...")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                local_files_only=False,
+                use_fast=True  # Fast tokenizer uses less memory
+            )
             
-            # Move model to appropriate device
+            # Load model with memory optimizations
+            logger.info("Loading model...")
+            model_kwargs = {
+                "local_files_only": False,
+                "low_cpu_mem_usage": True,  # Reduces peak memory usage during loading
+            }
+            
+            self.model = AutoModel.from_pretrained(model_name, **model_kwargs)
+            
+            # Use half precision if enabled (reduces memory by ~50%)
+            if self.use_half_precision:
+                logger.info("Converting model to half precision (FP16)")
+                self.model = self.model.half()
+            
+            # Move model to device and set to evaluation mode
             self.model.to(self.device)
             self.model.eval()
             
@@ -79,9 +106,16 @@ class InLegalBERTProcessor(LegalModelInterface):
             
             self.initialized = True
             logger.info("InLegalBERT model initialized successfully")
+            
+            # Force garbage collection after initialization
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         
         except Exception as e:
             logger.error(f"Error initializing InLegalBERT model: {e}")
+            # Cleanup on error
+            self.cleanup()
             raise
     
     def get_model_info(self) -> Dict[str, Any]:
@@ -118,36 +152,99 @@ class InLegalBERTProcessor(LegalModelInterface):
         if not self.initialized:
             logger.info("Model not initialized, initializing now...")
             self.initialize()
+        elif self.lazy_loading and (self.model is None or self.tokenizer is None):
+            logger.info("Lazy loading model for current request...")
+            self.initialize()
     
     def _get_embeddings(self, text: str) -> np.ndarray:
-        """Get embeddings for input text"""
+        """Get embeddings for input text with memory optimization"""
         self._ensure_initialized()
         
-        # Tokenize input
+        # Process in smaller batches if text is very long
+        if len(text) > 10000:
+            logger.info(f"Processing long text of length {len(text)} in chunks")
+            return self._get_embeddings_chunked(text)
+        
+        # Tokenize input efficiently
         inputs = self.tokenizer(
             text,
             return_tensors="pt",
             truncation=True,
             max_length=self.max_length,
             padding="max_length"
-        ).to(self.device)
+        )
         
-        # Get model output
+        # Convert to appropriate precision and move to device
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        
+        # Get model output with memory optimization
         with torch.no_grad():
-            outputs = self.model(**inputs)
+            # Use inference_mode which is more memory-efficient than no_grad
+            with torch.inference_mode():
+                outputs = self.model(**inputs)
         
-        # Use CLS token embedding as text representation
-        embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+        # Use CLS token embedding as text representation and detach from graph
+        embeddings = outputs.last_hidden_state[:, 0, :].detach().cpu().numpy()
+        
+        # Clean up GPU memory
+        del inputs, outputs
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         return embeddings
+        
+    def _get_embeddings_chunked(self, text: str, chunk_size: int = 512) -> np.ndarray:
+        """Process very long texts by breaking into chunks"""
+        # Split text into sentences or chunks that respect word boundaries
+        chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+        
+        # Get embeddings for each chunk
+        all_embeddings = []
+        for i, chunk in enumerate(chunks[:10]):  # Limit number of chunks for memory reasons
+            logger.info(f"Processing chunk {i+1}/{min(len(chunks), 10)}")
+            emb = self._get_embeddings(chunk)
+            all_embeddings.append(emb)
+            
+        # Average the embeddings
+        if all_embeddings:
+            return np.mean(all_embeddings, axis=0)
+        else:
+            return np.zeros((1, 768))  # Default embedding size for BERT models
     
+    def cleanup(self):
+        """
+        Release memory used by the model when not needed
+        This is particularly useful in low-memory environments
+        """
+        logger.info("Cleaning up InLegalBERT resources...")
+        
+        # Delete model and tokenizer references
+        if hasattr(self, "model") and self.model is not None:
+            del self.model
+            self.model = None
+        
+        if hasattr(self, "tokenizer") and self.tokenizer is not None:
+            del self.tokenizer
+            self.tokenizer = None
+            
+        # Force garbage collection
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
+        logger.info("InLegalBERT resources cleaned up")
+        self.initialized = False
+        
     def _process_with_embeddings(self, prompt: str, task_type: str) -> str:
         """
         Process a request using InLegalBERT embeddings and routing to appropriate models.
         
         This method uses the embeddings from InLegalBERT and leverages either OpenAI or local models
-        based on availability and task requirements.
+        based on availability and task requirements. Implements memory optimization.
         """
+        # Log memory status before processing
+        if torch.cuda.is_available():
+            logger.info(f"GPU memory before processing: {torch.cuda.memory_allocated()/1024**2:.2f}MB")
         import os
         import requests
         from datetime import datetime

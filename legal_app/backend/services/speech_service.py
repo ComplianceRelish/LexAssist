@@ -17,11 +17,12 @@ class WhisperSpeechService:
         self.model_cache = {}
         self._load_model()
     
-    def _load_model(self, model_size="base"):
+    def _load_model(self, model_size=None):
         """Load Whisper model on startup"""
         try:
-            # Available models: tiny, base, small, medium, large
-            # base: ~74 MB, good balance (RECOMMENDED for legal)
+            # Get model size from environment or use default
+            model_size = model_size or os.environ.get("WHISPER_MODEL_SIZE", "base")
+            # Available models: tiny (~39 MB), base (~74 MB), small, medium, large
             logger.info(f"Loading Whisper model: {model_size}")
             
             if model_size not in self.model_cache:

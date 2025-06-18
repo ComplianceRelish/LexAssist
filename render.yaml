@@ -5,6 +5,8 @@ services:
     plan: pro  # Upgraded for more memory
     rootDir: legal_app/backend
     buildCommand: |
+      mkdir -p /app/huggingface/models
+      chmod -R 777 /app/huggingface
       python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
     startCommand: "gunicorn main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
     disk:
@@ -12,8 +14,22 @@ services:
       mountPath: /app/huggingface
       sizeGB: 3
     envVars:
+      # HuggingFace and model caching
       - key: TRANSFORMERS_CACHE
         value: /app/huggingface/models
+      - key: HF_HOME
+        value: /app/huggingface
+      # Memory optimization
+      - key: PYTORCH_CUDA_ALLOC_CONF
+        value: max_split_size_mb:32
+      - key: MALLOC_TRIM_THRESHOLD_
+        value: 65536
+      - key: USE_HALF_PRECISION
+        value: "true"
+      # Load smaller models when possible
+      - key: WHISPER_MODEL_SIZE
+        value: tiny
+      # Application settings
       - key: PORT
         value: 10000
       - key: SUPABASE_URL
