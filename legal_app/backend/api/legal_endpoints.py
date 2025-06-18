@@ -50,21 +50,15 @@ except ImportError as e:
     RAGFLOW_AVAILABLE = False
     legal_ragflow_service = None
 
+# Import indicator only, not the actual processor to avoid circular imports
 try:
-    from services.inlegalbert_processor import InLegalBERTProcessor
+    from services.inlegalbert_processor import __name__ as inlegalbert_module
     INLEGAL_BERT_PROCESSOR_AVAILABLE = True
-    # Initialize the InLegalBERTProcessor
-    inlegalbert_processor = InLegalBERTProcessor()
-    try:
-        inlegalbert_processor.initialize()
-        logger.info("✅ InLegalBERT processor initialized successfully")
-    except Exception as init_error:
-        logger.warning(f"InLegalBERT processor initialization failed: {init_error}")
-        INLEGAL_BERT_PROCESSOR_AVAILABLE = False
+    # Don't initialize here - we'll do this in a separate service module
+    inlegalbert_processor = None  # Will be set by processor service later if needed
 except ImportError as e:
     logging.warning(f"InLegalBERT processor not available: {e}")
     INLEGAL_BERT_PROCESSOR_AVAILABLE = False
-    InLegalBERTProcessor = None
     inlegalbert_processor = None
 
 try:

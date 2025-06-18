@@ -836,8 +836,6 @@ const EnhancedUserDashboard: React.FC = () => {
                         </Flex>
                         <StatuteHighlighter 
                           text={analysisResult.ai_analysis.case_summary} 
-                          jurisdiction="IN"
-                          onAnalysisComplete={(result) => setStatuteAnalysisResult(result)}
                         />
                       </Box>
                     ) : (
