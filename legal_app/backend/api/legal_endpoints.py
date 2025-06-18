@@ -266,6 +266,15 @@ async def analyze_legal_brief(
     Comprehensive legal brief analysis with fallback for missing services
     """
     try:
+        # === Input validation ===
+        required_fields = ["user_id", "title", "brief_text"]
+        missing_fields = [f for f in required_fields if not getattr(brief, f, None)]
+        if missing_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Missing required field(s): {', '.join(missing_fields)}"
+            )
+
         analysis_id = str(uuid.uuid4())
         logger.info(f"Starting analysis for brief: {brief.title}")
 
@@ -431,6 +440,9 @@ async def analyze_legal_brief(
             success_probability=ai_analysis.get("success_probability")
         )
         
+    except HTTPException as e:
+        # Re-raise validation or other explicit HTTP errors unchanged
+        raise e
     except Exception as e:
         logger.error(f"Error analyzing brief: {str(e)}")
         raise HTTPException(

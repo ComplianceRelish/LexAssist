@@ -96,8 +96,9 @@ async def get_user_cases(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/users/{user_id}/stats")
-async def get_user_stats(
+# Duplicate endpoint (superseded by legal_endpoints.get_user_stats)
+# @router.get("/users/{user_id}/stats")
+async def _legacy_get_user_stats(
     user_id: str,
     current_user = Depends(get_current_user)
 ):

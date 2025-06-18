@@ -6,7 +6,8 @@
  */
 
 import axios from 'axios';
-import { createClient } from '@supabase/supabase-js';
+import supabase from '../supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Types
 interface User {
@@ -75,13 +76,13 @@ interface SubscriptionTier {
 // API Client Class
 class LexAssistApiClient {
   private baseUrl: string;
-  private supabaseClient: any;
+  private supabaseClient: SupabaseClient;
   private accessToken: string | null = null;
   private user: User | null = null;
 
-  constructor(baseUrl: string, supabaseUrl: string, supabaseKey: string) {
+  constructor(baseUrl: string, _supabaseUrl?: string, _supabaseKey?: string) {
     this.baseUrl = baseUrl;
-    this.supabaseClient = createClient(supabaseUrl, supabaseKey);
+    this.supabaseClient = supabase;
     
     // Initialize from localStorage if available
     if (typeof window !== 'undefined') {
