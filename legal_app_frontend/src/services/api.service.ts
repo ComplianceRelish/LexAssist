@@ -2,7 +2,60 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { authService } from './auth.service';
 
-// Add new interfaces for user-specific data
+// Add new interfaces for user-specific data and inlegalBERT services
+
+// InLegalBERT specific interfaces
+export interface EmbeddingResponse {
+  embedding: number[];
+  dimensions: number;
+  model_version: string;
+  processing_time: number;
+}
+
+export interface TextSimilarityResponse {
+  similarity: number;
+  model_version: string;
+  processing_time: number;
+}
+
+export interface LegalTextAnalysisResponse {
+  statutes: {
+    act: string;
+    section: string;
+    title: string;
+  }[];
+  legal_issues: string[];
+  analysis: {
+    summary: string;
+    issues: string[];
+    strengths: string[];
+    weaknesses: string[];
+    recommendations: string[];
+  };
+  model_version: string;
+  processing_time: number;
+  confidence_score: number;
+  raw_output: string;
+}
+
+export interface LegalQueryRequest {
+  query: string;
+  query_type: string;
+  context?: string;
+  documents?: any[];
+}
+
+export interface EnhancedLegalQueryRequest extends LegalQueryRequest {
+  use_preprocessing: boolean;
+}
+
+export interface EnhancedLegalQueryResponse {
+  enhanced: boolean;
+  result: any;
+  timestamp: string;
+  inlegalbert_available: boolean;
+}
+
 export interface UserCase {
   id: string;
   title: string;
@@ -230,7 +283,8 @@ class ApiService {
         jurisdiction: briefData.jurisdiction || 'IN',
         urgency_level: briefData.urgency_level || briefData.urgencyLevel || 'medium',
         speech_input: briefData.speech_input || briefData.speechInput || false,
-        case_id: briefData.case_id || briefData.caseId
+        case_id: briefData.case_id || briefData.caseId,
+        document_id: briefData.document_id || null
       };
       
       console.log('Transformed case brief data:', transformedData);
@@ -286,6 +340,82 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching analysis results:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Process a legal query with inlegalBERT preprocessing enhancement
+   * This enhances the query with legal entity extraction before sending to LLMs
+   * @param query The legal query with preprocessing toggle
+   * @returns Enhanced response with preprocessing metadata
+   */
+  public async processEnhancedLegalQuery(query: EnhancedLegalQueryRequest): Promise<EnhancedLegalQueryResponse> {
+    try {
+      const response = await this.post<EnhancedLegalQueryResponse>('/api/enhanced-legal-query', query);
+      console.log('Enhanced query processed with inlegalBERT preprocessing:', response.data.enhanced);
+      return response.data;
+    } catch (error) {
+      console.error('Enhanced legal query failed:', error);
+      throw error;
+    }
+  }
+
+  // InLegalBERT specific methods
+  public async getTextEmbeddings(text: string): Promise<EmbeddingResponse> {
+    try {
+      const response = await this.post('/api/inlegalbert/embeddings', { text });
+      return response.data;
+    } catch (error) {
+      console.error('Error getting text embeddings:', error);
+      throw error;
+    }
+  }
+
+  public async getTextSimilarity(text1: string, text2: string): Promise<TextSimilarityResponse> {
+    try {
+      const response = await this.post('/api/inlegalbert/similarity', { text1, text2 });
+      return response.data;
+    } catch (error) {
+      console.error('Error calculating text similarity:', error);
+      throw error;
+    }
+  }
+
+  public async analyzeStatutes(text: string, jurisdiction: string = 'IN'): Promise<LegalTextAnalysisResponse> {
+    try {
+      const response = await this.post('/api/inlegalbert/analyze', { 
+        text, 
+        jurisdiction,
+        task_type: 'statute_identification'
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error analyzing statutes:', error);
+      throw error;
+    }
+  }
+
+  public async analyzeLegalText(text: string, jurisdiction: string = 'IN', taskType: string = 'general_analysis'): Promise<LegalTextAnalysisResponse> {
+    try {
+      const response = await this.post('/api/inlegalbert/analyze', { 
+        text, 
+        jurisdiction,
+        task_type: taskType
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error analyzing legal text:', error);
+      throw error;
+    }
+  }
+
+  public async checkInLegalBERTStatus(): Promise<{status: string, model_version: string}> {
+    try {
+      const response = await this.get('/api/inlegalbert/health');
+      return response.data;
+    } catch (error) {
+      console.error('Error checking InLegalBERT status:', error);
+      return { status: 'unavailable', model_version: 'unknown' };
     }
   }
 

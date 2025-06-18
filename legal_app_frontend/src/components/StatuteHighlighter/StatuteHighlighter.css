@@ -1,0 +1,40 @@
+.statute-highlighter {
+  font-family: 'Roboto', sans-serif;
+  line-height: 1.6;
+}
+
+.highlighted-content {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.highlighted-statute {
+  background-color: rgba(25, 118, 210, 0.1);
+  border-bottom: 1px dashed #1976d2;
+  padding: 0 2px;
+  position: relative;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.highlighted-statute:hover {
+  background-color: rgba(25, 118, 210, 0.2);
+}
+
+.statute-icon {
+  font-size: 14px !important;
+  margin-left: 2px;
+  color: #1976d2;
+  opacity: 0.7;
+}
+
+/* Animation for when new statutes are identified */
+@keyframes highlightFade {
+  from { background-color: rgba(25, 118, 210, 0.3); }
+  to { background-color: rgba(25, 118, 210, 0.1); }
+}
+
+.highlighted-statute.new {
+  animation: highlightFade 1.5s ease-out;
+}

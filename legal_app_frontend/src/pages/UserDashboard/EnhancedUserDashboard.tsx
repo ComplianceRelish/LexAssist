@@ -31,6 +31,10 @@ import {
   List,
   ListItem,
   ListIcon,
+  Switch,
+  FormControl,
+  FormLabel,
+  Tooltip,
 } from '@chakra-ui/react';
 import { 
   FaArrowUp, 
@@ -46,8 +50,9 @@ import {
 } from 'react-icons/fa';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Legend } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
-import { apiService, UserCase, UserDocument, UserStats, CaseBriefSubmission } from '../../services/api.service';
+import { apiService, UserCase, UserDocument, UserStats, CaseBriefSubmission, LegalTextAnalysisResponse } from '../../services/api.service';
 import CaseBriefModal from '../../components/Dashboard/CaseBriefModal';
+import StatuteHighlighter from '../../components/StatuteHighlighter';
 
 interface BriefAnalysisResult {
   analysis_id: string;
@@ -96,7 +101,17 @@ const EnhancedUserDashboard: React.FC = () => {
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [showAllCasesModal, setShowAllCasesModal] = useState(false);  // cases list modal
   const [showStatsModal, setShowStatsModal] = useState(false);       // key stats modal
-  const [showDeadlinesModal, setShowDeadlinesModal] = useState(false);
+  const [showDeadlinesModal, setShowDeadlinesModal] = useState(false); // deadlines modal
+  const [showDocumentsModal, setShowDocumentsModal] = useState(false); // documents modal
+  
+  // InLegalBERT integration
+  const [useStatuteHighlighter, setUseStatuteHighlighter] = useState(true);
+  const [inlegalBERTStatus, setInlegalBERTStatus] = useState<{status: string, model_version: string}>({status: 'checking', model_version: ''});
+  const [statuteAnalysisResult, setStatuteAnalysisResult] = useState<LegalTextAnalysisResponse | null>(null);
+  
+  // For showing individual case details
+  const [selectedCase, setSelectedCase] = useState<UserCase | null>(null);
+  const [showCaseDetailsModal, setShowCaseDetailsModal] = useState(false);
   
   // User-specific state
   const [userCases, setUserCases] = useState<UserCase[]>([]);
@@ -110,8 +125,24 @@ const EnhancedUserDashboard: React.FC = () => {
   useEffect(() => {
     if (user?.id) {
       loadUserData();
+      checkInlegalBERTAvailability();
     }
   }, [user?.id]);
+  
+  const checkInlegalBERTAvailability = async () => {
+    try {
+      const status = await apiService.checkInLegalBERTStatus();
+      setInlegalBERTStatus(status);
+      // If not available, disable the statute highlighter
+      if (status.status !== 'ok') {
+        setUseStatuteHighlighter(false);
+      }
+    } catch (error) {
+      console.error('Error checking inlegalBERT status:', error);
+      setInlegalBERTStatus({status: 'unavailable', model_version: ''});
+      setUseStatuteHighlighter(false);
+    }
+  };
 
   const loadUserData = async () => {
     if (!user?.id) return;
@@ -156,6 +187,8 @@ const EnhancedUserDashboard: React.FC = () => {
         urgency_level: briefData.urgency_level || 'medium',
         speech_input: briefData.speech_input || briefData.speechInput || false,
         case_id: briefData.case_id || briefData.caseId,
+        // Handle document uploads properly
+        document_id: briefData.document_id || null,  // Add direct document_id handling
         // Additional fields that might be required
         ...(briefData.documents && { documents: briefData.documents }),
         ...(briefData.tags && { tags: briefData.tags }),
@@ -297,8 +330,9 @@ const EnhancedUserDashboard: React.FC = () => {
           bg={cardBg}
           borderTop="4px solid"
           borderTopColor="orange.500"
-          _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+          _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg', cursor: 'pointer' }}
           transition="all 0.3s ease"
+          onClick={() => setShowDeadlinesModal(true)}
         >
           <CardBody>
             <VStack align="start" spacing={2}>
@@ -321,8 +355,9 @@ const EnhancedUserDashboard: React.FC = () => {
           bg={cardBg}
           borderTop="4px solid"
           borderTopColor="purple.500"
-          _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+          _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg', cursor: 'pointer' }}
           transition="all 0.3s ease"
+          onClick={() => setShowDocumentsModal(true)}
         >
           <CardBody>
             <VStack align="start" spacing={2}>
@@ -495,7 +530,7 @@ const EnhancedUserDashboard: React.FC = () => {
         </Card>
       </Grid>
 
-      {/* Case Brief Modal */}
+      {/* Case Brief Modal with Document Upload */}
       <CaseBriefModal
         isOpen={showCaseBriefModal}
         onClose={() => setShowCaseBriefModal(false)}
@@ -520,6 +555,13 @@ const EnhancedUserDashboard: React.FC = () => {
                     borderRadius="lg"
                     borderLeft="4px solid"
                     borderLeftColor={primaryColor}
+                    cursor="pointer"
+                    onClick={() => {
+                      setSelectedCase(case_);
+                      setShowCaseDetailsModal(true);
+                      setShowAllCasesModal(false); // Close the all cases modal
+                    }}
+                    _hover={{ bg: "gray.100" }}
                   >
                     <Box p={2} bg={primaryColor} borderRadius="md" color="white" mr={4}>
                       <Icon as={FaGavel} />
@@ -592,6 +634,132 @@ const EnhancedUserDashboard: React.FC = () => {
         </ModalContent>
       </Modal>
 
+      {/* Case Details Modal */}
+      <Modal 
+        isOpen={showCaseDetailsModal} 
+        onClose={() => setShowCaseDetailsModal(false)} 
+        size="xl"
+        scrollBehavior="inside"
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader bg={primaryColor} color="white">
+            {selectedCase?.title} <Badge ml={2} colorScheme={selectedCase?.status === 'active' ? 'green' : 'gray'}>{selectedCase?.status}</Badge>
+          </ModalHeader>
+          <ModalCloseButton color="white" />
+          <ModalBody>
+            {selectedCase ? (
+              <VStack spacing={4} align="stretch" py={4}>
+                {/* Case Summary */}
+                <Card>
+                  <CardBody>
+                    <Heading size="md" mb={3}>Case Summary</Heading>
+                    <SimpleGrid columns={2} spacing={4}>
+                      <Box>
+                        <Text fontWeight="bold" fontSize="sm">Case Type:</Text>
+                        <Text>{selectedCase.caseType || 'Not specified'}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontWeight="bold" fontSize="sm">Court:</Text>
+                        <Text>{selectedCase.court || 'Not specified'}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontWeight="bold" fontSize="sm">Created:</Text>
+                        <Text>{new Date(selectedCase.createdAt).toLocaleDateString()}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontWeight="bold" fontSize="sm">Next Hearing:</Text>
+                        <Text>{selectedCase.nextHearing ? new Date(selectedCase.nextHearing).toLocaleDateString() : 'Not scheduled'}</Text>
+                      </Box>
+                    </SimpleGrid>
+                  </CardBody>
+                </Card>
+
+                {/* Case Timeline */}
+                <Card>
+                  <CardBody>
+                    <Heading size="md" mb={3}>Case Timeline</Heading>
+                    <VStack spacing={2} align="stretch">
+                      <Flex align="center">
+                        <Box bg="green.500" borderRadius="full" p={1} mr={3}>
+                          <Icon as={FaCheckCircle} color="white" boxSize={3} />
+                        </Box>
+                        <Text flex="1">Case Created</Text>
+                        <Text fontSize="sm" color="gray.500">{new Date(selectedCase.createdAt).toLocaleDateString()}</Text>
+                      </Flex>
+                      {selectedCase.nextHearing && (
+                        <Flex align="center">
+                          <Box bg="blue.500" borderRadius="full" p={1} mr={3}>
+                            <Icon as={FaClock} color="white" boxSize={3} />
+                          </Box>
+                          <Text flex="1">Next Hearing Scheduled</Text>
+                          <Text fontSize="sm" color="gray.500">{new Date(selectedCase.nextHearing).toLocaleDateString()}</Text>
+                        </Flex>
+                      )}
+                    </VStack>
+                  </CardBody>
+                </Card>
+
+                {/* Actions */}
+                <Card>
+                  <CardBody>
+                    <Heading size="md" mb={3}>Actions</Heading>
+                    <SimpleGrid columns={2} spacing={4}>
+                      <Button
+                        leftIcon={<FaFileUpload />}
+                        colorScheme="blue"
+                        variant="outline"
+                        onClick={() => {
+                          // Set up case brief submission with pre-filled case data
+                          setShowCaseDetailsModal(false);
+                          setTimeout(() => {
+                            setShowCaseBriefModal(true);
+                          }, 100);
+                        }}
+                      >
+                        Add Brief/Analysis
+                      </Button>
+                      <Button
+                        leftIcon={<FaBalanceScale />}
+                        colorScheme="green"
+                        variant="outline"
+                        onClick={() => {
+                          toast({
+                            title: 'Coming Soon',
+                            description: 'Case update functionality will be available soon.',
+                            status: 'info',
+                            duration: 3000,
+                          });
+                        }}
+                      >
+                        Update Status
+                      </Button>
+                    </SimpleGrid>
+                  </CardBody>
+                </Card>
+              </VStack>
+            ) : (
+              <Center py={10}>
+                <Spinner />
+              </Center>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" mr={3} onClick={() => setShowCaseDetailsModal(false)}>
+              Close
+            </Button>
+            <Button variant="ghost" onClick={() => {
+              // Set selectedCase to null when returning to case list
+              setShowCaseDetailsModal(false);
+              setSelectedCase(null);
+              setShowAllCasesModal(true);
+            }}>
+              Back to Case List
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
       {/* Key Stats Modal */}
       <Modal isOpen={showStatsModal} onClose={() => setShowStatsModal(false)} size="md">
         <ModalOverlay />
@@ -643,9 +811,42 @@ const EnhancedUserDashboard: React.FC = () => {
                       <Icon as={FaBalanceScale} mr={2} />
                       Case Summary
                     </Heading>
-                    <Text>{analysisResult.ai_analysis.case_summary}</Text>
-                    
-                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
+                    <Box p={4}>
+                    {/* Use StatuteHighlighter when enabled, otherwise show regular text */}
+                    {analysisResult?.ai_analysis?.case_summary && useStatuteHighlighter ? (
+                      <Box mb={3}>
+                        <Flex justifyContent="space-between" mb={2}>
+                          <Text fontSize="sm" fontWeight="bold" color="blue.600">
+                            Case Summary with Statute Highlighting
+                          </Text>
+                          <Tooltip label={inlegalBERTStatus.status === 'ok' ? 'Toggle statute highlighting' : 'inlegalBERT not available'}>
+                            <FormControl display="flex" alignItems="center" w="auto" isDisabled={inlegalBERTStatus.status !== 'ok'}>
+                              <FormLabel htmlFor="statute-highlight" mb="0" fontSize="xs">
+                                Highlight Statutes
+                              </FormLabel>
+                              <Switch 
+                                id="statute-highlight" 
+                                isChecked={useStatuteHighlighter} 
+                                onChange={(e) => setUseStatuteHighlighter(e.target.checked)}
+                                colorScheme="blue"
+                                size="sm"
+                              />
+                            </FormControl>
+                          </Tooltip>
+                        </Flex>
+                        <StatuteHighlighter 
+                          text={analysisResult.ai_analysis.case_summary} 
+                          jurisdiction="IN"
+                          onAnalysisComplete={(result) => setStatuteAnalysisResult(result)}
+                        />
+                      </Box>
+                    ) : (
+                      <Text fontSize="md" mb={3}>
+                        {analysisResult?.ai_analysis?.case_summary || 'No summary available'}
+                      </Text>
+                    )}
+                    <Divider my={3} />
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
                       <Box p={3} bg="blue.50" borderRadius="md">
                         <Text fontSize="sm" color="gray.600">Timeline Estimate</Text>
                         <Text fontWeight="bold" color="blue.600">
@@ -660,6 +861,7 @@ const EnhancedUserDashboard: React.FC = () => {
                         </Text>
                       </Box>
                     </SimpleGrid>
+                    </Box>
                   </CardBody>
                 </Card>
 
@@ -814,6 +1016,96 @@ const EnhancedUserDashboard: React.FC = () => {
             <Button variant="outline" onClick={() => window.print()}>
               Print Report
             </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Deadlines Modal */}
+      <Modal isOpen={showDeadlinesModal} onClose={() => setShowDeadlinesModal(false)} size="md">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Pending Deadlines</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {userStats?.pendingDeadlines && userStats.pendingDeadlines > 0 ? (
+              <VStack spacing={4} align="stretch">
+                <Text mb={2}>You currently have {userStats.pendingDeadlines} pending deadlines in the next 7 days.</Text>
+                <Alert status="info">
+                  <AlertIcon />
+                  Detailed deadline information will be available soon.
+                </Alert>
+              </VStack>
+            ) : (
+              <Center p={8}>
+                <VStack spacing={4}>
+                  <Icon as={FaClock} fontSize="4xl" color="gray.300" />
+                  <Text color="gray.500" textAlign="center">
+                    No pending deadlines in the next 7 days.
+                  </Text>
+                </VStack>
+              </Center>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={() => setShowDeadlinesModal(false)}>Close</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Documents Modal */}
+      <Modal isOpen={showDocumentsModal} onClose={() => setShowDocumentsModal(false)} size="lg">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Documents Reviewed</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {userDocuments && userDocuments.length > 0 ? (
+              <VStack spacing={4} align="stretch">
+                {userDocuments.map((doc, index) => (
+                  <Flex 
+                    key={index}
+                    p={4}
+                    bg="gray.50"
+                    borderRadius="md"
+                    borderLeft="4px solid"
+                    borderLeftColor="purple.500"
+                    align="center"
+                  >
+                    <Icon as={FaFileUpload} color="purple.500" mr={3} />
+                    <Box flex={1}>
+                      <Text fontWeight="bold">{doc.title || `Document #${doc.id}`}</Text>
+                      <Text fontSize="sm" color="gray.600">
+                        Uploaded: {new Date(doc.uploadedAt).toLocaleDateString()}
+                      </Text>
+                    </Box>
+                    <Badge colorScheme="green">Reviewed</Badge>
+                  </Flex>
+                ))}
+              </VStack>
+            ) : (
+              <Center p={8}>
+                <VStack spacing={4}>
+                  <Icon as={FaFileUpload} fontSize="4xl" color="gray.300" />
+                  <Text color="gray.500" textAlign="center">
+                    No documents have been reviewed yet.
+                  </Text>
+                  <Button
+                    size="sm"
+                    colorScheme="blue"
+                    variant="outline"
+                    onClick={() => {
+                      setShowDocumentsModal(false);
+                      setShowCaseBriefModal(true);
+                    }}
+                  >
+                    Upload a Document
+                  </Button>
+                </VStack>
+              </Center>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={() => setShowDocumentsModal(false)}>Close</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

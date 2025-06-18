@@ -1,0 +1,47 @@
+.highlighted-text {
+  background-color: rgba(255, 255, 0, 0.3);
+  padding: 2px 0;
+}
+
+.source-highlight {
+  background-color: rgba(66, 153, 225, 0.2);
+  border-left: 3px solid #4299E1;
+  padding-left: 8px;
+  margin: 4px 0;
+}
+
+.target-highlight {
+  background-color: rgba(72, 187, 120, 0.2);
+  border-left: 3px solid #48BB78;
+  padding-left: 8px;
+  margin: 4px 0;
+}
+
+.similarity-high {
+  color: #48BB78;
+}
+
+.similarity-medium {
+  color: #ECC94B;
+}
+
+.similarity-low {
+  color: #F56565;
+}
+
+/* Animation for progress bar */
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+.analyzing-animation {
+  animation: pulse 1.5s infinite ease-in-out;
+}

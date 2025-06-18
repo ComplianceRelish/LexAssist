@@ -9,6 +9,7 @@ from enum import Enum
 from pydantic import BaseModel
 import httpx
 from datetime import datetime
+from utils.model_context_protocol import ModelRequest, ModelResponse, LegalModelInterface
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +38,15 @@ class LegalAIService:
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
         
-        # FIXED: Correct base URL without /v1
-        self.deepseek_base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        # Make sure base URL doesn't end with a slash and defaults to correct API endpoint
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        self.deepseek_base_url = base_url.rstrip('/')
         
         self.openai_model = "gpt-4"
+        # Default to deepseek-chat if not specified
         self.deepseek_model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
         
-        # FIXED: Increased timeout to 120 seconds
+        # Increased timeout to 120 seconds for long-running completions
         self.http_client = httpx.AsyncClient(timeout=120.0)
         
         # Add validation and logging
@@ -54,6 +57,21 @@ class LegalAIService:
         
         logger.info(f"DeepSeek base URL: {self.deepseek_base_url}")
         logger.info(f"DeepSeek model: {self.deepseek_model}")
+        
+        # inlegalBERT integration
+        self.inlegalbert_available = False
+        try:
+            # Check if inlegalBERT processor is available from legal_endpoints
+            from api.legal_endpoints import inlegalbert_processor, INLEGAL_BERT_PROCESSOR_AVAILABLE
+            self.inlegalbert_processor = inlegalbert_processor
+            self.inlegalbert_available = INLEGAL_BERT_PROCESSOR_AVAILABLE
+            if self.inlegalbert_available:
+                logger.info("✅ inlegalBERT processor integrated with AI service")
+            else:
+                logger.warning("⚠️ inlegalBERT processor not available for integration")
+        except ImportError as e:
+            logger.warning(f"⚠️ Could not import inlegalBERT processor: {e}")
+            self.inlegalbert_processor = None
     
     def _select_provider(self, query_type: LegalQueryType, jurisdiction: str) -> AIProvider:
         """Select the best AI provider based on query type and jurisdiction"""
@@ -97,16 +115,48 @@ class LegalAIService:
         """
     
     def _build_user_prompt(self, request: AIRequest) -> str:
-        """Build detailed user prompt based on request"""
-        prompt = f"Legal Query: {request.query}\n\n"
+        """Build user prompt based on query type and enhanced context from inlegalBERT"""
+        prompt = f"Query: {request.query}\n\n"
         
+        # Process enhanced context if available
+        enhanced_context_str = ""
         if request.context:
-            prompt += f"Context: {request.context}\n\n"
+            try:
+                context = json.loads(request.context)
+                
+                # Add identified statutes if available
+                if "statutes" in context and context["statutes"]:
+                    enhanced_context_str += "Identified Statutes:\n"
+                    for statute in context["statutes"]:
+                        enhanced_context_str += f"- {statute['act']} {statute['section']}: {statute['title']}\n"
+                    enhanced_context_str += "\n"
+                
+                # Add identified legal issues if available
+                if "legal_issues" in context and context["legal_issues"]:
+                    enhanced_context_str += "Legal Issues Identified:\n"
+                    for issue in context["legal_issues"]:
+                        enhanced_context_str += f"- {issue}\n"
+                    enhanced_context_str += "\n"
+                
+                # Add any other legal entities
+                if "legal_entities" in context and context["legal_entities"]:
+                    enhanced_context_str += "Other Legal References:\n"
+                    for entity in context["legal_entities"]:
+                        enhanced_context_str += f"- {entity}\n"
+                    enhanced_context_str += "\n"
+                
+                # Add any additional context
+                for key, value in context.items():
+                    if key not in ["statutes", "legal_issues", "legal_entities", "preprocessing"]:
+                        enhanced_context_str += f"{key}: {value}\n"
+                
+            except json.JSONDecodeError:
+                # If context is not JSON, use as-is
+                enhanced_context_str = f"Context: {request.context}\n\n"
         
-        if request.documents:
-            prompt += f"Related Documents/Cases: {json.dumps(request.documents, indent=2)}\n\n"
-        
-        # Add specific instructions based on query type
+        if enhanced_context_str:
+            prompt += f"Context (Pre-processed by inlegalBERT):\n{enhanced_context_str}\n"
+            
         if request.query_type == LegalQueryType.CASE_ANALYSIS:
             prompt += """
             Please provide a comprehensive case analysis including:
@@ -157,16 +207,146 @@ class LegalAIService:
         return prompt
     
     async def process_legal_query(self, request: AIRequest) -> Dict:
-        """Process legal query using selected AI provider"""
-        provider = self._select_provider(request.query_type, request.jurisdiction)
+        """Process legal query using selected AI provider with inlegalBERT preprocessing"""
+        # Check if we can use inlegalBERT directly for specialized tasks
+        if self.inlegalbert_available and request.query_type in [
+            LegalQueryType.STATUTE_IDENTIFICATION, 
+            LegalQueryType.TEXT_PROCESSING
+        ]:
+            logger.info(f"Using inlegalBERT directly for {request.query_type.value}")
+            return await self.hybrid_process_query(request)
         
+        # For other query types, use inlegalBERT preprocessing + LLM
+        if self.inlegalbert_available:
+            # Preprocess with inlegalBERT to enhance context
+            enhanced_request = await self._enhance_query_with_inlegalbert(request)
+            logger.info("Query enhanced with inlegalBERT preprocessing")
+            request = enhanced_request
+        else:
+            logger.info("inlegalBERT not available for preprocessing enhancement")
+        
+        # Process with LLM
+        provider = self._select_provider(request.query_type, request.jurisdiction)
         if provider == AIProvider.DEEPSEEK:
             return await self._query_deepseek(request)
         else:
             return await self._query_openai(request)
     
+    async def _enhance_query_with_inlegalbert(self, request: AIRequest) -> AIRequest:
+        """Enhance query with inlegalBERT preprocessing to extract legal entities and context"""
+        try:
+            if not self.inlegalbert_available or not self.inlegalbert_processor:
+                logger.warning("InlegalBERT not available for preprocessing")
+                return request
+            
+            # Create a copy of the request to avoid modifying the original
+            import copy
+            enhanced_request = copy.deepcopy(request)
+            
+            # Extract context from query using inlegalBERT
+            model_request = ModelRequest(
+                task_type="statute_identification",
+                input_text=request.query,
+                context="{}"
+            )
+            
+            logger.info(f"Preprocessing with inlegalBERT: extracting legal entities")
+            result = self.inlegalbert_processor.process(model_request)
+            
+            # Create an enhanced context object
+            enhanced_context = {}
+            
+            # Add original context if exists
+            if request.context:
+                try:
+                    original_context = json.loads(request.context)
+                    enhanced_context.update(original_context)
+                except json.JSONDecodeError:
+                    logger.warning("Original context is not valid JSON, ignoring")
+            
+            # Add extracted statutes
+            if hasattr(result, 'law_sections') and result.law_sections:
+                enhanced_context["statutes"] = [
+                    {"act": law.act, "section": law.section, "title": law.title}
+                    for law in result.law_sections
+                ]
+            
+            # Add extracted legal issues
+            if hasattr(result, 'legal_issues') and result.legal_issues:
+                enhanced_context["legal_issues"] = result.legal_issues
+            
+            # Add any other extracted legal entities
+            if hasattr(result, 'legal_entities') and result.legal_entities:
+                enhanced_context["legal_entities"] = result.legal_entities
+            
+            # Set the enhanced context in the request
+            enhanced_request.context = json.dumps(enhanced_context)
+            
+            # Add metadata about preprocessing
+            enhanced_context["preprocessing"] = {
+                "model": "inlegalBERT-" + self.inlegalbert_processor.MODEL_VERSION,
+                "timestamp": datetime.now().isoformat(),
+                "confidence": getattr(result, 'confidence_score', 0.0)
+            }
+            
+            logger.info(f"Query enhanced with legal context: {len(enhanced_context)} entities")
+            return enhanced_request
+        
+        except Exception as e:
+            logger.error(f"Error in inlegalBERT preprocessing: {str(e)}")
+            return request  # Return original request on error
+            
+    async def hybrid_process_query(self, request: AIRequest) -> Dict:
+        """Use inlegalBERT to handle specialized Indian legal tasks"""
+        try:
+            if not self.inlegalbert_available or not self.inlegalbert_processor:
+                logger.warning("InlegalBERT not available, falling back to LLM")
+                return await self._query_deepseek(request)
+            
+            # Map AIRequest to ModelRequest for inlegalBERT
+            model_request = ModelRequest(
+                task_type=request.query_type.value,
+                input_text=request.query,
+                context=request.context or "{}"
+            )
+            
+            # Process with inlegalBERT
+            logger.info(f"Processing with inlegalBERT: {request.query_type.value}")
+            result = self.inlegalbert_processor.process(model_request)
+            
+            # Transform inlegalBERT response to match LLM response format
+            response = {
+                "content": result.raw_output,
+                "model": "inlegalBERT-" + self.inlegalbert_processor.MODEL_VERSION,
+                "processing_time": result.processing_time,
+                "confidence": result.confidence_score
+            }
+            
+            # Add specialized fields based on task type
+            if request.query_type == LegalQueryType.STATUTE_IDENTIFICATION and result.law_sections:
+                response["statutes"] = [
+                    {"act": law.act, "section": law.section, "title": law.title}
+                    for law in result.law_sections
+                ]
+            
+            if request.query_type == LegalQueryType.CASE_ANALYSIS and result.analysis:
+                response.update({
+                    "case_summary": result.analysis.summary,
+                    "legal_issues": result.analysis.issues,
+                    "strengths": result.analysis.strengths,
+                    "weaknesses": result.analysis.weaknesses,
+                    "recommendations": result.analysis.recommendations
+                })
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error in hybrid processing with inlegalBERT: {str(e)}")
+            # Fallback to DeepSeek
+            return await self._query_deepseek(request)
+    
     async def _query_deepseek(self, request: AIRequest) -> Dict:
-        """Query DeepSeek API with improved error handling"""
+        """Query DeepSeek API with improved error handling and inlegalBERT enhanced context"""
         try:
             if not self.deepseek_api_key:
                 raise ValueError("DEEPSEEK_API_KEY not configured")
@@ -174,6 +354,17 @@ class LegalAIService:
             system_prompt = self._build_legal_system_prompt(request.jurisdiction, request.user_role)
             user_prompt = self._build_user_prompt(request)
             
+            # Check if we have inlegalBERT preprocessing information to include in the payload
+            inlegalbert_metadata = None
+            if request.context:
+                try:
+                    context_data = json.loads(request.context)
+                    if "preprocessing" in context_data:
+                        inlegalbert_metadata = context_data["preprocessing"]
+                except json.JSONDecodeError:
+                    pass
+                
+            # Construct model payload
             payload = {
                 "model": self.deepseek_model,
                 "messages": [
@@ -189,55 +380,63 @@ class LegalAIService:
                 "Content-Type": "application/json"
             }
             
-            # FIXED: Correct endpoint construction
-            endpoint = f"{self.deepseek_base_url}/chat/completions"
-            logger.info(f"Making DeepSeek API call to: {endpoint}")
+            # Log the enhanced prompt if inlegalBERT was used
+            if inlegalbert_metadata:
+                logger.info(f"Sending DeepSeek request with inlegalBERT enhanced context") 
             
-            response = await self.http_client.post(
-                endpoint,
-                json=payload,
-                headers=headers
-            )
+            endpoint = f"{self.deepseek_base_url}/v1/chat/completions"
+            response = await self.http_client.post(endpoint, json=payload, headers=headers)
             
-            # FIXED: Better error handling
             if response.status_code != 200:
                 error_text = response.text
-                logger.error(f"DeepSeek API error {response.status_code}: {error_text}")
                 raise httpx.HTTPStatusError(f"API returned {response.status_code}: {error_text}", request=response.request, response=response)
             
             result = response.json()
             
             if "choices" not in result or not result["choices"]:
-                logger.error(f"Invalid DeepSeek response format: {result}")
                 raise ValueError(f"Invalid response format: {result}")
             
             content = result["choices"][0]["message"]["content"]
             
-            # Parse and structure the response
-            return self._parse_ai_response(content, request.query_type)
+            # Parse the response and add inlegalBERT metadata if it was used
+            parsed_response = self._parse_ai_response(content, request.query_type)
+            
+            # Add metadata about inlegalBERT preprocessing if it was used
+            if inlegalbert_metadata:
+                parsed_response["enhanced_with_inlegalbert"] = True
+                parsed_response["preprocessing_metadata"] = inlegalbert_metadata
+            
+            return parsed_response
             
         except httpx.TimeoutException:
-            logger.error("DeepSeek API timeout after 120 seconds")
             raise Exception("DeepSeek API timeout - request took too long")
         except httpx.HTTPStatusError as e:
-            logger.error(f"DeepSeek HTTP error: {e}")
             raise Exception(f"DeepSeek API HTTP error: {e}")
+        except Exception as e:
+            raise Exception(f"DeepSeek API error: {str(e)}")
         except Exception as e:
             logger.error(f"DeepSeek query failed with detailed error: {str(e)}")
             logger.error(f"Request details - Model: {self.deepseek_model}, Endpoint: {self.deepseek_base_url}")
             raise Exception(f"DeepSeek API error: {str(e)}")
     
     async def _query_openai(self, request: AIRequest) -> Dict:
-        """Query OpenAI API"""
+        """Query OpenAI API with inlegalBERT enhanced context"""
         try:
-            if not self.openai_api_key:
-                raise ValueError("OPENAI_API_KEY not configured")
-            
             system_prompt = self._build_legal_system_prompt(request.jurisdiction, request.user_role)
             user_prompt = self._build_user_prompt(request)
             
+            # Check for inlegalBERT preprocessing metadata
+            inlegalbert_metadata = None
+            if request.context:
+                try:
+                    context_data = json.loads(request.context)
+                    if "preprocessing" in context_data:
+                        inlegalbert_metadata = context_data["preprocessing"]
+                except json.JSONDecodeError:
+                    pass
+            
             payload = {
-                "model": self.openai_model,
+                "model": "gpt-4",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -251,6 +450,10 @@ class LegalAIService:
                 "Content-Type": "application/json"
             }
             
+            # Log if using enhanced context
+            if inlegalbert_metadata:
+                logger.info("Sending OpenAI request with inlegalBERT enhanced context")
+            
             response = await self.http_client.post(
                 "https://api.openai.com/v1/chat/completions",
                 json=payload,
@@ -262,8 +465,15 @@ class LegalAIService:
             
             content = result["choices"][0]["message"]["content"]
             
-            # Parse and structure the response
-            return self._parse_ai_response(content, request.query_type)
+            # Parse response and add metadata
+            parsed_response = self._parse_ai_response(content, request.query_type)
+            
+            # Add metadata about inlegalBERT preprocessing if it was used
+            if inlegalbert_metadata:
+                parsed_response["enhanced_with_inlegalbert"] = True
+                parsed_response["preprocessing_metadata"] = inlegalbert_metadata
+            
+            return parsed_response
             
         except Exception as e:
             logger.error(f"OpenAI query failed: {str(e)}")

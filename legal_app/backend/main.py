@@ -44,6 +44,14 @@ try:
 except ImportError as e:
     logger.error(f"❌ Legal endpoints failed to load: {e}")
 
+# Register InLegalBERT endpoints
+try:
+    from api.legal_bert import router as legal_bert_router
+    app.include_router(legal_bert_router, prefix="/api/inlegalbert", tags=["InLegalBERT"])
+    logger.info("✅ InLegalBERT endpoints loaded successfully")
+except ImportError as e:
+    logger.error(f"❌ InLegalBERT endpoints failed to load: {e}")
+
 @app.get("/")
 async def root():
     return {

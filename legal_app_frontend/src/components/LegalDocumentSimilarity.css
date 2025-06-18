@@ -1,0 +1,38 @@
+.legal-document-similarity {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.source-highlight {
+  background-color: rgba(13, 110, 253, 0.05);
+  border-left: 4px solid #0d6efd;
+}
+
+.target-highlight {
+  background-color: rgba(25, 135, 84, 0.05);
+  border-left: 4px solid #198754;
+}
+
+.highlighted-text {
+  background-color: #fff3cd;
+  padding: 2px 0;
+  border-radius: 2px;
+}
+
+/* Progress bar animations */
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+.analyzing-animation {
+  animation: pulse 1.5s infinite ease-in-out;
+}
