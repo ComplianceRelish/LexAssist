@@ -8,18 +8,49 @@ import os
 import logging
 import threading
 from typing import List, Dict, Any, Optional
-import torch
-from transformers import AutoTokenizer, AutoModel, pipeline
-from huggingface_hub import login
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Handle optional dependencies with graceful fallbacks
+torch_available = True
+transformers_available = True
+huggingface_available = True
+
+try:
+    import torch
+    logger.info(f"PyTorch loaded successfully: {torch.__version__}")
+except ImportError as e:
+    logger.error(f"Failed to import torch: {e}")
+    torch_available = False
+
+try:
+    from transformers import AutoTokenizer, AutoModel, pipeline
+    logger.info("Transformers loaded successfully")
+except ImportError as e:
+    logger.error(f"Failed to import transformers: {e}")
+    transformers_available = False
+    
+try:
+    from huggingface_hub import login
+    logger.info("Huggingface Hub loaded successfully")
+except ImportError as e:
+    logger.error(f"Failed to import huggingface_hub: {e}")
+    huggingface_available = False
 
 class LegalBertService:
     """Service to handle InLegalBERT model operations"""
     
     def __init__(self, load_models_async=False):
         logger.info("Initializing LegalBertService")
+        
+        # Check if required dependencies are available
+        if not torch_available or not transformers_available:
+            self.is_loaded = False
+            self.loading_error = "Required dependencies not available"
+            logger.error(f"Cannot initialize LegalBertService: torch_available={torch_available}, transformers_available={transformers_available}")
+            return
+        
         # Load environment variables
         self.model_path = os.environ.get("INLEGALBERT_MODEL_PATH", "law-ai/InLegalBERT")
         self.hf_token = os.environ.get("HUGGINGFACE_TOKEN")
@@ -30,11 +61,14 @@ class LegalBertService:
         logger.info(f"Cache directory: {self.cache_dir}")
         
         # Create cache directory if it doesn't exist
-        os.makedirs(self.cache_dir, exist_ok=True)
-        logger.info("Cache directory created/verified")
+        try:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            logger.info("Cache directory created/verified")
+        except Exception as e:
+            logger.warning(f"Failed to create cache directory: {e}")
         
         # Login to Hugging Face if token is provided
-        if self.hf_token:
+        if self.hf_token and huggingface_available:
             try:
                 logger.info("Attempting to login to Hugging Face Hub")
                 login(token=self.hf_token)
@@ -42,7 +76,7 @@ class LegalBertService:
             except Exception as e:
                 logger.error(f"Failed to login to Hugging Face Hub: {e}")
         else:
-            logger.warning("No Hugging Face token provided, some models may not be accessible")
+            logger.warning("No Hugging Face token provided or huggingface_hub not available")
         
         # Initialize model components
         self.tokenizer = None

@@ -2,8 +2,13 @@ services:
   - type: web
     name: lexassist-backend
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    buildCommand: >
+      pip install --upgrade pip &&
+      pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu &&
+      pip install -r legal_app/backend/requirements.txt &&
+      pip install sentence-transformers transformers twilio openai-whisper spacy nltk &&
+      python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
+    startCommand: cd legal_app/backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PINECONE_API_KEY
         value: pcsk_76Pk4Y_ABp8Yw7eMT2F9sjBAr5LwBMaqawpJZn5WdZ4DG2ozhJtkz2GvAniuK3YDudMAKb
@@ -33,7 +38,13 @@ services:
         value: law-ai/InLegalBERT
       - key: HUGGINGFACE_TOKEN
         value: hf_zSAcaCWTaaJBHwImVPUChBsIFlaXgQFwG
+      - key: INLEGALBERT_CACHE_DIR
+        value: /app/huggingface/inlegalbert
+      - key: TRANSFORMERS_CACHE
+        value: /app/huggingface/transformers
+      - key: TORCH_HOME
+        value: /app/huggingface/torch
     disk:
       name: huggingface-cache
       mountPath: /app/huggingface
-      sizeGB: 2
+      sizeGB: 3

@@ -46,11 +46,32 @@ except ImportError as e:
 
 # Register InLegalBERT endpoints
 try:
+    logger.info("Attempting to load InLegalBERT endpoints")
+    
+    # Check if torch and transformers are available
+    try:
+        import torch
+        logger.info(f"PyTorch available: {torch.__version__}")
+    except ImportError as e:
+        logger.error(f"PyTorch not available: {e}")
+        
+    try:
+        import transformers
+        logger.info(f"Transformers available: {transformers.__version__}")
+    except ImportError as e:
+        logger.error(f"Transformers not available: {e}")
+    
+    # Import the router with explicit error tracking
     from api.legal_bert import router as legal_bert_router
+    logger.info("InLegalBERT router imported")
+    
+    # Register the router
     app.include_router(legal_bert_router, prefix="/api/inlegalbert", tags=["InLegalBERT"])
     logger.info("✅ InLegalBERT endpoints loaded successfully")
-except ImportError as e:
+except Exception as e:
+    import traceback
     logger.error(f"❌ InLegalBERT endpoints failed to load: {e}")
+    logger.error(f"Traceback: {traceback.format_exc()}")
 
 @app.get("/")
 async def root():
