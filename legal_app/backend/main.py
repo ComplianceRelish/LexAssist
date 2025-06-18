@@ -61,16 +61,35 @@ try:
     except ImportError as e:
         logger.error(f"Transformers not available: {e}")
     
-    # Import the router with explicit error tracking
-    from api.legal_bert import router as legal_bert_router
-    logger.info("InLegalBERT router imported")
+    try:
+        # Import the standard legal bert router
+        from api.legal_bert import router as legal_bert_router
+        logger.info("InLegalBERT router imported")
+        
+        # Register the router
+        app.include_router(legal_bert_router, prefix="/api/inlegalbert", tags=["InLegalBERT"])
+        logger.info("✅ InLegalBERT endpoints loaded successfully")
+    except Exception as e:
+        import traceback
+        logger.error(f"❌ InLegalBERT endpoints failed to load: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
     
-    # Register the router
-    app.include_router(legal_bert_router, prefix="/api/inlegalbert", tags=["InLegalBERT"])
-    logger.info("✅ InLegalBERT endpoints loaded successfully")
+    try:
+        # Import the Model Context Protocol router
+        from api.model_context_endpoints import router as model_context_router
+        logger.info("Model Context Protocol router imported")
+        
+        # Register the router
+        app.include_router(model_context_router, prefix="/api/legal-ai", tags=["LegalAI"])
+        logger.info("✅ Model Context Protocol endpoints loaded successfully")
+    except Exception as e:
+        import traceback
+        logger.error(f"❌ Model Context Protocol endpoints failed to load: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
 except Exception as e:
     import traceback
-    logger.error(f"❌ InLegalBERT endpoints failed to load: {e}")
+    logger.error(f"❌ InLegalBERT dependencies failed to load: {e}")
     logger.error(f"Traceback: {traceback.format_exc()}")
 
 @app.get("/")
