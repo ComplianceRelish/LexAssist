@@ -78,6 +78,19 @@ services:
         value: /tmp/huggingface/torch
       - key: WHISPER_CACHE
         value: /tmp/huggingface/whisper
+  - type: web
+    name: lexassist-web
+    env: python
+    region: singapore
+    buildCommand: ./render-build.sh
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 4
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+    cache:
+      directories:
+        - ~/.cache/pip
+        - /tmp
 
 databases:  # Optional: Add if you need Redis
   - name: redis
