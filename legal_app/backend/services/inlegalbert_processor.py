@@ -76,12 +76,26 @@ class InLegalBERTProcessor(LegalModelInterface):
                 os.makedirs(cache_dir, exist_ok=True)
                 os.chmod(cache_dir, 0o777)
             
-            # Set environment variables
+            # Set comprehensive environment variables to prevent any /app access
             os.environ.setdefault("TRANSFORMERS_CACHE", "/tmp/huggingface")
             os.environ.setdefault("HF_HOME", "/tmp/huggingface")
+            os.environ.setdefault("HF_DATASETS_CACHE", "/tmp/huggingface/datasets")
+            os.environ.setdefault("HUGGINGFACE_HUB_CACHE", "/tmp/huggingface/hub")
             os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
             
-            logger.info(f"Cache directories setup: {cache_dirs}")
+            # PyTorch specific cache settings
+            os.environ.setdefault("TORCH_HOME", "/tmp/torch")
+            os.environ.setdefault("TORCH_CACHE", "/tmp/torch")
+            os.environ.setdefault("PYTORCH_TRANSFORMERS_CACHE", "/tmp/huggingface")
+            os.environ.setdefault("PYTORCH_PRETRAINED_BERT_CACHE", "/tmp/huggingface")
+            
+            # Create additional cache directories
+            additional_dirs = ["/tmp/torch", "/tmp/huggingface/datasets", "/tmp/huggingface/hub"]
+            for cache_dir in additional_dirs:
+                os.makedirs(cache_dir, exist_ok=True)
+                os.chmod(cache_dir, 0o777)
+            
+            logger.info(f"Cache directories setup: {cache_dirs + additional_dirs}")
         except Exception as e:
             logger.warning(f"Could not setup cache directories: {e}")
             # Fallback to default behavior
@@ -90,16 +104,20 @@ class InLegalBERTProcessor(LegalModelInterface):
     def initialize(self, model_path: Optional[str] = None, **kwargs) -> None:
         """Initialize the InLegalBERT model"""
         try:
+            # Ensure cache directories are set up first
+            self._setup_cache_dirs()
+            
             # Clean memory before loading model
             gc.collect()
             
             model_name = model_path or self.MODEL_NAME
             logger.info(f"Initializing InLegalBERT model from {model_name}")
             
-            # Load tokenizer with low memory footprint
+            # Load tokenizer with low memory footprint and explicit cache
             logger.info("Loading tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
+                cache_dir="/tmp/huggingface",
                 local_files_only=False,
                 use_fast=True  # Fast tokenizer uses less memory
             )
@@ -107,6 +125,7 @@ class InLegalBERTProcessor(LegalModelInterface):
             # Load model with ultra-aggressive memory optimizations
             logger.info("Loading model with maximum memory optimization...")
             model_kwargs = {
+                "cache_dir": "/tmp/huggingface",
                 "local_files_only": False,
                 "low_cpu_mem_usage": True,  # Reduces peak memory usage during loading
                 "torch_dtype": torch.float16 if self.use_half_precision else torch.float32,
@@ -143,7 +162,13 @@ class InLegalBERTProcessor(LegalModelInterface):
             
             # Force garbage collection after initialization
             gc.collect()
-        
+    
+        except PermissionError as e:
+            logger.error(f"Permission error initializing InLegalBERT model: {e}")
+            logger.error("This usually indicates an issue with cache directory permissions")
+            # Cleanup on error
+            self.cleanup()
+            raise
         except Exception as e:
             logger.error(f"Error initializing InLegalBERT model: {e}")
             # Cleanup on error
