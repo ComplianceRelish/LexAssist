@@ -12,7 +12,7 @@ import torch
 from transformers import AutoTokenizer, AutoModel
 import numpy as np
 
-from .model_context_protocol import (
+from ..utils.model_context_protocol import (
     LegalModelInterface,
     ModelRequest,
     ModelResponse,

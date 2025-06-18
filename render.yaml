@@ -2,7 +2,7 @@ services:
   - type: web
     name: lexassist-backend
     runtime: python
-    plan: standard  # Required for ML models
+    plan: pro  # Upgraded for more memory
     rootDir: legal_app/backend
     buildCommand: |
       python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
@@ -12,6 +12,8 @@ services:
       mountPath: /app/huggingface
       sizeGB: 3
     envVars:
+      - key: TRANSFORMERS_CACHE
+        value: /app/huggingface/models
       - key: PORT
         value: 10000
       - key: SUPABASE_URL
