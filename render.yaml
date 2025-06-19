@@ -83,11 +83,18 @@ services:
     runtime: python
     rootDir: legal_app/backend
     buildCommand: |
-      export TRANSFORMERS_CACHE=/tmp/huggingface
-      export HF_HOME=/tmp/huggingface  
-      export HF_DATASETS_CACHE=/tmp/huggingface/datasets
-      export TOKENIZERS_PARALLELISM=false
-      python -c 'import nltk; nltk.download("punkt"); nltk.download("stopwords")'
+      pip install --no-cache-dir -U pip
+      pip install --no-cache-dir -r requirements.txt
+      echo "=== Verifying critical packages ==="
+      pip show accelerate || { echo "accelerate not installed"; exit 1; }
+      pip show transformers || { echo "transformers not installed"; exit 1; }
+      pip show fastapi || { echo "fastapi not installed"; exit 1; }
+      pip show gunicorn || { echo "gunicorn not installed"; exit 1; }
+      echo "=== Testing imports ==="
+      python -c "import accelerate; print(f'✅ Accelerate {accelerate.__version__} imported')" || { echo "accelerate import failed"; exit 1; }
+      python -c "import transformers; print(f'✅ Transformers {transformers.__version__} imported')" || { echo "transformers import failed"; exit 1; }
+      python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')" || echo "NLTK download failed"
+      echo "🏁 Build verification complete"
     startCommand: |
       mkdir -p /tmp/huggingface/{models,tokenizers,datasets,transformers,torch,whisper}
       chmod -R 777 /tmp/huggingface
