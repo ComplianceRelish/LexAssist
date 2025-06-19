@@ -83,18 +83,22 @@ services:
     runtime: python
     rootDir: legal_app/backend
     buildCommand: |
-      pip install --no-cache-dir -U pip
+      echo "🚀 Starting build process..."
+      pip install --no-cache-dir --upgrade pip
+      echo "📦 Installing dependencies from requirements.txt only..."
       pip install --no-cache-dir -r requirements.txt
-      echo "=== Verifying critical packages ==="
-      pip show accelerate || { echo "accelerate not installed"; exit 1; }
-      pip show transformers || { echo "transformers not installed"; exit 1; }
-      pip show fastapi || { echo "fastapi not installed"; exit 1; }
-      pip show gunicorn || { echo "gunicorn not installed"; exit 1; }
-      echo "=== Testing imports ==="
-      python -c "import accelerate; print(f'✅ Accelerate {accelerate.__version__} imported')" || { echo "accelerate import failed"; exit 1; }
-      python -c "import transformers; print(f'✅ Transformers {transformers.__version__} imported')" || { echo "transformers import failed"; exit 1; }
-      python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')" || echo "NLTK download failed"
-      echo "🏁 Build verification complete"
+      echo "🔍 Verifying critical packages..."
+      pip show accelerate || { echo "❌ accelerate not installed"; exit 1; }
+      pip show transformers || { echo "❌ transformers not installed"; exit 1; }
+      pip show torch || { echo "❌ torch not installed"; exit 1; }
+      pip show fastapi || { echo "❌ fastapi not installed"; exit 1; }
+      pip show gunicorn || { echo "❌ gunicorn not installed"; exit 1; }
+      echo "🧪 Testing imports..."
+      python -c "import accelerate; print(f'✅ Accelerate {accelerate.__version__} imported successfully')" || { echo "❌ accelerate import failed"; exit 1; }
+      python -c "import transformers; print(f'✅ Transformers {transformers.__version__} imported successfully')" || { echo "❌ transformers import failed"; exit 1; }
+      python -c "import torch; print(f'✅ PyTorch {torch.__version__} imported successfully')" || { echo "❌ torch import failed"; exit 1; }
+      python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('stopwords', quiet=True); print('✅ NLTK data downloaded')" || echo "⚠️ NLTK download failed (non-critical)"
+      echo "🏁 Build verification complete - all critical packages installed!"
     startCommand: |
       mkdir -p /tmp/huggingface/{models,tokenizers,datasets,transformers,torch,whisper}
       chmod -R 777 /tmp/huggingface
