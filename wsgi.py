@@ -7,8 +7,30 @@ import subprocess
 import logging
 from pathlib import Path
 
+# Configure logging first
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Early accelerate import test
+def test_accelerate_import():
+    """Test if accelerate can be imported"""
+    try:
+        import accelerate
+        logger.info(f"✅ Accelerate {accelerate.__version__} imported successfully")
+        return True
+    except ImportError as e:
+        logger.error(f"❌ Failed to import accelerate: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Unexpected error importing accelerate: {e}")
+        return False
+
+# Test accelerate before proceeding
+if not test_accelerate_import():
+    logger.error("CRITICAL: Accelerate module cannot be imported. Deployment will fail.")
+    # Don't exit here, let the app start so we can see logs
+
 # Set up comprehensive cache directories BEFORE any imports
-# This prevents PyTorch, transformers, and other libraries from accessing /app
 def setup_cache_environment():
     """Setup all cache directories and environment variables"""
     try:
@@ -47,10 +69,10 @@ def setup_cache_environment():
         for key, value in cache_env_vars.items():
             os.environ.setdefault(key, value)
             
-        print(f"✅ Cache environment setup complete: {len(cache_dirs)} directories created")
+        logger.info(f"✅ Cache environment setup complete: {len(cache_dirs)} directories created")
         
     except Exception as e:
-        print(f"⚠️ Warning: Could not setup cache environment: {e}")
+        logger.error(f"⚠️ Warning: Could not setup cache environment: {e}")
 
 # Setup cache environment immediately
 setup_cache_environment()
@@ -58,9 +80,6 @@ setup_cache_environment()
 # Add the backend directory to Python path
 backend_dir = Path(__file__).parent / "legal_app" / "backend"
 sys.path.insert(0, str(backend_dir))
-
-# Create a logger
-existing_logger = logging.getLogger(__name__)
 
 try:
     # Import your FastAPI app
@@ -70,15 +89,17 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).parent))
     from legal_app.backend.main import app
 
-# Log Python path
-existing_logger.info(f"Python sys.path: {sys.path}")
+# Log Python path and environment info
+logger.info(f"Python sys.path: {sys.path}")
 
-# Log installed packages
+# Log installed packages for debugging
 try:
     installed_packages = subprocess.check_output([sys.executable, '-m', 'pip', 'freeze']).decode().splitlines()
-    existing_logger.info(f"Installed packages: {installed_packages}")
+    # Only log the key packages we care about
+    key_packages = [pkg for pkg in installed_packages if any(name in pkg.lower() for name in ['accelerate', 'torch', 'transformers'])]
+    logger.info(f"Key ML packages: {key_packages}")
 except Exception as e:
-    existing_logger.error(f"Failed to get installed packages: {e}")
+    logger.error(f"Failed to get installed packages: {e}")
 
 if __name__ == "__main__":
     import uvicorn

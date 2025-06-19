@@ -2,8 +2,9 @@ services:
   - type: web
     name: lexassist
     runtime: python
+    plan: "pro plus"
     buildCommand: ./render-build.sh
-    startCommand: gunicorn wsgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+    startCommand: ./venv/bin/gunicorn wsgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
     envVars:
       - key: TRANSFORMERS_CACHE
         value: /tmp/huggingface
