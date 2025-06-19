@@ -3,6 +3,8 @@ WSGI entry point for LexAssist FastAPI application
 """
 import os
 import sys
+import subprocess
+import logging
 from pathlib import Path
 
 # Set up comprehensive cache directories BEFORE any imports
@@ -57,6 +59,9 @@ setup_cache_environment()
 backend_dir = Path(__file__).parent / "legal_app" / "backend"
 sys.path.insert(0, str(backend_dir))
 
+# Create a logger
+existing_logger = logging.getLogger(__name__)
+
 try:
     # Import your FastAPI app
     from main import app
@@ -64,6 +69,16 @@ except ImportError:
     # Fallback for different directory structure
     sys.path.insert(0, str(Path(__file__).parent))
     from legal_app.backend.main import app
+
+# Log Python path
+existing_logger.info(f"Python sys.path: {sys.path}")
+
+# Log installed packages
+try:
+    installed_packages = subprocess.check_output([sys.executable, '-m', 'pip', 'freeze']).decode().splitlines()
+    existing_logger.info(f"Installed packages: {installed_packages}")
+except Exception as e:
+    existing_logger.error(f"Failed to get installed packages: {e}")
 
 if __name__ == "__main__":
     import uvicorn

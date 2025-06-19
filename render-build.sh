@@ -16,4 +16,14 @@ pip install --no-cache-dir -r requirements-ml.txt
 echo "Verifying accelerate installation..."
 pip show accelerate || { echo "accelerate not installed"; exit 1; }
 
+# Verify accelerate installation explicitly
+if ! pip show accelerate > /dev/null 2>&1; then
+    echo " Accelerate package not installed! Attempting reinstall..."
+    pip install accelerate --no-cache-dir
+    if ! pip show accelerate > /dev/null 2>&1; then
+        echo " Critical error: Accelerate still not installed after reattempt!"
+        exit 1
+    fi
+fi
+
 echo "=== Build completed successfully ==="
