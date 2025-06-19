@@ -1,9 +1,8 @@
-# LexAssist Render Configuration - Updated for Pro Plus deployment
+# LexAssist Render Configuration - Updated for Standard deployment
 services:
   - type: web
     name: lexassist
     runtime: python
-    plan: "pro plus"
     buildCommand: ./render-build.sh
     startCommand: ./venv/bin/gunicorn wsgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
     envVars:
@@ -79,7 +78,6 @@ services:
   - type: web
     name: lexassist-backend
     runtime: python
-    plan: "pro plus"
     rootDir: legal_app/backend
     buildCommand: |
       export TRANSFORMERS_CACHE=/tmp/huggingface
