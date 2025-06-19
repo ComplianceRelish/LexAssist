@@ -11,7 +11,7 @@ import os
 import gc
 from typing import Dict, List, Any, Optional, Union
 import torch
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModelForMaskedLM
 import numpy as np
 
 from utils.model_context_protocol import (
@@ -104,8 +104,9 @@ class InLegalBERTProcessor(LegalModelInterface):
     def initialize(self, model_path: Optional[str] = None, **kwargs) -> None:
         """Initialize the InLegalBERT model"""
         try:
-            # Ensure cache directories are set up first
-            self._setup_cache_dirs()
+            # Verify accelerate is installed
+            import accelerate
+            logger.info(f"Accelerate version: {accelerate.__version__}")
             
             # Clean memory before loading model
             gc.collect()
@@ -113,65 +114,31 @@ class InLegalBERTProcessor(LegalModelInterface):
             model_name = model_path or self.MODEL_NAME
             logger.info(f"Initializing InLegalBERT model from {model_name}")
             
-            # Load tokenizer with low memory footprint and explicit cache
+            # Load tokenizer with low memory footprint
             logger.info("Loading tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
-                cache_dir="/tmp/huggingface",
                 local_files_only=False,
                 use_fast=True  # Fast tokenizer uses less memory
             )
             
             # Load model with ultra-aggressive memory optimizations
             logger.info("Loading model with maximum memory optimization...")
-            model_kwargs = {
-                "cache_dir": "/tmp/huggingface",
-                "local_files_only": False,
-                "low_cpu_mem_usage": True,  # Reduces peak memory usage during loading
-                "torch_dtype": torch.float16 if self.use_half_precision else torch.float32,
-                "device_map": {"": "cpu"},  # Force CPU to avoid GPU memory issues
-                "offload_folder": "/tmp/huggingface/offload",  # Offload unused layers
-                "offload_state_dict": True,  # Offload state dict to disk
-                "max_memory": {0: "400MB"},  # Limit memory usage per device
-            }
             
-            # Create offload directory
-            os.makedirs("/tmp/huggingface/offload", exist_ok=True)
+            # Use simpler model loading without low_cpu_mem_usage if memory is critical
+            self.model = AutoModelForMaskedLM.from_pretrained(model_name)
             
-            # Filter out None values
-            model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None}
-            
-            self.model = AutoModel.from_pretrained(model_name, **model_kwargs)
-            
-            # Only convert to half precision if not already done during loading
-            if self.use_half_precision and not hasattr(self.model, '_half_precision_applied'):
-                logger.info("Converting model to half precision (FP16)")
-                self.model = self.model.half()
-                self.model._half_precision_applied = True
-            
-            # Force CPU usage for maximum memory control
-            self.model.to(self.device)
-            self.model.eval()
-            
-            # Aggressive memory cleanup
-            gc.collect()
-            
-            self.initialized = True
-            logger.info(f"InLegalBERT model initialized successfully on {self.device}")
-            logger.info(f"Model max_length: {self.max_length}, Half precision: {self.use_half_precision}")
-            
-            # Force garbage collection after initialization
-            gc.collect()
-    
+            # Memory usage logging
+            import psutil
+            process = psutil.Process()
+            mem_usage = process.memory_info().rss / 1024 ** 2
+            logger.info(f"Model loaded. Current memory usage: {mem_usage:.2f} MB")
         except PermissionError as e:
-            logger.error(f"Permission error initializing InLegalBERT model: {e}")
-            logger.error("This usually indicates an issue with cache directory permissions")
-            # Cleanup on error
+            logger.error(f"Permission error during InLegalBERT initialization: {e}")
             self.cleanup()
             raise
         except Exception as e:
             logger.error(f"Error initializing InLegalBERT model: {e}")
-            # Cleanup on error
             self.cleanup()
             raise
     

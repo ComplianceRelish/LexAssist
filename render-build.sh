@@ -12,4 +12,8 @@ pip install --no-cache-dir -r requirements-core.txt
 echo "=== Installing ML dependencies ==="
 pip install --no-cache-dir -r requirements-ml.txt
 
+# Verify installation of critical packages
+echo "Verifying accelerate installation..."
+pip show accelerate || { echo "accelerate not installed"; exit 1; }
+
 echo "=== Build completed successfully ==="
