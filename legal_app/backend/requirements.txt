@@ -18,20 +18,19 @@ python-multipart>=0.0.5
 email-validator>=1.1.1
 twilio>=8.0.0
 
-# Speech and AI dependencies
-openai-whisper==20240930
-# Standard PyTorch dependencies (lightweight versions will be used automatically on CPU-only platforms)
-torch>=2.0.0,<3.0.0
-torchvision>=0.15.0,<1.0.0
-torchaudio>=2.0.0,<3.0.0
-transformers>=4.30.0
-accelerate>=0.29.0
-sentence-transformers>=2.2.0
-huggingface-hub>=0.16.0
+# Speech and AI dependencies - Pin to compatible versions
+torch==2.4.1
+torchvision==0.19.1
+torchaudio==2.4.1
+transformers==4.45.2
+accelerate==0.29.3
+sentence-transformers==2.2.2
+huggingface-hub==0.25.2
 psutil>=5.9.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 librosa>=0.10.0
 soundfile>=0.12.0
+openai-whisper==20240930
 
 # Additional dependencies for legal processing
 spacy>=3.6.0
