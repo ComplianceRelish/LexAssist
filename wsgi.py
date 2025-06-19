@@ -5,6 +5,7 @@ import os
 import sys
 import subprocess
 import logging
+import importlib.util
 from pathlib import Path
 
 # Configure logging first
@@ -77,29 +78,104 @@ def setup_cache_environment():
 # Setup cache environment immediately
 setup_cache_environment()
 
-# Add the backend directory to Python path
-backend_dir = Path(__file__).parent / "legal_app" / "backend"
-sys.path.insert(0, str(backend_dir))
+# Log current working directory and environment
+logger.info(f"Current working directory: {os.getcwd()}")
+logger.info(f"Python executable: {sys.executable}")
+logger.info(f"Python version: {sys.version}")
 
+# Setup Python path for importing the backend app
+def setup_python_path():
+    """Setup Python path to find the backend application"""
+    current_dir = Path(__file__).parent
+    backend_dir = current_dir / "legal_app" / "backend"
+    
+    logger.info(f"Current directory: {current_dir}")
+    logger.info(f"Backend directory: {backend_dir}")
+    logger.info(f"Backend directory exists: {backend_dir.exists()}")
+    
+    # Add directories to Python path
+    paths_to_add = [
+        str(backend_dir),
+        str(current_dir),
+        str(current_dir / "legal_app")
+    ]
+    
+    for path in paths_to_add:
+        if path not in sys.path:
+            sys.path.insert(0, path)
+            logger.info(f"Added to Python path: {path}")
+
+# Setup Python path
+setup_python_path()
+
+# Import the FastAPI app with comprehensive error handling
+app = None
 try:
-    # Import your FastAPI app
+    # Try direct import from main
+    logger.info("Attempting to import main.app directly...")
     from main import app
-except ImportError:
-    # Fallback for different directory structure
-    sys.path.insert(0, str(Path(__file__).parent))
-    from legal_app.backend.main import app
+    logger.info("✅ Successfully imported app from main")
+except ImportError as e:
+    logger.warning(f"Direct import failed: {e}")
+    try:
+        # Try import from legal_app.backend.main
+        logger.info("Attempting to import from legal_app.backend.main...")
+        from legal_app.backend.main import app
+        logger.info("✅ Successfully imported app from legal_app.backend.main")
+    except ImportError as e:
+        logger.error(f"Failed to import from legal_app.backend.main: {e}")
+        try:
+            # Last resort: check if main.py exists and import it
+            backend_dir = Path(__file__).parent / "legal_app" / "backend"
+            main_file = backend_dir / "main.py"
+            if main_file.exists():
+                logger.info(f"Found main.py at {main_file}, importing...")
+                spec = importlib.util.spec_from_file_location("main", main_file)
+                main_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(main_module)
+                app = main_module.app
+                logger.info("✅ Successfully imported app using importlib")
+            else:
+                logger.error(f"main.py not found at {main_file}")
+                raise ImportError("Could not find main.py")
+        except Exception as final_e:
+            logger.error(f"All import attempts failed: {final_e}")
+            # Create a minimal FastAPI app as fallback
+            from fastapi import FastAPI
+            app = FastAPI(title="LexAssist - Import Error", description="Backend import failed")
+            
+            @app.get("/")
+            async def root():
+                return {"error": "Backend import failed", "message": str(final_e)}
+            
+            logger.info("Created fallback FastAPI app")
+except Exception as e:
+    logger.error(f"Unexpected error during import: {e}")
+    # Create a minimal FastAPI app as fallback
+    from fastapi import FastAPI
+    app = FastAPI(title="LexAssist - Error", description="Unexpected error")
+    
+    @app.get("/")
+    async def root():
+        return {"error": "Unexpected import error", "message": str(e)}
 
 # Log Python path and environment info
-logger.info(f"Python sys.path: {sys.path}")
+logger.info(f"Final Python sys.path: {sys.path[:3]}...")  # Only log first 3 entries to avoid spam
 
 # Log installed packages for debugging
 try:
     installed_packages = subprocess.check_output([sys.executable, '-m', 'pip', 'freeze']).decode().splitlines()
     # Only log the key packages we care about
-    key_packages = [pkg for pkg in installed_packages if any(name in pkg.lower() for name in ['accelerate', 'torch', 'transformers'])]
-    logger.info(f"Key ML packages: {key_packages}")
+    key_packages = [pkg for pkg in installed_packages if any(name in pkg.lower() for name in ['accelerate', 'torch', 'transformers', 'fastapi', 'gunicorn'])]
+    logger.info(f"Key packages: {key_packages}")
 except Exception as e:
     logger.error(f"Failed to get installed packages: {e}")
+
+# Verify the app is properly imported
+if app is None:
+    logger.error("CRITICAL: app is None after all import attempts")
+else:
+    logger.info(f"✅ App successfully imported: {type(app)}")
 
 if __name__ == "__main__":
     import uvicorn

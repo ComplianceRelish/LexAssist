@@ -4,7 +4,10 @@ services:
     name: lexassist
     runtime: python
     buildCommand: ./render-build.sh
-    startCommand: ./venv/bin/gunicorn wsgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+    startCommand: |
+      mkdir -p /tmp/huggingface/{models,tokenizers,datasets,hub,offload,whisper} /tmp/torch
+      chmod -R 777 /tmp/huggingface /tmp/torch
+      venv/bin/gunicorn wsgi:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 1 --max-requests 50 --max-requests-jitter 5 --timeout 120 --preload
     envVars:
       - key: TRANSFORMERS_CACHE
         value: /tmp/huggingface
