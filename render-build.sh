@@ -37,4 +37,8 @@ python -c "import accelerate; print(f' Accelerate {accelerate.__version__} impor
 echo "=== Installed packages ==="
 pip list | grep -E "(accelerate|torch|transformers)"
 
-echo "=== Build completed successfully ==="
+echo "🏁 Build completed successfully!"
+
+# Run verification to prove this script executed
+echo "🔍 Running build verification..."
+bash ./verify-build.sh

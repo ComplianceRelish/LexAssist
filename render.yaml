@@ -1,3 +1,4 @@
+# LexAssist Render Configuration - Updated for Pro Plus deployment
 services:
   - type: web
     name: lexassist
