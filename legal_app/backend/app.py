@@ -14,13 +14,22 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # Create Flask app
 app = Flask(__name__)
 
+# Get CORS settings from environment variables or use defaults
+allowed_origins = os.environ.get('CORS_ALLOWED_ORIGINS', 'https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001,http://localhost:5173').split(',')
+allowed_methods = os.environ.get('CORS_ALLOW_METHODS', 'GET,POST,PUT,DELETE,OPTIONS,PATCH').split(',')
+allowed_headers = os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type,Authorization,X-Requested-With,Accept,Origin').split(',')
+max_age = int(os.environ.get('CORS_MAX_AGE', '600'))
+allow_credentials = os.environ.get('CORS_ALLOW_CREDENTIALS', 'true').lower() == 'true'
+
 # Configure CORS to allow requests from specific origins
 CORS(app, resources={
     r"/*": {
-        "origins": ["https://lex-assist.vercel.app", "http://localhost:3000", "http://localhost:5173"],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
-        "supports_credentials": True,
+        "origins": allowed_origins,
+        "methods": allowed_methods,
+        "allow_headers": allowed_headers,
+        "expose_headers": ["Content-Length"],
+        "supports_credentials": allow_credentials,
+        "max_age": max_age  # Cache preflight requests
     }
 })
 
@@ -29,20 +38,36 @@ CORS(app, resources={
 def handle_options(path):
     """Handle OPTIONS preflight requests"""
     response = app.make_default_options_response()
-    response.headers.add('Access-Control-Allow-Origin', 'https://lex-assist.vercel.app')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    # Allow the specific origin that made the request, or fall back to the primary origin
+    origin = request.headers.get('Origin')
+    if origin and origin in allowed_origins:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+    else:
+        # Default to primary origin if the origin header doesn't match allowed origins
+        response.headers.add('Access-Control-Allow-Origin', allowed_origins[0])
+    response.headers.add('Access-Control-Allow-Headers', ','.join(allowed_headers))
+    response.headers.add('Access-Control-Allow-Methods', ','.join(allowed_methods))
+    response.headers.add('Access-Control-Allow-Credentials', 'true' if allow_credentials else 'false')
+    response.headers.add('Access-Control-Max-Age', str(max_age))
+    response.headers.add('Access-Control-Expose-Headers', 'Content-Length')
     return response
 
 @app.route('/', methods=['OPTIONS'])
 def handle_root_options():
     """Handle OPTIONS preflight requests for root path"""
     response = app.make_default_options_response()
-    response.headers.add('Access-Control-Allow-Origin', 'https://lex-assist.vercel.app')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    # Allow the specific origin that made the request, or fall back to the primary origin
+    origin = request.headers.get('Origin')
+    if origin and origin in allowed_origins:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+    else:
+        # Default to primary origin if the origin header doesn't match allowed origins
+        response.headers.add('Access-Control-Allow-Origin', allowed_origins[0])
+    response.headers.add('Access-Control-Allow-Headers', ','.join(allowed_headers))
+    response.headers.add('Access-Control-Allow-Methods', ','.join(allowed_methods))
+    response.headers.add('Access-Control-Allow-Credentials', 'true' if allow_credentials else 'false')
+    response.headers.add('Access-Control-Max-Age', str(max_age))
+    response.headers.add('Access-Control-Expose-Headers', 'Content-Length')
     return response
 
 # Import FastAPI app after Flask setup to avoid circular imports

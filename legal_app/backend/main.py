@@ -70,17 +70,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS
+# Configure CORS using environment variables or defaults
+allowed_origins = os.environ.get('CORS_ALLOWED_ORIGINS', 'https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001').split(',')
+allowed_methods = os.environ.get('CORS_ALLOW_METHODS', 'GET,POST,PUT,DELETE,OPTIONS,PATCH').split(',')
+allowed_headers = os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type,Authorization,X-Requested-With,Accept,Origin').split(',')
+max_age = int(os.environ.get('CORS_MAX_AGE', '600'))
+allow_credentials = os.environ.get('CORS_ALLOW_CREDENTIALS', 'true').lower() == 'true'
+
+logger.info(f"Configuring CORS with origins: {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://lex-assist.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3001"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=allow_credentials,
+    allow_methods=allowed_methods,
+    allow_headers=allowed_headers,
+    expose_headers=["Content-Length"],
+    max_age=max_age,  # Cache preflight requests
 )
 
 # Health check endpoint
