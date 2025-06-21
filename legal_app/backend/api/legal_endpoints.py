@@ -81,7 +81,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Define the router
-router = APIRouter(prefix="/api", tags=["Legal"])
+router = APIRouter(tags=["Legal"])
 
 # Enhanced model definitions
 class CaseBriefSubmission(BaseModel):

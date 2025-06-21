@@ -5,7 +5,7 @@ from datetime import datetime
 from .supabase_client import get_supabase_client
 from .auth_endpoints import get_current_user
 
-router = APIRouter(prefix="/api", tags=["cases"])
+router = APIRouter(tags=["cases"])
 
 @router.post("/cases")
 async def create_case(

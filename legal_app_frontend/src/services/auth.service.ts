@@ -47,9 +47,9 @@ class AuthService {
   private apiBaseUrl: string;
 
   private constructor() {
-    // ✅ Use the correct backend URL with /api prefix
+    // ✅ Use the correct backend URL without /api prefix (endpoints already include it)
     const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-4387205875.europe-west1.run.app';
-    this.apiBaseUrl = `${API_URL}/api`;
+    this.apiBaseUrl = API_URL; // Removed /api suffix to prevent path duplication
     
     // Initialize from sessionStorage if available
     this.loadFromStorage();

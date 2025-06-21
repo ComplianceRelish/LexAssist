@@ -82,24 +82,45 @@ allow_credentials = os.environ.get('CORS_ALLOW_CREDENTIALS', 'true').lower() == 
 
 logger.info(f"Configuring CORS with origins: {allowed_origins}")
 
-# For debugging purposes
+# For debugging purposes - log all CORS settings
 for key, value in os.environ.items():
     if key.startswith('CORS_'):
         logger.info(f"CORS environment variable: {key}={value}")
+
+# Enhanced CORS debugging - print all values being used
+logger.info(f"CORS config: origins={allowed_origins}, methods={allowed_methods}, headers={allowed_headers}")
+logger.info(f"CORS credentials: {allow_credentials}, max_age: {max_age}")
 
 # In Cloud Run, we might need to handle '*' for development
 if '*' in allowed_origins:
     logger.warning("CORS is configured to allow all origins ('*')")
 
+# Add CORS middleware with explicit configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins if '*' not in allowed_origins else ["*"],
     allow_credentials=allow_credentials and '*' not in allowed_origins,  # Must be False if allow_origins=['*']
     allow_methods=allowed_methods,
     allow_headers=allowed_headers,
-    expose_headers=["Content-Length", "Content-Type"],
+    expose_headers=["Content-Length", "Content-Type", "Authorization"],
     max_age=max_age,  # Cache preflight requests
 )
+
+# Add explicit OPTIONS handler for troubleshooting
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    from fastapi.responses import Response
+    logger.info(f"Handling OPTIONS request for /{path}")
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": ",".join(allowed_origins) if "*" not in allowed_origins else "*",
+            "Access-Control-Allow-Methods": ",".join(allowed_methods),
+            "Access-Control-Allow-Headers": ",".join(allowed_headers),
+            "Access-Control-Allow-Credentials": "true" if allow_credentials else "false",
+            "Access-Control-Max-Age": str(max_age),
+        }
+    )
 
 # Health check endpoint
 @app.get("/")
@@ -156,17 +177,24 @@ async def health_check():
 # Import and include routers
 try:
     from api.auth_endpoints import router as auth_router
-    app.include_router(auth_router)  # This will now add /api/auth/* endpoints
+    app.include_router(auth_router, prefix="/api")  # Now properly prefixed as /api/auth/* endpoints
     logger.info("✅ Auth endpoints loaded successfully")
 except ImportError as e:
     logger.error(f"❌ Auth endpoints failed to load: {e}")
 
 try:
     from api.legal_endpoints import router as legal_router
-    app.include_router(legal_router)  # This adds /api/* endpoints
+    app.include_router(legal_router, prefix="/api")  # Now properly prefixed as /api/* endpoints
     logger.info("✅ Legal endpoints loaded successfully")
 except ImportError as e:
     logger.error(f"❌ Legal endpoints failed to load: {e}")
+    
+try:
+    from api.case_endpoints import router as case_router
+    app.include_router(case_router, prefix="/api")  # Now properly prefixed as /api/* endpoints
+    logger.info("✅ Case endpoints loaded successfully")
+except ImportError as e:
+    logger.error(f"❌ Case endpoints failed to load: {e}")
 
 # Register InLegalBERT endpoints
 try:

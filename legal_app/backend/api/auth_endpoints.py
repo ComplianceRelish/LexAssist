@@ -44,7 +44,7 @@ if os.getenv('DISABLE_TWILIO', '').lower() == 'true':
     print("🔇 Twilio disabled via environment variable")
 
 # Initialize router
-router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # Enhanced Indian Legal System Framework
 class IndianLegalSystemMixin:
