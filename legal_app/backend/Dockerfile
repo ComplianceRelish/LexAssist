@@ -13,8 +13,18 @@ ENV TORCH_HOME=/app/cache/torch
 ENV TOKENIZERS_PARALLELISM=false
 ENV CLOUD_RUN=true
 
-# Install dependencies
+# Install build essentials for packages like blis
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements file
 COPY requirements.txt .
+
+# Pre-install problematic packages with binary wheels
+RUN pip install --no-cache-dir --only-binary=:all: blis
+
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
