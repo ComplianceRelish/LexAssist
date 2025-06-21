@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com';
+const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-4387205875.europe-west1.run.app';
 
 export const legalAiService = {
   /**

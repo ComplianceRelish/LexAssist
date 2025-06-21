@@ -50,7 +50,7 @@ const VerifyEmailPage: React.FC = () => {
     setError('');
     
     try {
-      const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com';
+      const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-4387205875.europe-west1.run.app';
       
       const response = await axios.post(`${API_URL}/api/auth/verify-code`, {
         contact: email,
@@ -76,7 +76,7 @@ const VerifyEmailPage: React.FC = () => {
     setError('');
     
     try {
-      const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com';
+      const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-4387205875.europe-west1.run.app';
       
       await axios.post(`${API_URL}/api/auth/send-verification`, {
         email: email

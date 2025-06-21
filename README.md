@@ -20,7 +20,7 @@ A legal assistance platform powered by InLegalBERT for Indian legal text analysi
 ## Deployment
 
 - Frontend: [https://lex-assist.vercel.app/](https://lex-assist.vercel.app/)
-- Backend: [https://lexassist-backend.onrender.com](https://lexassist-backend.onrender.com)
+- Backend: [https://lexassist-4387205875.europe-west1.run.app](https://lexassist-4387205875.europe-west1.run.app)
 
 ## Local Development
 

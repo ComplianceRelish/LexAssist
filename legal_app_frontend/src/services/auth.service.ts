@@ -48,7 +48,8 @@ class AuthService {
 
   private constructor() {
     // ✅ Use the correct backend URL with /api prefix
-    this.apiBaseUrl = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com';
+    const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-4387205875.europe-west1.run.app';
+    this.apiBaseUrl = `${API_URL}/api`;
     
     // Initialize from sessionStorage if available
     this.loadFromStorage();

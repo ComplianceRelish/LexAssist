@@ -126,7 +126,7 @@ const LoginPage: React.FC<LoginProps> = ({ onLogin }) => {
     } else {
       // Verify OTP
       try {
-        const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com';
+        const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://lexassist-europe-west1.run.app';
         const response = await fetch(`${API_URL}/api/auth/otp/verify`, {
           method: 'POST',
           headers: {

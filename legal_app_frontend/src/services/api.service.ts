@@ -129,7 +129,7 @@ class ApiService {
 
   private constructor() {
     this.axiosInstance = axios.create({
-      baseURL: import.meta.env.VITE_BACKEND_URL || 'https://lexassist-backend.onrender.com',
+      baseURL: import.meta.env.VITE_BACKEND_URL || 'https://lexassist-europe-west1.run.app',
       timeout: 30000, // Increased for AI processing
       headers: {
         'Content-Type': 'application/json',
