@@ -71,21 +71,33 @@ app = FastAPI(
 )
 
 # Configure CORS using environment variables or defaults
-allowed_origins = os.environ.get('CORS_ALLOWED_ORIGINS', 'https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001').split(',')
-allowed_methods = os.environ.get('CORS_ALLOW_METHODS', 'GET,POST,PUT,DELETE,OPTIONS,PATCH').split(',')
-allowed_headers = os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type,Authorization,X-Requested-With,Accept,Origin').split(',')
+allowed_origins_str = os.environ.get('CORS_ALLOWED_ORIGINS', 'https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001')
+allowed_origins = [origin.strip() for origin in allowed_origins_str.split(',')]
+allowed_methods_str = os.environ.get('CORS_ALLOW_METHODS', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
+allowed_methods = [method.strip() for method in allowed_methods_str.split(',')]
+allowed_headers_str = os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
+allowed_headers = [header.strip() for header in allowed_headers_str.split(',')]
 max_age = int(os.environ.get('CORS_MAX_AGE', '600'))
 allow_credentials = os.environ.get('CORS_ALLOW_CREDENTIALS', 'true').lower() == 'true'
 
 logger.info(f"Configuring CORS with origins: {allowed_origins}")
 
+# For debugging purposes
+for key, value in os.environ.items():
+    if key.startswith('CORS_'):
+        logger.info(f"CORS environment variable: {key}={value}")
+
+# In Cloud Run, we might need to handle '*' for development
+if '*' in allowed_origins:
+    logger.warning("CORS is configured to allow all origins ('*')")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=allow_credentials,
+    allow_origins=allowed_origins if '*' not in allowed_origins else ["*"],
+    allow_credentials=allow_credentials and '*' not in allowed_origins,  # Must be False if allow_origins=['*']
     allow_methods=allowed_methods,
     allow_headers=allowed_headers,
-    expose_headers=["Content-Length"],
+    expose_headers=["Content-Length", "Content-Type"],
     max_age=max_age,  # Cache preflight requests
 )
 
