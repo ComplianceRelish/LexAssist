@@ -7,15 +7,20 @@ import logging
 def setup_cache_environment():
     """Setup cache directories and environment variables"""
     try:
+        # Determine base cache path based on environment
+        is_cloud_run = os.environ.get("CLOUD_RUN", "false").lower() == "true"
+        base_path = "/app/cache" if is_cloud_run else "/tmp"
+        print(f"Using cache base path: {base_path}")
+        
         # Create cache directories
         cache_dirs = [
-            "/tmp/huggingface", 
-            "/tmp/huggingface/models", 
-            "/tmp/huggingface/tokenizers",
-            "/tmp/huggingface/datasets",
-            "/tmp/huggingface/hub",
-            "/tmp/huggingface/offload",
-            "/tmp/torch"
+            f"{base_path}/huggingface", 
+            f"{base_path}/huggingface/models", 
+            f"{base_path}/huggingface/tokenizers",
+            f"{base_path}/huggingface/datasets",
+            f"{base_path}/huggingface/hub",
+            f"{base_path}/huggingface/offload",
+            f"{base_path}/torch"
         ]
         
         for cache_dir in cache_dirs:
@@ -24,15 +29,15 @@ def setup_cache_environment():
         
         # Set comprehensive environment variables
         cache_env_vars = {
-            "TRANSFORMERS_CACHE": "/tmp/huggingface",
-            "HF_HOME": "/tmp/huggingface",
-            "HF_DATASETS_CACHE": "/tmp/huggingface/datasets",
-            "HUGGINGFACE_HUB_CACHE": "/tmp/huggingface/hub",
+            "TRANSFORMERS_CACHE": f"{base_path}/huggingface",
+            "HF_HOME": f"{base_path}/huggingface",
+            "HF_DATASETS_CACHE": f"{base_path}/huggingface/datasets",
+            "HUGGINGFACE_HUB_CACHE": f"{base_path}/huggingface/hub",
             "TOKENIZERS_PARALLELISM": "false",
-            "TORCH_HOME": "/tmp/torch",
-            "TORCH_CACHE": "/tmp/torch",
-            "PYTORCH_TRANSFORMERS_CACHE": "/tmp/huggingface",
-            "PYTORCH_PRETRAINED_BERT_CACHE": "/tmp/huggingface",
+            "TORCH_HOME": f"{base_path}/torch",
+            "TORCH_CACHE": f"{base_path}/torch",
+            "PYTORCH_TRANSFORMERS_CACHE": f"{base_path}/huggingface",
+            "PYTORCH_PRETRAINED_BERT_CACHE": f"{base_path}/huggingface",
             "PYTORCH_CUDA_ALLOC_CONF": "max_split_size_mb:32,garbage_collection_threshold:0.6",
             "OMP_NUM_THREADS": "1",
             "MKL_NUM_THREADS": "1",
