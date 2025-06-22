@@ -111,54 +111,38 @@ app.add_middleware(
 )
 
 # Add explicit OPTIONS handler for troubleshooting
-@app.options("/{path:path}", include_in_schema=False)
-async def options_handler(path: str):
-    """Global OPTIONS handler to support CORS preflight requests"""
-    from fastapi.responses import Response
-    logger.info(f"OPTIONS request received for path: /{path}")
-    
-    # Define allowed methods based on the endpoint
-    allowed_methods_list = ["OPTIONS", "GET", "POST", "PUT", "DELETE", "PATCH"]
-    
-    # Special handling for login endpoint and related auth paths
-    if path.startswith("api/auth/"):
-        if path == "api/auth/login":
-            # Critical: Ensure login endpoint accepts POST
-            logger.info(f"OPTIONS for login endpoint, ensuring POST method is allowed")
-            allowed_methods_list = ["OPTIONS", "POST"]
+# Remove the global OPTIONS handler as it's interfering with route-specific methods
+# The CORS middleware will handle preflight requests correctly
+
+# We'll add a middleware instead of a global handler to ensure proper route handling
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response as StarletteResponse
+
+class CORSHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+
+        # Log request details for debugging
+        path = request.url.path
+        method = request.method
+        logger.info(f"Request: {method} {path}")
+        
+        # Check if this is a CORS preflight request
+        if method == "OPTIONS" and path == "/api/auth/login":
+            logger.info(f"Processing login preflight request with custom middleware")
             
-            # Log detailed debugging information for login endpoint
-            logger.info(f"Login endpoint CORS debug:")
-            logger.info(f"  - Origin header: {allowed_origins}")
-            logger.info(f"  - Allow credentials: {allow_credentials}")
-        elif path.endswith("/refresh"):
-            logger.info(f"OPTIONS for token refresh endpoint")
-            allowed_methods_list = ["OPTIONS", "POST", "GET"]
-        else:
-            logger.info(f"OPTIONS for other auth endpoint: {path}")
-    
-    allowed_methods_str = ",".join(allowed_methods_list)
-    logger.info(f"Responding with allowed methods: {allowed_methods_str}")
-    
-    # Construct response headers
-    cors_headers = {
-        "Access-Control-Allow-Origin": ",".join(allowed_origins) if "*" not in allowed_origins else "*",
-        "Access-Control-Allow-Methods": allowed_methods_str,
-        "Access-Control-Allow-Headers": ",".join(allowed_headers),
-        "Access-Control-Allow-Credentials": "true" if allow_credentials else "false",
-        "Access-Control-Max-Age": str(max_age),
-        "Content-Length": "0",
-        "Allow": allowed_methods_str  # Also add standard Allow header
-    }
-    
-    # Log the full response headers
-    logger.info(f"CORS response headers: {cors_headers}")
-    
-    # Return response with proper CORS headers
-    return Response(
-        status_code=200,
-        headers=cors_headers
-    )
+            # Set explicit methods for the login endpoint
+            response.headers["Allow"] = "OPTIONS, POST"
+            response.headers["Access-Control-Allow-Methods"] = "OPTIONS, POST"
+            
+            # Log response for debugging
+            logger.info(f"Response headers: {dict(response.headers)}")
+            
+        return response
+
+# Add the custom middleware
+app.add_middleware(CORSHeadersMiddleware)
 
 # Health check endpoint
 @app.get("/")
