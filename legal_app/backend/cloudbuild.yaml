@@ -26,7 +26,6 @@ steps:
   - '--cpu=2'
   - '--min-instances=0'
   - '--max-instances=5'
-  # Combine all environment variables into a single --set-env-vars flag
   - '--set-env-vars=CLOUD_RUN=true,CORS_ALLOWED_ORIGINS="https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001,http://localhost:5173",CORS_ALLOW_CREDENTIALS=true,CORS_ALLOW_METHODS="GET,POST,PUT,DELETE,OPTIONS,PATCH",CORS_ALLOW_HEADERS="Content-Type,Authorization,X-Requested-With,Accept,Origin",CORS_MAX_AGE=600,PORT=8000'
 
 # Store images
@@ -34,10 +33,7 @@ images:
 - 'gcr.io/$PROJECT_ID/lexassist:$COMMIT_SHA'
 
 options:
-  # Set the machine type to use for the build
   machineType: 'E2_HIGHCPU_8'
-  # Specify logging mode to fix service account requirement
   logging: CLOUD_LOGGING_ONLY
 
-# Increased timeout for ML model downloads (30 minutes)
 timeout: '1800s'
