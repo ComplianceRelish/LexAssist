@@ -107,18 +107,38 @@ app.add_middleware(
 )
 
 # Add explicit OPTIONS handler for troubleshooting
-@app.options("/{path:path}")
+@app.options("/{path:path}", include_in_schema=False)
 async def options_handler(path: str):
+    """Global OPTIONS handler to support CORS preflight requests"""
     from fastapi.responses import Response
-    logger.info(f"Handling OPTIONS request for /{path}")
+    logger.info(f"OPTIONS request received for path: /{path}")
+    
+    # Define allowed methods based on the endpoint
+    allowed_methods_list = ["OPTIONS", "GET", "POST", "PUT", "DELETE", "PATCH"]
+    
+    # Special handling for login endpoint and related auth paths
+    if path.startswith("api/auth/"):
+        if path == "api/auth/login":
+            logger.info(f"OPTIONS for login endpoint, ensuring POST method is allowed")
+            allowed_methods_list = ["OPTIONS", "POST"]
+        elif path.endswith("/refresh"):
+            logger.info(f"OPTIONS for token refresh endpoint")
+            allowed_methods_list = ["OPTIONS", "POST", "GET"]
+        else:
+            logger.info(f"OPTIONS for other auth endpoint: {path}")
+    
+    allowed_methods_str = ",".join(allowed_methods_list)
+    
+    # Return response with proper CORS headers
     return Response(
         status_code=200,
         headers={
             "Access-Control-Allow-Origin": ",".join(allowed_origins) if "*" not in allowed_origins else "*",
-            "Access-Control-Allow-Methods": ",".join(allowed_methods),
+            "Access-Control-Allow-Methods": allowed_methods_str,
             "Access-Control-Allow-Headers": ",".join(allowed_headers),
             "Access-Control-Allow-Credentials": "true" if allow_credentials else "false",
             "Access-Control-Max-Age": str(max_age),
+            "Content-Length": "0"
         }
     )
 
