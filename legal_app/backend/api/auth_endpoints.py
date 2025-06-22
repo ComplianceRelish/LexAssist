@@ -46,10 +46,9 @@ if os.getenv('DISABLE_TWILIO', '').lower() == 'true':
 
 # Create router with explicit route class to ensure proper method handling
 router = APIRouter(
-    prefix="/auth",  # Changed from /api/auth to avoid double /api prefix
-    tags=["auth"],
-    responses={404: {"description": "Not found"}},
-    route_class=APIRoute,  # Ensures proper route registration
+    prefix="/auth",  
+    tags=["Authentication"],
+    default_response_class=Response,
 )
 
 # Enhanced Indian Legal System Framework
@@ -630,7 +629,8 @@ async def send_verification(request_data: VerificationRequest):
         }
         # ... error handling ...
 
-@router.post("/login", response_model=TokenResponse, methods=["POST"], include_in_schema=True)
+# Explicitly define the login route with debug logging
+@router.post("/login", response_model=TokenResponse)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     request: Request = None,
@@ -640,8 +640,13 @@ async def login_for_access_token(
     Authenticate a user - verification skipped
     """
     try:
-        print(f"=== LOGIN (NO VERIFICATION CHECK) ===")
+        print(f"=== LOGIN REQUEST RECEIVED ===")
+        print(f"HTTP Method: POST")
+        print(f"Path: /api/auth/login")
         print(f"Attempting to login user: {form_data.username}")
+        
+        # Log request details for debugging
+        print(f"Request headers: {dict(request.headers) if request else 'No request object'}")
         
         # We skip verification check as we've modified registration to auto-verify users
         # Just check if user exists in database

@@ -67,7 +67,11 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="LexAssist Legal AI API",
     description="Advanced Legal Assistant with AI-powered analysis",
-    version="1.0.0"
+    version="1.0.0",
+    # Don't validate methods by default - we'll handle it explicitly
+    openapi_url="/api/openapi.json",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
 )
 
 # Configure CORS using environment variables or defaults
@@ -95,14 +99,14 @@ logger.info(f"CORS credentials: {allow_credentials}, max_age: {max_age}")
 if '*' in allowed_origins:
     logger.warning("CORS is configured to allow all origins ('*')")
 
-# Add CORS middleware with explicit configuration
+# Add CORS middleware with explicit configuration and additional headers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins if '*' not in allowed_origins else ["*"],
-    allow_credentials=allow_credentials and '*' not in allowed_origins,  # Must be False if allow_origins=['*']
+    allow_credentials=allow_credentials and '*' not in allowed_origins,
     allow_methods=allowed_methods,
     allow_headers=allowed_headers,
-    expose_headers=["Content-Length", "Content-Type", "Authorization"],
+    expose_headers=["Content-Length", "Content-Type", "Authorization", "X-Requested-With"],
     max_age=max_age,  # Cache preflight requests
 )
 
@@ -119,8 +123,14 @@ async def options_handler(path: str):
     # Special handling for login endpoint and related auth paths
     if path.startswith("api/auth/"):
         if path == "api/auth/login":
+            # Critical: Ensure login endpoint accepts POST
             logger.info(f"OPTIONS for login endpoint, ensuring POST method is allowed")
             allowed_methods_list = ["OPTIONS", "POST"]
+            
+            # Log detailed debugging information for login endpoint
+            logger.info(f"Login endpoint CORS debug:")
+            logger.info(f"  - Origin header: {allowed_origins}")
+            logger.info(f"  - Allow credentials: {allow_credentials}")
         elif path.endswith("/refresh"):
             logger.info(f"OPTIONS for token refresh endpoint")
             allowed_methods_list = ["OPTIONS", "POST", "GET"]
@@ -128,18 +138,26 @@ async def options_handler(path: str):
             logger.info(f"OPTIONS for other auth endpoint: {path}")
     
     allowed_methods_str = ",".join(allowed_methods_list)
+    logger.info(f"Responding with allowed methods: {allowed_methods_str}")
+    
+    # Construct response headers
+    cors_headers = {
+        "Access-Control-Allow-Origin": ",".join(allowed_origins) if "*" not in allowed_origins else "*",
+        "Access-Control-Allow-Methods": allowed_methods_str,
+        "Access-Control-Allow-Headers": ",".join(allowed_headers),
+        "Access-Control-Allow-Credentials": "true" if allow_credentials else "false",
+        "Access-Control-Max-Age": str(max_age),
+        "Content-Length": "0",
+        "Allow": allowed_methods_str  # Also add standard Allow header
+    }
+    
+    # Log the full response headers
+    logger.info(f"CORS response headers: {cors_headers}")
     
     # Return response with proper CORS headers
     return Response(
         status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": ",".join(allowed_origins) if "*" not in allowed_origins else "*",
-            "Access-Control-Allow-Methods": allowed_methods_str,
-            "Access-Control-Allow-Headers": ",".join(allowed_headers),
-            "Access-Control-Allow-Credentials": "true" if allow_credentials else "false",
-            "Access-Control-Max-Age": str(max_age),
-            "Content-Length": "0"
-        }
+        headers=cors_headers
     )
 
 # Health check endpoint
@@ -194,11 +212,28 @@ async def health_check():
         }
     }
 
-# Import and include routers
+# Import and include routers with debug logging for auth routes
 try:
     from api.auth_endpoints import router as auth_router
-    app.include_router(auth_router, prefix="/api")  # Now properly prefixed as /api/auth/* endpoints
+    
+    # Add debug information before including router
+    logger.info(f"Auth router routes before inclusion:")
+    for route in auth_router.routes:
+        logger.info(f"  - {route.path} [{','.join(route.methods)}]")
+    
+    # Include the router with explicit prefix
+    app.include_router(
+        auth_router, 
+        prefix="/api",  # This prefix + router's /auth prefix = /api/auth/* endpoints
+        tags=["Authentication"]
+    )
+    
+    # Add debug route info after inclusion
     logger.info("✅ Auth endpoints loaded successfully")
+    for route in app.routes:
+        if str(route.path).startswith("/api/auth"):
+            logger.info(f"  - {route.path} [{','.join(route.methods) if hasattr(route, 'methods') else 'unknown'}]")
+
 except ImportError as e:
     logger.error(f"❌ Auth endpoints failed to load: {e}")
 
