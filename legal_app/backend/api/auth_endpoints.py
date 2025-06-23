@@ -566,13 +566,20 @@ async def login_for_access_token(
             headers=cors_headers
         )
         
-    except HTTPException:
-        raise
+    except HTTPException as http_exc:
+        # Return HTTPException with CORS headers
+        return JSONResponse(
+            status_code=http_exc.status_code,
+            content={"detail": http_exc.detail},
+            headers=cors_headers
+        )
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
-        raise HTTPException(
+        # Return 500 error with CORS headers
+        return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Login failed"
+            content={"detail": "Login failed"},
+            headers=cors_headers
         )
 
 # Get user profile with legal system data
