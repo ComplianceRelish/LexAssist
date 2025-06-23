@@ -40,30 +40,48 @@ router = APIRouter()
 _inlegalbert_processor = None
 
 def get_inlegalbert_processor():
-    """Singleton provider for InLegalBERT processor"""
+    """Singleton provider for Legal AI processor"""
     global _inlegalbert_processor
     
     if _inlegalbert_processor is None:
         try:
-            logger.info("Initializing InLegalBERT processor for API endpoints")
-            _inlegalbert_processor = InLegalBERTProcessor()
+            logger.info("Initializing Legal AI processor for API endpoints")
             
-            # Get model path from environment or use default
-            model_path = os.getenv("INLEGALBERT_MODEL_PATH")
+            # Check if we should use the Hugging Face Inference API
+            use_hf_inference = os.environ.get("USE_HF_INFERENCE_API", "true").lower() == "true"
+            
+            if use_hf_inference:
+                # Use HF Inference API processor
+                try:
+                    from services.huggingface_inference_processor import HuggingFaceInferenceProcessor
+                except ImportError:
+                    # Fallback import path for different contexts
+                    from legal_app.backend.services.huggingface_inference_processor import HuggingFaceInferenceProcessor
+                
+                logger.info("Using Hugging Face Inference API for InLegalBERT")
+                _inlegalbert_processor = HuggingFaceInferenceProcessor()
+            else:
+                # Use local model processor (original behavior)
+                logger.info("Using local model for InLegalBERT")
+                _inlegalbert_processor = InLegalBERTProcessor()
+            
+            # Get model configuration
+            model_path = os.getenv("INLEGALBERT_MODEL_PATH", "law-ai/InLegalBERT")
             cache_dir = os.getenv("INLEGALBERT_CACHE_DIR")
             
             logger.info(f"Using model path: {model_path}")
             logger.info(f"Using cache directory: {cache_dir}")
             
-            # Initialize with environment variables if available
+            # Initialize the processor
             _inlegalbert_processor.initialize(
                 model_path=model_path,
                 cache_dir=cache_dir
             )
             
-            logger.info("✅ InLegalBERT processor initialized successfully")
+            logger.info("✅ Legal AI processor initialized successfully")
+            
         except Exception as e:
-            logger.error(f"❌ Failed to initialize InLegalBERT processor: {e}")
+            logger.error(f"❌ Failed to initialize Legal AI processor: {e}")
             raise
     
     return _inlegalbert_processor
