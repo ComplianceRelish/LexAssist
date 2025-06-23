@@ -23,6 +23,21 @@ router = APIRouter(
     tags=["Authentication"]
 )
 
+# CORS preflight handler for ALL auth endpoints
+@router.options("/{path:path}")
+async def auth_options_handler(path: str):
+    """Generic CORS preflight handler for all auth endpoints"""
+    return Response(
+        content="",
+        headers={
+            "Access-Control-Allow-Origin": "https://lex-assist.vercel.app",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600"
+        }
+    )
+
 # Enhanced Indian Legal System Framework
 class IndianLegalSystemMixin:
     """Enhanced legal system definitions with focus on Indian plural legal system"""
@@ -394,22 +409,55 @@ async def register_user(
             detail=f"Registration failed: {str(e)}"
         )
 
-# Login endpoint with legal system data
+# Login endpoint with legal system data - FIXED OPTIONS handling
 @router.post("/login", response_model=TokenResponse)
 async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    request: Request,
     supabase: Client = Depends(get_supabase_client)
 ):
     """
     Authenticate a user and return access token with legal system information
     """
     try:
-        logger.info(f"Login attempt for user: {form_data.username}")
+        # Handle OPTIONS request
+        if request.method == "OPTIONS":
+            return Response(
+                content="",
+                headers={
+                    "Access-Control-Allow-Origin": "https://lex-assist.vercel.app",
+                    "Access-Control-Allow-Methods": "POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Max-Age": "600"
+                }
+            )
+        
+        logger.info(f"Login attempt received")
+        
+        # Parse request - handle both form and JSON
+        try:
+            content_type = request.headers.get('content-type', '').lower()
+            if 'application/json' in content_type:
+                body = await request.json()
+                username = body.get('email')
+                password = body.get('password')
+            else:
+                form = await request.form()
+                username = form.get('username') or form.get('email')
+                password = form.get('password')
+        except Exception as parse_error:
+            logger.error(f"Failed to parse request: {parse_error}")
+            raise HTTPException(status_code=400, detail="Invalid request format")
+        
+        if not username or not password:
+            raise HTTPException(status_code=400, detail="Email and password required")
+        
+        logger.info(f"Login attempt for user: {username}")
         
         # Authenticate with Supabase
         auth_response = supabase.auth.sign_in_with_password({
-            "email": form_data.username,
-            "password": form_data.password
+            "email": username,
+            "password": password
         })
         
         if not auth_response.user or not auth_response.session:

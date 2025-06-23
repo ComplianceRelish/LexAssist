@@ -1,11 +1,30 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response
 from typing import List, Optional
 import uuid
+import logging
 from datetime import datetime
 from .supabase_client import get_supabase_client
 from .auth_endpoints import get_current_user
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["cases"])
+
+# CORS preflight handler for all case endpoints
+@router.options("/{path:path}")
+async def cases_options_handler(path: str):
+    """Generic CORS preflight handler for all case endpoints"""
+    return Response(
+        content="",
+        headers={
+            "Access-Control-Allow-Origin": "https://lex-assist.vercel.app",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600"
+        }
+    )
 
 @router.post("/cases")
 async def create_case(
@@ -47,6 +66,7 @@ async def create_case(
             else:
                 # Re-raise if it's a different error
                 raise
+        
         # `return=minimal` (the default). In that scenario, fall back to the UUID we
         # generated locally so the caller still receives a valid case identifier.
         inserted_id = case_record["id"]
