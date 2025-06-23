@@ -3,7 +3,7 @@ Authentication and User Management API Endpoints for Lex Assist
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timedelta
@@ -580,6 +580,54 @@ async def login_for_access_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Login failed"},
             headers=cors_headers
+        )
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """Get current authenticated user"""
+    try:
+        if not credentials or not credentials.credentials:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="No authorization token provided"
+            )
+        
+        token = credentials.credentials
+        
+        # Get user from token
+        user_response = supabase.auth.get_user(token)
+        if not user_response.user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token"
+            )
+        
+        user_id = str(user_response.user.id)
+        
+        # Get user details from database
+        try:
+            db_response = supabase.table("users").select("*").eq("id", user_id).single().execute()
+            if db_response.data:
+                return db_response.data
+        except Exception:
+            pass
+        
+        # Fallback to auth user data
+        return {
+            "id": user_id,
+            "email": user_response.user.email,
+            "role": "user"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Authentication error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
         )
 
 # Get user profile with legal system data

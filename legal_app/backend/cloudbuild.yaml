@@ -1,4 +1,4 @@
-
+# legal_app/backend/cloudbuild.yaml
 steps:
 # Build the container image
 - name: 'gcr.io/cloud-builders/docker'
@@ -10,7 +10,7 @@ steps:
   dir: 'legal_app/backend'
   args: ['push', 'gcr.io/$PROJECT_ID/lexassist:$COMMIT_SHA']
 
-# Deploy container image to Cloud Run
+# Deploy container image to Cloud Run with Secret Manager
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: 'gcloud'
   dir: 'legal_app/backend'
@@ -28,9 +28,11 @@ steps:
   - '--cpu=2'
   - '--min-instances=0'
   - '--max-instances=5'
-  - '--env-vars-file=env.yaml'
+  - '--set-env-vars=CLOUD_RUN=true,USE_HF_INFERENCE_API=true'
+  - '--set-env-vars=CORS_ALLOWED_ORIGINS=https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001,http://localhost:5173'
+  - '--set-env-vars=CORS_ALLOW_CREDENTIALS=true'
+  - '--set-secrets=SUPABASE_URL=supabase-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,HF_TOKEN=huggingface-token:latest'
 
-# Store images
 images:
 - 'gcr.io/$PROJECT_ID/lexassist:$COMMIT_SHA'
 

@@ -129,6 +129,28 @@ class CORSHeadersMiddleware(BaseHTTPMiddleware):
 # Add the custom middleware
 app.add_middleware(CORSHeadersMiddleware)
 
+@app.middleware("http")
+async def catch_exceptions_middleware(request: Request, call_next):
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as exc:
+        logger.error(f"Unhandled exception: {exc}")
+        
+        # Always include CORS headers in error responses
+        cors_headers = {
+            "Access-Control-Allow-Origin": "https://lex-assist.vercel.app",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS,PATCH",
+            "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Requested-With,Accept,Origin",
+            "Access-Control-Allow-Credentials": "true"
+        }
+        
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+            headers=cors_headers
+        )
+
 # Root endpoint
 @app.get("/")
 async def root():
