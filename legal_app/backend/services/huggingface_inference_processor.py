@@ -28,7 +28,9 @@ class HuggingFaceInferenceProcessor(LegalModelInterface):
         self.disabled = False
         self.initialized = False
         self.client = None
-        self.hf_token = os.environ.get("HF_TOKEN", "")
+        
+        # Check for token in either format for backward compatibility
+        self.hf_token = os.environ.get("HF_TOKEN", os.environ.get("HUGGINGFACE_TOKEN", ""))
         
         # Configure logging
         self.logger = logging.getLogger(__name__)

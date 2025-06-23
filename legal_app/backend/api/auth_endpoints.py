@@ -27,14 +27,25 @@ router = APIRouter(
 @router.options("/{path:path}")
 async def auth_options_handler(path: str):
     """Generic CORS preflight handler for all auth endpoints"""
+    # Use the same environment variables as main.py for consistency
+    allowed_origins_str = os.environ.get('CORS_ALLOWED_ORIGINS', 'https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001')
+    allowed_origins = [origin.strip() for origin in allowed_origins_str.split(',')]
+    
+    # Get the origin from the request if available
+    request_origin = '*'
+    if len(allowed_origins) == 1:
+        request_origin = allowed_origins[0]
+    
+    logger.info(f"Auth OPTIONS handler for path: {path}, allowed origins: {allowed_origins}")
+    
     return Response(
         content="",
         headers={
-            "Access-Control-Allow-Origin": "https://lex-assist.vercel.app",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "600"
+            "Access-Control-Allow-Origin": request_origin,
+            "Access-Control-Allow-Methods": os.environ.get('CORS_ALLOW_METHODS', 'GET, POST, PUT, DELETE, OPTIONS, PATCH'),
+            "Access-Control-Allow-Headers": os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type, Authorization, X-Requested-With, Accept, Origin'),
+            "Access-Control-Allow-Credentials": os.environ.get('CORS_ALLOW_CREDENTIALS', 'true'),
+            "Access-Control-Max-Age": os.environ.get('CORS_MAX_AGE', '600')
         }
     )
 
