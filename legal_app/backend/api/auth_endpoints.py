@@ -430,18 +430,25 @@ async def login_for_access_token(
     Authenticate a user and return access token with legal system information
     """
     try:
+        # Get CORS configuration from environment variables
+        allowed_origins_str = os.environ.get('CORS_ALLOWED_ORIGINS', 'https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001')
+        allowed_origins = [origin.strip() for origin in allowed_origins_str.split(',')]
+        
+        # Set default CORS headers for all responses
+        origin = request.headers.get('origin', 'https://lex-assist.vercel.app')
+        cors_headers = {
+            "Access-Control-Allow-Origin": origin if origin in allowed_origins else allowed_origins[0],
+            "Access-Control-Allow-Methods": os.environ.get('CORS_ALLOW_METHODS', 'GET, POST, PUT, DELETE, OPTIONS, PATCH'),
+            "Access-Control-Allow-Headers": os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type, Authorization, X-Requested-With, Accept, Origin'),
+            "Access-Control-Allow-Credentials": os.environ.get('CORS_ALLOW_CREDENTIALS', 'true'),
+            "Access-Control-Max-Age": os.environ.get('CORS_MAX_AGE', '600')
+        }
+        
+        logger.info(f"Login request from origin: {origin}, allowed origins: {allowed_origins}")
+        
         # Handle OPTIONS request
         if request.method == "OPTIONS":
-            return Response(
-                content="",
-                headers={
-                    "Access-Control-Allow-Origin": "https://lex-assist.vercel.app",
-                    "Access-Control-Allow-Methods": "POST, OPTIONS",
-                    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
-                    "Access-Control-Allow-Credentials": "true",
-                    "Access-Control-Max-Age": "600"
-                }
-            )
+            return Response(content="", headers=cors_headers)
         
         logger.info(f"Login attempt received")
         
@@ -532,7 +539,8 @@ async def login_for_access_token(
             }
             full_name = user.email  # Fallback
         
-        return TokenResponse(
+        # Create the token response
+        token_response = TokenResponse(
             access_token=session.access_token,
             token_type="bearer",
             expires_in=3600,
@@ -549,6 +557,13 @@ async def login_for_access_token(
                 legal_system=user_data.get("legal_system"),
                 jurisdiction_type=user_data.get("jurisdiction_type")
             )
+        )
+        
+        # Convert to a Response object with CORS headers
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=token_response.dict(),
+            headers=cors_headers
         )
         
     except HTTPException:
