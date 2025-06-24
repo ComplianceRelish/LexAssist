@@ -77,6 +77,27 @@ app = FastAPI(
 # Configure CORS using environment variables or defaults
 allowed_origins_str = os.environ.get('CORS_ALLOWED_ORIGINS', 'https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001,http://localhost:5173')
 allowed_origins = [origin.strip() for origin in allowed_origins_str.split(',')]
+
+# Add additional variants for Cloud Run URLs to handle potential URL variations
+# This ensures that if there are slight differences in the URL (like additional digits),
+# CORS will still work correctly
+expanded_origins = []
+for origin in allowed_origins:
+    expanded_origins.append(origin)
+    # If it's a Cloud Run URL, add variants that might exist
+    if 'lexassist' in origin and 'run.app' in origin:
+        # Extract base parts and create flexible pattern
+        parts = origin.split('lexassist-')
+        if len(parts) > 1:
+            base_url = parts[0] + 'lexassist-'
+            # Add flexibility for different number sequences
+            expanded_origins.append(f"{base_url}*")
+
+# Use the expanded origins list if we're in Cloud Run, otherwise just use the original list
+is_cloud_run = os.environ.get('CLOUD_RUN', 'false').lower() == 'true'
+final_origins = expanded_origins if is_cloud_run else allowed_origins
+
+# Continue with other CORS settings
 allowed_methods_str = os.environ.get('CORS_ALLOW_METHODS', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
 allowed_methods = [method.strip() for method in allowed_methods_str.split(',')]
 allowed_headers_str = os.environ.get('CORS_ALLOW_HEADERS', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
@@ -84,15 +105,17 @@ allowed_headers = [header.strip() for header in allowed_headers_str.split(',')]
 max_age = int(os.environ.get('CORS_MAX_AGE', '600'))
 allow_credentials = os.environ.get('CORS_ALLOW_CREDENTIALS', 'true').lower() == 'true'
 
-logger.info(f"Configuring CORS with origins: {allowed_origins}")
-logger.info(f"CORS config: origins={allowed_origins}, methods={allowed_methods}, headers={allowed_headers}")
+logger.info(f"Original CORS origins: {allowed_origins}")
+logger.info(f"Expanded CORS origins: {expanded_origins}")
+logger.info(f"Final CORS origins: {final_origins}")
+logger.info(f"CORS config: methods={allowed_methods}, headers={allowed_headers}")
 logger.info(f"CORS credentials: {allow_credentials}, max_age: {max_age}")
 
 # Add CORS middleware with explicit configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins if '*' not in allowed_origins else ["*"],
-    allow_credentials=allow_credentials and '*' not in allowed_origins,
+    allow_origins=final_origins if '*' not in final_origins else ["*"],
+    allow_credentials=allow_credentials and '*' not in final_origins,
     allow_methods=allowed_methods,
     allow_headers=allowed_headers,
     expose_headers=["Content-Length", "Content-Type", "Authorization", "X-Requested-With"],
@@ -105,26 +128,72 @@ class CORSHeadersMiddleware(BaseHTTPMiddleware):
         # Log request details for debugging
         path = request.url.path
         method = request.method
-        logger.info(f"Request: {method} {path}")
+        origin = request.headers.get("origin")
+        logger.info(f"Request: {method} {path} from origin: {origin}")
         
         # Handle preflight requests for auth endpoints specifically
         if method == "OPTIONS" and path.startswith("/api/auth/"):
-            logger.info(f"Processing auth preflight request: {path}")
+            logger.info(f"Processing auth preflight request: {path} from origin: {origin}")
             
             response = StarletteResponse()
-            response.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "*")
-            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH"
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Requested-With,Accept,Origin"
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Max-Age"] = "600"
+            
+            # Always allow the requesting origin if it's included in our allowed origins
+            # or if we have wildcard patterns
+            if origin:
+                is_allowed = False
+                for allowed_origin in final_origins:
+                    # Exact match
+                    if origin == allowed_origin:
+                        is_allowed = True
+                        break
+                    # Wildcard pattern match (for Cloud Run variants)
+                    if allowed_origin.endswith('*') and origin.startswith(allowed_origin[:-1]):
+                        is_allowed = True
+                        break
+                
+                if is_allowed:
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    logger.info(f"Allowing origin: {origin}")
+                else:
+                    logger.warning(f"Origin not allowed: {origin} not in {final_origins}")
+                    # For security, we don't set the header if origin isn't allowed
+            else:
+                # No origin header in the request
+                response.headers["Access-Control-Allow-Origin"] = "*"
+                logger.info("No origin in request, setting Access-Control-Allow-Origin: *")
+            
+            # Set standard CORS headers
+            response.headers["Access-Control-Allow-Methods"] = allowed_methods_str
+            response.headers["Access-Control-Allow-Headers"] = allowed_headers_str
+            response.headers["Access-Control-Allow-Credentials"] = str(allow_credentials).lower()
+            response.headers["Access-Control-Max-Age"] = str(max_age)
             
             if path == "/api/auth/login":
                 response.headers["Allow"] = "OPTIONS, POST"
+                logger.info("Setting special headers for login endpoint")
             
             return response
         
-        response = await call_next(request)
-        return response
+        try:
+            response = await call_next(request)
+            
+            # For non-OPTIONS requests to auth endpoints, ensure CORS headers are present
+            if path.startswith("/api/auth/") and origin:
+                # Only add CORS headers if they aren't already present
+                if "Access-Control-Allow-Origin" not in response.headers:
+                    # Apply the same origin checking logic as for preflight requests
+                    for allowed_origin in final_origins:
+                        if origin == allowed_origin or (allowed_origin.endswith('*') and origin.startswith(allowed_origin[:-1])):
+                            response.headers["Access-Control-Allow-Origin"] = origin
+                            # Add other necessary headers
+                            if "Access-Control-Allow-Credentials" not in response.headers:
+                                response.headers["Access-Control-Allow-Credentials"] = str(allow_credentials).lower()
+                            break
+            
+            return response
+        except Exception as e:
+            logger.error(f"Error in request processing: {str(e)}")
+            raise
 
 # Add the custom middleware
 app.add_middleware(CORSHeadersMiddleware)
