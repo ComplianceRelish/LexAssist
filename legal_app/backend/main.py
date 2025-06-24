@@ -390,6 +390,16 @@ if not auth_loaded:
     
     logger.info("✅ Fallback auth endpoints created")
 
+# Load auth profile endpoints that work with both real and fallback auth
+try:
+    from api.auth_profile import router as auth_profile_router
+    app.include_router(auth_profile_router, prefix="/api/auth", tags=["Authentication"])
+    logger.info("✅ Auth profile endpoints loaded successfully")
+except ImportError as e:
+    logger.error(f"❌ Auth profile endpoints failed to load: {e}")
+except Exception as e:
+    logger.error(f"❌ Auth profile endpoints unexpected error: {e}")
+
 # Load legal endpoints
 try:
     from api.legal_endpoints import router as legal_router

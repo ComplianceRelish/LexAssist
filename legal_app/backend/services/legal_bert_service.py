@@ -2,352 +2,175 @@
 LegalBert Service for LexAssist Application
 
 This service provides an interface to the InLegalBERT model for legal text processing.
+Using Hugging Face Inference API only - no local model loading.
 """
 
 import os
 import logging
-import threading
+import requests
 from typing import List, Dict, Any, Optional
+import asyncio
+import aiohttp
+from concurrent.futures import ThreadPoolExecutor
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Handle optional dependencies with graceful fallbacks
-torch_available = True
-transformers_available = True
-huggingface_available = True
 
-try:
-    import torch
-    logger.info(f"PyTorch loaded successfully: {torch.__version__}")
-except ImportError as e:
-    logger.error(f"Failed to import torch: {e}")
-    torch_available = False
-
-try:
-    from transformers import AutoTokenizer, AutoModel, pipeline
-    logger.info("Transformers loaded successfully")
-except ImportError as e:
-    logger.error(f"Failed to import transformers: {e}")
-    transformers_available = False
+class InLegalBERTService:
+    """Service to handle InLegalBERT model operations using Hugging Face API only"""
     
-try:
-    from huggingface_hub import login
-    logger.info("Huggingface Hub loaded successfully")
-except ImportError as e:
-    logger.error(f"Failed to import huggingface_hub: {e}")
-    huggingface_available = False
-
-class LegalBertService:
-    """Service to handle InLegalBERT model operations"""
-    
-    def __init__(self, load_models_async=False):
-        logger.info("Initializing LegalBertService")
+    def __init__(self):
+        self.use_hf_api = os.getenv("USE_HF_INFERENCE_API", "false").lower() == "true"
+        self.model_name = os.getenv("INLEGALBERT_MODEL_PATH", "nlpaueb/legal-bert-base-uncased")
+        self.hf_token = os.getenv("HUGGINGFACE_API_TOKEN")
+        self.api_url = f"https://api-inference.huggingface.co/models/{self.model_name}"
         
-        # Check if required dependencies are available
-        if not torch_available or not transformers_available:
-            self.is_loaded = False
-            self.loading_error = "Required dependencies not available"
-            logger.error(f"Cannot initialize LegalBertService: torch_available={torch_available}, transformers_available={transformers_available}")
-            return
-        
-        # Load environment variables
-        self.model_path = os.environ.get("INLEGALBERT_MODEL_PATH", "law-ai/InLegalBERT")
-        self.hf_token = os.environ.get("HUGGINGFACE_TOKEN")
-        self.cache_dir = os.environ.get("INLEGALBERT_CACHE_DIR", "./models/inlegalbert")
-        
-        logger.info(f"Model path: {self.model_path}")
-        logger.info(f"HF token provided: {bool(self.hf_token)}")
-        logger.info(f"Cache directory: {self.cache_dir}")
-        
-        # Create cache directory if it doesn't exist
-        try:
-            os.makedirs(self.cache_dir, exist_ok=True)
-            logger.info("Cache directory created/verified")
-        except Exception as e:
-            logger.warning(f"Failed to create cache directory: {e}")
-        
-        # Login to Hugging Face if token is provided
-        if self.hf_token and huggingface_available:
-            try:
-                logger.info("Attempting to login to Hugging Face Hub")
-                login(token=self.hf_token)
-                logger.info("Successfully logged in to Hugging Face Hub")
-            except Exception as e:
-                logger.error(f"Failed to login to Hugging Face Hub: {e}")
+        # Only initialize API client, NO local model loading
+        if self.use_hf_api:
+            logger.info(f"🚀 InLegalBERT configured for API-only mode: {self.model_name}")
+            if not self.hf_token:
+                logger.warning("⚠️ HUGGINGFACE_API_TOKEN not set - using public API (may have rate limits)")
         else:
-            logger.warning("No Hugging Face token provided or huggingface_hub not available")
-        
-        # Initialize model components
-        self.tokenizer = None
-        self.model = None
-        self.fill_mask_pipe = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"Using device: {self.device}")
-        
-        # Set model loading status
-        self.is_loaded = False
-        self.loading_error = None
-        
-        # Load models - either synchronously or asynchronously
-        if load_models_async:
-            logger.info("Starting asynchronous model loading process")
-            thread = threading.Thread(target=self._load_models_thread)
-            thread.daemon = True  # Thread will exit when main thread exits
-            thread.start()
-        else:
-            logger.info("Starting synchronous model loading process")
-            self._load_models()
+            logger.error("❌ Local model loading disabled. Set USE_HF_INFERENCE_API=true")
+            raise ValueError("Local model loading is disabled. Use Hugging Face API instead.")
     
-    def _load_models_thread(self):
-        """Thread method to load models asynchronously"""
+    async def analyze_legal_text(self, text: str, max_length: int = 512) -> Dict[str, Any]:
+        """Analyze legal text using Hugging Face API only"""
+        if not self.use_hf_api:
+            raise ValueError("API mode required")
+        
         try:
-            self._load_models()
-            logger.info("Async model loading completed successfully")
-        except Exception as e:
-            logger.error(f"Error in async model loading: {e}")
-            import traceback
-            self.loading_error = str(e) + "\n" + traceback.format_exc()
-    
-    def _load_models(self):
-        """Load all required models and tokenizers"""
-        try:
-            logger.info(f"Loading InLegalBERT models from {self.model_path}")
+            headers = {}
+            if self.hf_token:
+                headers["Authorization"] = f"Bearer {self.hf_token}"
             
-            # Load tokenizer with caching
-            logger.info("Step 1: Loading tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_path,
-                cache_dir=self.cache_dir
+            # Truncate text to avoid API limits
+            if len(text) > max_length:
+                text = text[:max_length]
+            
+            payload = {"inputs": text}
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.api_url, 
+                    headers=headers, 
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        return {
+                            "status": "success",
+                            "model": self.model_name,
+                            "analysis": result,
+                            "method": "huggingface_api"
+                        }
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"HF API error {response.status}: {error_text}")
+                        return {
+                            "status": "error",
+                            "error": f"API returned {response.status}",
+                            "details": error_text
+                        }
+        
+        except Exception as e:
+            logger.error(f"InLegalBERT API analysis failed: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "model": self.model_name
+            }
+    
+    async def batch_analyze_legal_texts(self, texts: List[str], max_length: int = 512) -> List[Dict[str, Any]]:
+        """Analyze multiple legal texts in parallel using Hugging Face API"""
+        if not self.use_hf_api:
+            raise ValueError("API mode required")
+        
+        # Process each text with a maximum of 5 concurrent requests
+        tasks = [self.analyze_legal_text(text, max_length) for text in texts]
+        results = await asyncio.gather(*tasks)
+        return results
+    
+    def analyze_legal_text_sync(self, text: str, max_length: int = 512) -> Dict[str, Any]:
+        """Synchronous version of analyze_legal_text for non-async contexts"""
+        if not self.use_hf_api:
+            raise ValueError("API mode required")
+        
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(self.analyze_legal_text(text, max_length))
+            return result
+        finally:
+            loop.close()
+    
+    def batch_analyze_legal_texts_sync(self, texts: List[str], max_length: int = 512) -> List[Dict[str, Any]]:
+        """Synchronous version of batch_analyze_legal_texts for non-async contexts"""
+        if not self.use_hf_api:
+            raise ValueError("API mode required")
+        
+        loop = asyncio.new_event_loop()
+        try:
+            results = loop.run_until_complete(self.batch_analyze_legal_texts(texts, max_length))
+            return results
+        finally:
+            loop.close()
+    
+    def get_api_status(self) -> Dict[str, Any]:
+        """Check if the Hugging Face API is available"""
+        try:
+            headers = {}
+            if self.hf_token:
+                headers["Authorization"] = f"Bearer {self.hf_token}"
+            
+            response = requests.get(
+                self.api_url, 
+                headers=headers,
+                timeout=5
             )
-            logger.info("Tokenizer loaded successfully")
             
-            # Load model with caching
-            logger.info("Step 2: Loading model...")
-            self.model = AutoModel.from_pretrained(
-                self.model_path,
-                cache_dir=self.cache_dir
-            ).to(self.device)
-            logger.info("Model loaded successfully")
-            
-            # Put model in evaluation mode
-            logger.info("Setting model to evaluation mode")
-            self.model.eval()
-            
-            # Create fill-mask pipeline
-            logger.info("Step 3: Creating fill-mask pipeline...")
-            self.fill_mask_pipe = pipeline(
-                "fill-mask", 
-                model=self.model_path,
-                tokenizer=self.tokenizer,
-                device=0 if self.device == "cuda" else -1,
-                cache_dir=self.cache_dir
-            )
-            logger.info("Fill-mask pipeline created successfully")
-            
-            logger.info("InLegalBERT models loaded successfully")
-            self.is_loaded = True
-            
+            return {
+                "status": "available" if response.status_code == 200 else "unavailable",
+                "code": response.status_code,
+                "model": self.model_name,
+                "api_mode": self.use_hf_api
+            }
         except Exception as e:
-            logger.error(f"Error loading InLegalBERT models: {e}")
-            import traceback
-            logger.error(f"Detailed error: {traceback.format_exc()}")
-            self.loading_error = str(e)
-            raise
-    
-    def get_document_embedding(self, text: str) -> List[float]:
-        """Generate embeddings for a legal document"""
-        # Check if model is loaded
-        if not self.is_loaded:
-            if self.loading_error:
-                raise RuntimeError(f"Model failed to load: {self.loading_error}")
-            else:
-                raise RuntimeError("Model is still loading, please try again later")
-        
-        # Handle empty text
-        if not text or not text.strip():
-            logger.warning("Empty text provided for embedding generation")
-            return [0.0] * 768  # Return zero vector of BERT's output size
-        
-        # Truncate long text if needed
-        if len(text) > 10000:
-            logger.warning(f"Text too long ({len(text)} chars), truncating to 10000 chars")
-            text = text[:10000]
-            
-        try:
-            # Tokenize the input text
-            inputs = self.tokenizer(
-                text, 
-                return_tensors="pt",
-                truncation=True,
-                max_length=512,
-                padding="max_length"
-            ).to(self.device)
-            
-            # Generate embeddings
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-            
-            # Use [CLS] token (first token) as document embedding
-            embeddings = outputs.last_hidden_state[:, 0, :].squeeze().cpu().numpy().tolist()
-            return embeddings
-        except Exception as e:
-            logger.error(f"Error generating embeddings: {e}")
-            raise
-    
-    def fill_legal_mask(self, text: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """Fill in [MASK] tokens in legal text"""
-        # Check if model is loaded
-        if not self.is_loaded:
-            if self.loading_error:
-                raise RuntimeError(f"Model failed to load: {self.loading_error}")
-            else:
-                raise RuntimeError("Model is still loading, please try again later")
-        
-        if "[MASK]" not in text:
-            raise ValueError("Text must contain at least one [MASK] token")
-        
-        # Handle excessive text length
-        if len(text) > 10000:
-            logger.warning(f"Text too long ({len(text)} chars), truncating to 10000 chars")
-            text = text[:10000]
-        
-        # Process text with the fill-mask pipeline
-        try:
-            results = self.fill_mask_pipe(text, top_k=top_k)
-            
-            # Format results
-            predictions = []
-            
-            # Handle multiple mask tokens
-            if isinstance(results[0], list):
-                for result_set in results:
-                    mask_predictions = []
-                    for result in result_set:
-                        mask_predictions.append({
-                            "token": result["token_str"],
-                            "score": float(result["score"]),
-                            "sequence": result["sequence"]
-                        })
-                    predictions.append(mask_predictions)
-            else:
-                # Single mask token
-                for result in results:
-                    predictions.append({
-                        "token": result["token_str"],
-                        "score": float(result["score"]),
-                        "sequence": result["sequence"]
-                    })
-            
-            return predictions
-            
-        except Exception as e:
-            logger.error(f"Error in fill_legal_mask: {e}")
-            raise
-    
-    def get_legal_similarity(self, text1: str, text2: str) -> float:
-        """Calculate similarity between two legal texts"""
-        # Check if model is loaded
-        if not self.is_loaded:
-            if self.loading_error:
-                raise RuntimeError(f"Model failed to load: {self.loading_error}")
-            else:
-                raise RuntimeError("Model is still loading, please try again later")
-        
-        # Handle empty texts
-        if not text1.strip() or not text2.strip():
-            logger.warning("Empty text provided for similarity calculation")
-            return 0.0
-            
-        embedding1 = self.get_document_embedding(text1)
-        embedding2 = self.get_document_embedding(text2)
-        
-        # Convert to tensors
-        tensor1 = torch.tensor(embedding1)
-        tensor2 = torch.tensor(embedding2)
-        
-        # Calculate cosine similarity
-        similarity = torch.nn.functional.cosine_similarity(
-            tensor1.unsqueeze(0), tensor2.unsqueeze(0)
-        ).item()
-        
-        return similarity
-    
-    def analyze_legal_text(self, text: str) -> Dict[str, Any]:
-        """Perform comprehensive analysis on legal text"""
-        # Check if model is loaded
-        if not self.is_loaded:
-            if self.loading_error:
-                raise RuntimeError(f"Model failed to load: {self.loading_error}")
-            else:
-                raise RuntimeError("Model is still loading, please try again later")
-        
-        # This method integrates multiple analyses for a complete legal text assessment
-        
-        # Get embedding for overall representation
-        embedding = self.get_document_embedding(text)
-        
-        # Determine text complexity (simple heuristic based on sentence length and word length)
-        words = text.split()
-        avg_word_length = sum(len(word) for word in words) / max(1, len(words))
-        
-        # Extract key legal entities (simplified implementation)
-        legal_terms = self._extract_legal_entities(text)
-        
-        return {
-            "embedding_dimension": len(embedding),
-            "complexity_score": min(1.0, avg_word_length / 10),  # Normalize to 0-1
-            "key_legal_terms": legal_terms,
-            "document_length": len(text),
-            "word_count": len(words)
-        }
-    
-    def _extract_legal_entities(self, text: str) -> List[str]:
-        """Extract key legal entities from text (simplified implementation)"""
-        # This is a simplified implementation
-        # In production, this would use NER models or regex patterns specific to legal documents
-        
-        common_legal_terms = [
-            "plaintiff", "defendant", "court", "judgment", "petition", 
-            "appeal", "section", "act", "statute", "law", "rights",
-            "jurisdiction", "contract", "damages", "liability"
-        ]
-        
-        found_terms = []
-        lower_text = text.lower()
-        
-        for term in common_legal_terms:
-            if term in lower_text:
-                found_terms.append(term)
-                
-        return found_terms
+            logger.error(f"Failed to check API status: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "model": self.model_name,
+                "api_mode": self.use_hf_api
+            }
 
 
 # Singleton instance
-_legal_bert_service = None
-_is_initializing = False
-_initialization_lock = threading.Lock()
+_inlegalbert_service = None
+_initialization_lock = threading.RLock()
 
-def get_legal_bert_service():
-    """Get or create the LegalBertService instance"""
-    global _legal_bert_service, _is_initializing
+def get_inlegalbert_service():
+    """Get or create the InLegalBERTService singleton instance"""
+    global _inlegalbert_service
     
     # If service is already initialized, return it
-    if _legal_bert_service is not None:
-        return _legal_bert_service
+    if _inlegalbert_service is not None:
+        return _inlegalbert_service
     
     # Prevent multiple threads from initializing simultaneously
     with _initialization_lock:
         # Check again in case another thread initialized while we were waiting
-        if _legal_bert_service is not None:
-            return _legal_bert_service
+        if _inlegalbert_service is not None:
+            return _inlegalbert_service
         
-        # If initialization is not in progress, start it
-        if not _is_initializing:
-            _is_initializing = True
-            logger.info("Starting asynchronous initialization of LegalBertService")
-            
-            # Create a service instance without loading models
-            _legal_bert_service = LegalBertService(load_models_async=True)
+        # Create new service instance using API-only mode
+        try:
+            logger.info("Initializing InLegalBERTService in API-only mode")
+            _inlegalbert_service = InLegalBERTService()
+            logger.info("InLegalBERTService initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize InLegalBERTService: {e}")
+            raise
     
-    return _legal_bert_service
+    return _inlegalbert_service
