@@ -1,6 +1,5 @@
 CLOUD_RUN: "true"
 USE_HF_INFERENCE_API: "true"
-PORT: "8000"
 CORS_ALLOWED_ORIGINS: "https://lex-assist.vercel.app,http://localhost:3000,http://localhost:5173,https://lexassist-438720587503.europe-west1.run.app"
 CORS_ALLOW_CREDENTIALS: "true"
 CORS_ALLOW_METHODS: "GET,POST,PUT,DELETE,OPTIONS,PATCH"
