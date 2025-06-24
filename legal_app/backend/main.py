@@ -398,7 +398,17 @@ try:
 except ImportError as e:
     logger.error(f"❌ Legal endpoints failed to load: {e}")
 except Exception as e:
-    logger.error(f"❌ Legal endpoints unexpected error: {e}")
+    logger.error(f"❌ Case endpoints unexpected error: {e}")
+
+# Add user endpoints
+try:
+    from api.user_endpoints import router as user_router
+    app.include_router(user_router, prefix="/api", tags=["Users"])
+    logger.info("✅ User endpoints loaded successfully")
+except ImportError as e:
+    logger.error(f"❌ User endpoints failed to load: {e}")
+except Exception as e:
+    logger.error(f"❌ User endpoints unexpected error: {e}")
 
 # Load case endpoints    
 try:
