@@ -10,34 +10,36 @@ steps:
   dir: 'legal_app/backend'
   args: ['push', 'gcr.io/$PROJECT_ID/lexassist:$COMMIT_SHA']
 
-# Deploy container image to Cloud Run with Secret Manager
+# Deploy using script to handle complex env vars
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  entrypoint: 'gcloud'
   dir: 'legal_app/backend'
+  entrypoint: 'bash'
   args:
-  - 'run'
-  - 'deploy'
-  - 'lexassist'
-  - '--image=gcr.io/$PROJECT_ID/lexassist:$COMMIT_SHA'
-  - '--region=europe-west1'
-  - '--port=8000'
-  - '--platform=managed'
-  - '--allow-unauthenticated'
-  - '--memory=2Gi'
-  - '--timeout=900s'
-  - '--cpu=2'
-  - '--min-instances=0'
-  - '--max-instances=5'
-  - '--set-env-vars=CLOUD_RUN=true'
-  - '--set-env-vars=USE_HF_INFERENCE_API=true'
-  - '--set-env-vars=CORS_ALLOWED_ORIGINS=https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001,http://localhost:5173'
-  - '--set-env-vars=CORS_ALLOW_CREDENTIALS=true'
-  - '--set-env-vars=CORS_ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS,PATCH'
-  - '--set-env-vars=CORS_ALLOW_HEADERS=Content-Type,Authorization,X-Requested-With,Accept,Origin'
-  - '--set-env-vars=CORS_MAX_AGE=600'
-  - '--set-secrets=SUPABASE_URL=supabase-url:latest'
-  - '--set-secrets=SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest'
-  - '--set-secrets=HF_TOKEN=huggingface-token:latest'
+  - '-c'
+  - |
+    set -e
+    echo "Deploying LexAssist to Cloud Run..."
+    
+    gcloud run deploy lexassist \
+      --image=gcr.io/$PROJECT_ID/lexassist:$COMMIT_SHA \
+      --region=europe-west1 \
+      --port=8000 \
+      --platform=managed \
+      --allow-unauthenticated \
+      --memory=2Gi \
+      --timeout=900s \
+      --cpu=2 \
+      --min-instances=0 \
+      --max-instances=5 \
+      --set-env-vars="CLOUD_RUN=true,USE_HF_INFERENCE_API=true,CORS_ALLOW_CREDENTIALS=true,CORS_MAX_AGE=600" \
+      --set-env-vars="CORS_ALLOWED_ORIGINS=https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001,http://localhost:5173" \
+      --set-env-vars="CORS_ALLOW_HEADERS=Content-Type,Authorization,X-Requested-With,Accept,Origin" \
+      --set-env-vars="CORS_ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS,PATCH" \
+      --set-secrets="SUPABASE_URL=supabase-url:latest" \
+      --set-secrets="SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest" \
+      --set-secrets="HF_TOKEN=huggingface-token:latest"
+    
+    echo "Deployment completed successfully!"
 
 images:
 - 'gcr.io/$PROJECT_ID/lexassist:$COMMIT_SHA'
