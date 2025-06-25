@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import numpy as np
 
 from models.legal_brief_analyzer import LegalBriefAnalyzer
@@ -82,7 +82,7 @@ async def analyze_legal_text(request: TextAnalysisRequest):
             case_references=analysis["case_references"],
             legal_concepts=analysis.get("legal_concepts", []),
             confidence_score=analysis.get("confidence_score", 0.0),
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             model_version=request.model_version
         )
     except HTTPException as he:
