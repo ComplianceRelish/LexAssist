@@ -3,19 +3,27 @@ API endpoints for InLegalBERT model functionality using Hugging Face API
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Fix relative import issue
+# Import the service
 try:
     from services.legal_bert_service import get_inlegalbert_service, InLegalBERTService
 except ImportError:
-    # Fallback import path for different contexts
-    from legal_app.backend.services.legal_bert_service import get_inlegalbert_service, InLegalBERTService
+    try:
+        from legal_app.backend.services.legal_bert_service import get_inlegalbert_service, InLegalBERTService
+    except ImportError:
+        logger.error("Could not import legal_bert_service")
+        # Create dummy functions to prevent import errors
+        def get_inlegalbert_service():
+            raise HTTPException(status_code=503, detail="Legal BERT service not available")
+        
+        class InLegalBERTService:
+            pass
 
 router = APIRouter()
 
@@ -37,7 +45,6 @@ async def analyze_text(
 ):
     """Analyze legal text using Hugging Face API"""
     try:
-        # Use the async analyze method directly
         analysis = await legal_bert_service.analyze_legal_text(request.text)
         return analysis
     except ValueError as e:
@@ -56,7 +63,6 @@ async def get_text_embeddings(
 ):
     """Generate embeddings for legal text via Hugging Face API"""
     try:
-        # Use the analyze endpoint as embeddings are part of the analysis
         analysis = await legal_bert_service.analyze_legal_text(request.text)
         return {
             "status": analysis.get("status", "error"),
@@ -74,7 +80,6 @@ async def fill_masked_text(
 ):
     """Fill masked tokens in legal text using Hugging Face API"""
     try:
-        # Use analyze endpoint with special mask format
         text_with_mask = request.text if "[MASK]" in request.text else f"{request.text} [MASK]"
         
         result = await legal_bert_service.analyze_legal_text(text_with_mask)
@@ -95,7 +100,6 @@ async def get_text_similarity(
 ):
     """Calculate similarity between two legal texts using Hugging Face API"""
     try:
-        # Use batch analyze to get both texts at once
         results = await legal_bert_service.batch_analyze_legal_texts(
             texts=[request.text1, request.text2]
         )
@@ -110,22 +114,23 @@ async def get_text_similarity(
         logger.error(f"Error calculating similarity: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error calculating similarity: {str(e)}")
 
-@router.get("/health", tags=["Health Check"])
-async def health_check(legal_bert_service: InLegalBERTService = Depends(get_inlegalbert_service)):
-    """Check the health of the InLegalBERT service using API"""
+@router.get("/health")
+async def health_check():
+    """Check the health of the InLegalBERT service using Hugging Face API"""
     try:
-        # Use the API status check method
+        legal_bert_service = get_inlegalbert_service()
         api_status = legal_bert_service.get_api_status()
         
         return {
             "status": api_status.get("status", "unknown"),
-            "model": api_status.get("model", "nlpaueb/legal-bert-base-uncased"),
+            "model": api_status.get("model", "law-ai/InLegalBERT"),
             "api_mode": True,
+            "service": "huggingface_api",
             "code": api_status.get("code"),
             "time": api_status.get("time"),
             "details": {
                 "api_available": api_status.get("status") == "available",
-                "has_token": bool(legal_bert_service.hf_token)
+                "has_token": bool(getattr(legal_bert_service, 'hf_token', None))
             }
         }
     except Exception as e:
@@ -134,5 +139,6 @@ async def health_check(legal_bert_service: InLegalBERTService = Depends(get_inle
             "status": "error",
             "error": str(e),
             "api_mode": True,
-            "model": legal_bert_service.model_name
+            "service": "huggingface_api",
+            "model": "law-ai/InLegalBERT"
         }

@@ -390,116 +390,123 @@ if not auth_loaded:
     
     logger.info("✅ Fallback auth endpoints created")
 
-# Load auth profile endpoints that work with both real and fallback auth
+# === CLEAN ROUTER LOADING SECTION ===
+logger.info("=== LOADING API ROUTERS ===")
+
+# Load authentication endpoints
+auth_loaded = False
+try:
+    from api.auth_endpoints import router as auth_router
+    app.include_router(auth_router, prefix="/api", tags=["Authentication"])
+    auth_loaded = True
+    logger.info("✅ Auth endpoints loaded successfully")
+except Exception as e:
+    logger.error(f"❌ Auth endpoints failed: {e}")
+    auth_loaded = False
+
+# Fallback auth endpoint if main auth module fails to load
+if not auth_loaded:
+    @app.post("/api/auth/login")
+    async def fallback_login(request: Request):
+        """Fallback login endpoint when auth module fails to load"""
+        try:
+            body = await request.json()
+            email = body.get("email")
+            password = body.get("password")
+            
+            logger.info(f"Fallback login attempt for: {email}")
+            
+            if email and password:
+                return {
+                    "access_token": "fallback-token-replace-with-real-auth",
+                    "token_type": "bearer",
+                    "expires_in": 3600,
+                    "user": {
+                        "id": "fallback-user-id",
+                        "email": email,
+                        "full_name": "Fallback User",
+                        "role": "user",
+                        "subscription_tier": "free",
+                        "created_at": datetime.utcnow().isoformat(),
+                        "email_verified": True,
+                        "phone_verified": False,
+                        "country": "IN",
+                        "legal_system": "plural",
+                        "jurisdiction_type": "federal_union"
+                    }
+                }
+            else:
+                raise HTTPException(status_code=400, detail="Email and password required")
+        except Exception as e:
+            logger.error(f"Fallback login error: {e}")
+            raise HTTPException(status_code=500, detail="Authentication service temporarily unavailable")
+    
+    @app.get("/api/auth/health")
+    async def fallback_auth_health():
+        """Fallback auth health check"""
+        return {
+            "status": "fallback_mode",
+            "message": "Authentication service running in fallback mode",
+            "main_auth_module": "failed_to_load"
+        }
+    
+    logger.info("✅ Fallback auth endpoints created")
+
+# Load auth profile endpoints
 try:
     from api.auth_profile import router as auth_profile_router
     app.include_router(auth_profile_router, prefix="/api/auth", tags=["Authentication"])
     logger.info("✅ Auth profile endpoints loaded successfully")
-except ImportError as e:
-    logger.error(f"❌ Auth profile endpoints failed to load: {e}")
 except Exception as e:
-    logger.error(f"❌ Auth profile endpoints unexpected error: {e}")
+    logger.error(f"❌ Auth profile endpoints failed: {e}")
 
-# Load legal analysis endpoints
-try:
-    from api.legal_analysis import router as legal_analysis_router
-    app.include_router(legal_analysis_router, prefix="/api/inlegalbert", tags=["inlegalbert"])
-    logger.info("✅ Legal analysis router loaded successfully")
-except Exception as e:
-    logger.error(f"❌ Failed to load legal analysis router: {e}")
-
-# Load legal endpoints
-try:
-    from api.legal_endpoints import router as legal_router
-    app.include_router(legal_router, prefix="/api", tags=["Legal"])
-    logger.info("✅ Legal endpoints loaded successfully")
-except ImportError as e:
-    logger.error(f"❌ Legal endpoints failed to load: {e}")
-except Exception as e:
-    logger.error(f"❌ Case endpoints unexpected error: {e}")
-
-# Add user endpoints
+# Load user endpoints
 try:
     from api.user_endpoints import router as user_router
     app.include_router(user_router, prefix="/api", tags=["Users"])
     logger.info("✅ User endpoints loaded successfully")
-except ImportError as e:
-    logger.error(f"❌ User endpoints failed to load: {e}")
 except Exception as e:
-    logger.error(f"❌ User endpoints unexpected error: {e}")
+    logger.error(f"❌ User endpoints failed: {e}")
 
-# Load case endpoints    
+# Load case endpoints
 try:
     from api.case_endpoints import router as case_router
     app.include_router(case_router, prefix="/api", tags=["Cases"])
     logger.info("✅ Case endpoints loaded successfully")
-except ImportError as e:
-    logger.error(f"❌ Case endpoints failed to load: {e}")
 except Exception as e:
-    logger.error(f"❌ Case endpoints unexpected error: {e}")
-
-# Load InLegalBERT endpoints with enhanced error handling
-try:
-    logger.info("=== LOADING AI/ML ENDPOINTS ===")
-    
-    # Check ML dependencies first
-    ml_dependencies = {}
-    try:
-        import torch
-        ml_dependencies["torch"] = torch.__version__
-        logger.info(f"PyTorch available: {torch.__version__}")
-    except ImportError as e:
-        logger.error(f"PyTorch not available: {e}")
-        ml_dependencies["torch"] = None
-        
-    try:
-        import transformers
-        ml_dependencies["transformers"] = transformers.__version__
-        logger.info(f"Transformers available: {transformers.__version__}")
-    except ImportError as e:
-        logger.error(f"Transformers not available: {e}")
-        ml_dependencies["transformers"] = None
-    
-    # Load Legal API endpoints
-    try:
-        from api.legal_endpoints import router as legal_endpoints_router
-        app.include_router(legal_endpoints_router, prefix="/api", tags=["Legal"])
-        logger.info("✅ Legal endpoints loaded successfully")
-    except ImportError as e:
-        logger.error(f"❌ Legal endpoints failed to load: {e}")
-    except Exception as e:
-        logger.error(f"❌ Legal endpoints unexpected error: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-    
-    # Load Legal BERT endpoints
-    try:
-        from api.legal_bert import router as legal_bert_router
-        app.include_router(legal_bert_router, prefix="/api/inlegalbert", tags=["InLegalBERT"])
-        logger.info("✅ InLegalBERT endpoints loaded successfully")
-    except ImportError as e:
-        logger.error(f"❌ InLegalBERT endpoints failed to load: {e}")
-    except Exception as e:
-        logger.error(f"❌ InLegalBERT endpoints unexpected error: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-    
-    # Load Model Context Protocol endpoints
-    try:
-        from api.model_context_endpoints import router as model_context_router
-        app.include_router(model_context_router, prefix="/api/legal-ai", tags=["LegalAI"])
-        logger.info("✅ Model Context Protocol endpoints loaded successfully")
-    except ImportError as e:
-        logger.error(f"❌ Model Context Protocol endpoints failed to load: {e}")
-    except Exception as e:
-        logger.error(f"❌ Model Context Protocol endpoints unexpected error: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-except Exception as e:
-    logger.error(f"❌ ML endpoints loading failed: {e}")
+    logger.error(f"❌ Case endpoints failed: {e}")
     import traceback
     logger.error(f"Traceback: {traceback.format_exc()}")
+
+# Load legal endpoints (analyze-brief)
+try:
+    from api.legal_endpoints import router as legal_router
+    app.include_router(legal_router, prefix="/api", tags=["Legal"])
+    logger.info("✅ Legal endpoints loaded successfully")
+except Exception as e:
+    logger.error(f"❌ Legal endpoints failed: {e}")
+    import traceback
+    logger.error(f"Traceback: {traceback.format_exc()}")
+
+# Load InLegalBERT endpoints via Hugging Face API (NOT local model)
+try:
+    from api.legal_bert import router as legal_bert_router
+    app.include_router(legal_bert_router, prefix="/api/inlegalbert", tags=["InLegalBERT"])
+    logger.info("✅ InLegalBERT (Hugging Face API) endpoints loaded successfully")
+except Exception as e:
+    logger.error(f"❌ InLegalBERT (Hugging Face API) failed: {e}")
+    import traceback
+    logger.error(f"Traceback: {traceback.format_exc()}")
+
+# Load Model Context Protocol endpoints
+try:
+    from api.model_context_endpoints import router as model_context_router
+    app.include_router(model_context_router, prefix="/api/legal-ai", tags=["LegalAI"])
+    logger.info("✅ Model Context Protocol endpoints loaded successfully")
+except Exception as e:
+    logger.error(f"❌ Model Context Protocol failed: {e}")
+
+logger.info("=== ROUTER LOADING COMPLETE ===")
 
 # Debug endpoint to list all routes
 @app.get("/api/debug/routes")

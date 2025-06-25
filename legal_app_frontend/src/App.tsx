@@ -1,10 +1,12 @@
-// src/App.tsx - COMPLETE CORRECTED VERSION
+// src/App.tsx - UPDATED WITH LOADING SPINNER
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ChakraProvider } from '@chakra-ui/react';
+import { ChakraProvider, Box } from '@chakra-ui/react';
 import { BrandProvider } from './contexts/BrandContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import theme from './styles/theme';
+import { LoadingSpinner, LoadingOverlay } from './components';
+import { useLoading } from './hooks/useLoading';
 
 // Page imports
 import LandingPage from './pages/LandingPage/LandingPage';
@@ -33,12 +35,16 @@ import LexAssistApiClient from './services/LexAssistApiClient';
 // Utility imports
 import checkEnvironmentVariables from './utils/envCheck';
 
-// Protected Route Component
+// Protected Route Component with Loading Spinner
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <LoadingOverlay isLoading={true} message="Authenticating..." fullPage>
+        <div />
+      </LoadingOverlay>
+    );
   }
   
   if (!user) {
@@ -48,16 +54,35 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// Admin Route Component
+// Loading Wrapper Component
+const LoadingWrapper: React.FC<{ isLoading: boolean; children: React.ReactNode }> = ({ 
+  isLoading, 
+  children 
+}) => {
+  if (isLoading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minH="200px">
+        <LoadingSpinner size={50} ariaLabel="Loading..." />
+      </Box>
+    );
+  }
+  return <>{children}</>;
+};
+
+// Admin Route Component with Loading Spinner
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <LoadingOverlay isLoading={true} message="Verifying admin access..." fullPage>
+        <div />
+      </LoadingOverlay>
+    );
   }
   
   if (!user || user.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/login" replace />;
   }
   
   return <>{children}</>;
