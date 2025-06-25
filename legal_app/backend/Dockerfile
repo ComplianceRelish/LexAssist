@@ -37,10 +37,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Test HuggingFace API connectivity
-RUN python -c "\
-import os; \
-print('Testing HuggingFace API connectivity...'); \
-print(f'HF_TOKEN available: 'yes' if os.getenv('HF_TOKEN') else 'no')"
+RUN python -c "import os; print('Testing HuggingFace API connectivity...'); print('HF_TOKEN available:', 'yes' if os.getenv('HF_TOKEN') else 'no')"
 
 # Add a simple health check script
 RUN echo '#!/bin/bash\necho "Health check passed"' > /app/health_check.sh && \
