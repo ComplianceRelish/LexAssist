@@ -400,6 +400,14 @@ except ImportError as e:
 except Exception as e:
     logger.error(f"❌ Auth profile endpoints unexpected error: {e}")
 
+# Load legal analysis endpoints
+try:
+    from api.legal_analysis import router as legal_analysis_router
+    app.include_router(legal_analysis_router, prefix="/api/inlegalbert", tags=["inlegalbert"])
+    logger.info("✅ Legal analysis router loaded successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to load legal analysis router: {e}")
+
 # Load legal endpoints
 try:
     from api.legal_endpoints import router as legal_router
