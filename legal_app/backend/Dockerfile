@@ -40,7 +40,7 @@ COPY . .
 RUN python -c "\
 import os; \
 print('Testing HuggingFace API connectivity...'); \
-print(f'HF_TOKEN available: 'yes' if os.getenv('HF_TOKEN') else 'no')""
+print(f'HF_TOKEN available: 'yes' if os.getenv('HF_TOKEN') else 'no')"
 
 # Add a simple health check script
 RUN echo '#!/bin/bash\necho "Health check passed"' > /app/health_check.sh && \
