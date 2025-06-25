@@ -15,6 +15,7 @@ import MobileFirstDashboard from './pages/UserDashboard/MobileFirstDashboard';
 import EnhancedUserDashboard from './pages/UserDashboard/EnhancedUserDashboard';
 import EnvCheckPage from './pages/DevTools/EnvCheckPage';
 import AdminDashboard from './pages/AdminDashboard';
+import CaseDiaryPage from './pages/CaseDiaryPage';
 
 // Component imports 
 import BriefInput from './components/BriefInput';
@@ -240,6 +241,15 @@ const AppContent: React.FC = () => {
         <UserProfile user={user} subscription={subscription} />
       </ProtectedRoute>
     } 
+  />
+  
+  <Route 
+    path="/case/:caseId/diary" 
+    element={
+      <ProtectedRoute>
+        <CaseDiaryPage />
+      </ProtectedRoute>
+    }
   />
 
   {/* Admin routes */}

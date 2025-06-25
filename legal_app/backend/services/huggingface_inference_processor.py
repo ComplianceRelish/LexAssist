@@ -29,25 +29,24 @@ class HuggingFaceInferenceProcessor(LegalModelInterface):
         self.initialized = False
         self.client = None
         
-        # Check for token in either format for backward compatibility
-        self.hf_token = os.environ.get("HF_TOKEN", os.environ.get("HUGGINGFACE_TOKEN", ""))
-        
         # Configure logging
         self.logger = logging.getLogger(__name__)
         
     def initialize(self, model_path: Optional[str] = None, **kwargs) -> None:
         """Initialize the Hugging Face Inference client"""
         try:
-            if not self.hf_token:
+            # Check if environment variable exists
+            if not os.environ.get("HF_TOKEN"):
                 self.logger.error("HF_TOKEN environment variable not set")
                 raise ValueError("HF_TOKEN environment variable not set")
             
             self.model_path = model_path or self.MODEL_NAME
             self.logger.info(f"Initializing Hugging Face Inference client for {self.model_path}")
             
+            # Initialize client with provider parameter per HF documentation
             self.client = InferenceClient(
-                model=self.model_path,
-                token=self.hf_token
+                provider="hf-inference",
+                api_key=os.environ["HF_TOKEN"]
             )
             
             self.initialized = True
@@ -67,7 +66,10 @@ class HuggingFaceInferenceProcessor(LegalModelInterface):
         self._ensure_initialized()
         try:
             # Use feature-extraction task from HF Inference API
-            result = self.client.feature_extraction(text)
+            result = self.client.feature_extraction(
+                text,
+                model="intfloat/multilingual-e5-large-instruct"
+            )
             return np.array(result)
         except Exception as e:
             self.logger.error(f"Error getting embeddings: {e}")
@@ -123,13 +125,17 @@ class HuggingFaceInferenceProcessor(LegalModelInterface):
         """Identify statutes using HF Inference API"""
         self._ensure_initialized()
         try:
-            # Use token classification or text generation based on the task
-            response = self.client.text_generation(
-                prompt + "\n\nIdentify relevant statutes:",
-                max_new_tokens=256,
-                do_sample=False
+            # Use chat completions API per HF documentation
+            completion = self.client.chat.completions.create(
+                model="sarvamai/sarvam-m",  # Should be replaced with appropriate legal model
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt + "\n\nIdentify relevant statutes:"
+                    }
+                ],
             )
-            return response
+            return completion.choices[0].message.content
         except Exception as e:
             self.logger.error(f"Error in statute identification: {e}")
             return self._fallback_simulation("statute_identification")
@@ -138,12 +144,16 @@ class HuggingFaceInferenceProcessor(LegalModelInterface):
         """Analyze a case using HF Inference API"""
         self._ensure_initialized()
         try:
-            response = self.client.text_generation(
-                prompt + "\n\nAnalyze this case:",
-                max_new_tokens=512,
-                do_sample=False
+            completion = self.client.chat.completions.create(
+                model="sarvamai/sarvam-m",  # Should be replaced with appropriate legal model
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt + "\n\nAnalyze this case:"
+                    }
+                ],
             )
-            return response
+            return completion.choices[0].message.content
         except Exception as e:
             self.logger.error(f"Error in case analysis: {e}")
             return self._fallback_simulation("case_analysis")
@@ -152,12 +162,16 @@ class HuggingFaceInferenceProcessor(LegalModelInterface):
         """Predict judgment using HF Inference API"""
         self._ensure_initialized()
         try:
-            response = self.client.text_generation(
-                prompt + "\n\nPredict the judgment:",
-                max_new_tokens=512,
-                do_sample=False
+            completion = self.client.chat.completions.create(
+                model="sarvamai/sarvam-m",  # Should be replaced with appropriate legal model
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt + "\n\nPredict the judgment:"
+                    }
+                ],
             )
-            return response
+            return completion.choices[0].message.content
         except Exception as e:
             self.logger.error(f"Error in judgment prediction: {e}")
             return self._fallback_simulation("judgment_prediction")
@@ -166,12 +180,16 @@ class HuggingFaceInferenceProcessor(LegalModelInterface):
         """Retrieve case history using HF Inference API"""
         self._ensure_initialized()
         try:
-            response = self.client.text_generation(
-                prompt + "\n\nRetrieve relevant case history:",
-                max_new_tokens=512,
-                do_sample=False
+            completion = self.client.chat.completions.create(
+                model="sarvamai/sarvam-m",  # Should be replaced with appropriate legal model
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt + "\n\nRetrieve relevant case history:"
+                    }
+                ],
             )
-            return response
+            return completion.choices[0].message.content
         except Exception as e:
             self.logger.error(f"Error in case history retrieval: {e}")
             return self._fallback_simulation("case_history")
@@ -314,8 +332,8 @@ Comparable Case Outcomes:
                 model_version=self.MODEL_VERSION,
                 metadata={
                     "model_name": self.MODEL_NAME,
-                    "provider": "Hugging Face Inference API",
-                    "endpoint": f"https://api-inference.huggingface.co/models/{self.model_path}"
+                    "provider": "hf-inference",  # Updated to match the provider parameter
+                    "endpoint": "https://api.huggingface.co/inference-api"
                 }
             )
             
@@ -331,5 +349,5 @@ Comparable Case Outcomes:
                 confidence_score=0.0,
                 processing_time=time.time() - start_time,
                 model_version=self.MODEL_VERSION,
-                metadata={"error": str(e), "provider": "Hugging Face Inference API"}
+                metadata={"error": str(e), "provider": "hf-inference"}
             )

@@ -837,10 +837,35 @@ async def enhanced_legal_query(request: EnhancedLegalQuery, current_user=Depends
 # 🆕 Case Diary Entry Endpoints
 # ==============================================
 
+async def process_diary_entry_analysis(entry_id: str, ai_request: AIRequest, supabase: Client):
+    """Background task to process AI analysis for diary entries"""
+    try:
+        # Process the entry through the AI service
+        ai_analysis = await ai_service.process_legal_query(ai_request)
+        
+        # Update the entry with the analysis results
+        supabase.table("case_diary_entries").update({
+            "ai_analysis": ai_analysis,
+            "ai_status": "completed",
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", entry_id).execute()
+        
+        logger.info(f"Successfully processed AI analysis for diary entry {entry_id}")
+        
+    except Exception as e:
+        logger.error(f"Error processing AI analysis for diary entry {entry_id}: {e}")
+        # Mark as failed in the database
+        supabase.table("case_diary_entries").update({
+            "ai_status": "failed",
+            "ai_error": str(e),
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", entry_id).execute()
+
 class CaseDiaryEntryData(BaseModel):
     entry_text: str
-    entry_type: Optional[str] = "analysis"
+    entry_type: Optional[str] = "update"
     entry_date: Optional[str] = None  # YYYY-MM-DD
+    ai_analyze: Optional[bool] = True  # Whether to perform AI analysis on this entry
 
 @router.post("/cases/{case_id}/entries")
 async def add_case_diary_entry(
@@ -852,23 +877,62 @@ async def add_case_diary_entry(
 ):
     """Append a diary entry to an existing case."""
     # Verify ownership of the case
-    case_resp = supabase.table("cases").select("user_id").eq("id", case_id).single().execute()
+    case_resp = supabase.table("cases").select("user_id, title").eq("id", case_id).single().execute()
     if not case_resp.data:
         raise HTTPException(status_code=404, detail="Case not found")
     if case_resp.data["user_id"] != current_user.id:
         raise HTTPException(status_code=403, detail="Not allowed to modify this case")
 
     entry_id = str(uuid.uuid4())
+    now = datetime.now().isoformat()
+    entry_date = entry.entry_date or datetime.now().date().isoformat()
+    
     entry_record = {
         "id": entry_id,
         "case_id": case_id,
         "user_id": current_user.id,
         "entry_text": entry.entry_text,
         "entry_type": entry.entry_type,
-        "entry_date": entry.entry_date or datetime.now().date().isoformat(),
-        "created_at": datetime.now().isoformat(),
+        "entry_date": entry_date,
+        "created_at": now,
     }
+    
+    # Perform AI analysis if requested and services are available
+    ai_analysis = None
+    if entry.ai_analyze and AI_SERVICE_AVAILABLE:
+        try:
+            # Get existing case data for context
+            case_title = case_resp.data.get("title", "")
+            
+            # Use the AI service to analyze the entry
+            ai_request = AIRequest(
+                query=entry.entry_text,
+                query_type=LegalQueryType.CASE_ANALYSIS,
+                context=f"Case Title: {case_title}\nCase ID: {case_id}"
+            )
+            
+            # Process asynchronously to avoid blocking
+            background_tasks.add_task(
+                process_diary_entry_analysis,
+                entry_id=entry_id,
+                ai_request=ai_request,
+                supabase=supabase
+            )
+            entry_record["ai_status"] = "processing"
+        except Exception as e:
+            logger.error(f"Error queuing AI analysis for diary entry: {e}")
+            entry_record["ai_status"] = "failed"
+    else:
+        entry_record["ai_status"] = "skipped"
+    
+    # Insert the entry    
     supabase.table("case_diary_entries").insert(entry_record).execute()
+    
+    # Update case timestamp
+    supabase.table("cases").update({
+        "updated_at": now
+    }).eq("id", case_id).execute()
+    
     return entry_record
 
 @router.get("/cases/{case_id}/entries")
@@ -885,8 +949,54 @@ async def list_case_diary_entries(
     if case_resp.data["user_id"] != current_user.id:
         raise HTTPException(status_code=403, detail="Not allowed to view this case")
 
-    entries_resp = supabase.table("case_diary_entries").select("*").eq("case_id", case_id).order("entry_date", desc=False).execute()
+    entries_resp = supabase.table("case_diary_entries").select("*").eq("case_id", case_id).order("created_at", desc=False).execute()
     return {"entries": entries_resp.data or []}
+
+@router.get("/cases/{case_id}/diary")
+async def get_case_diary(
+    case_id: str,
+    current_user=Depends(verify_user_access),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """Get complete case diary with all entries and AI analyses"""
+    try:
+        # Get case details
+        case_resp = supabase.table("cases").select("*").eq("id", case_id).single().execute()
+        if not case_resp.data:
+            raise HTTPException(status_code=404, detail="Case not found")
+        if case_resp.data["user_id"] != current_user.id:
+            raise HTTPException(status_code=403, detail="Not allowed to view this case")
+            
+        case_data = case_resp.data
+        
+        # Get all diary entries
+        entries_resp = supabase.table("case_diary_entries").select("*").eq("case_id", case_id).order("created_at").execute()
+        entries = entries_resp.data or []
+        
+        # Get all analyses for this case
+        analyses_resp = supabase.table("brief_analyses").select("*").eq("case_id", case_id).order("created_at").execute()
+        analyses = analyses_resp.data or []
+        
+        # Create a statute timeline from the analyses
+        statute_timeline = []
+        for analysis in analyses:
+            if analysis.get("law_codes"):
+                statute_timeline.append({
+                    "timestamp": analysis["created_at"],
+                    "statutes": analysis.get("law_codes", []),
+                    "analysis_id": analysis["id"]
+                })
+        
+        return {
+            "case": case_data,
+            "diary_entries": entries,
+            "ai_analyses": analyses,
+            "statute_timeline": statute_timeline
+        }
+        
+    except Exception as e:
+        logger.error(f"Error retrieving case diary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==============================================
 # 🆕 Document Upload & Processing

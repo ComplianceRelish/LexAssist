@@ -46,11 +46,13 @@ import {
   FaLightbulb,
   FaBalanceScale,
   FaClock,
-  FaCheckDouble
+  FaCheckDouble,
+  FaBook
 } from 'react-icons/fa';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Legend } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService, UserCase, UserDocument, UserStats, CaseBriefSubmission, LegalTextAnalysisResponse } from '../../services/api.service';
+import { useNavigate } from 'react-router-dom';
 import CaseBriefModal from '../../components/Dashboard/CaseBriefModal';
 import StatuteHighlighter from '../../components/StatuteHighlighter';
 
@@ -94,6 +96,7 @@ interface BriefAnalysisResult {
 const EnhancedUserDashboard: React.FC = () => {
   const { user } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [showCaseBriefModal, setShowCaseBriefModal] = useState(false);
   const [submittingBrief, setSubmittingBrief] = useState(false);
@@ -733,6 +736,18 @@ const EnhancedUserDashboard: React.FC = () => {
                         }}
                       >
                         Update Status
+                      </Button>
+                      <Button
+                        leftIcon={<FaBook />}
+                        colorScheme="purple"
+                        variant="solid"
+                        gridColumn="span 2"
+                        onClick={() => {
+                          setShowCaseDetailsModal(false);
+                          navigate(`/case/${selectedCase?.id}/diary`);
+                        }}
+                      >
+                        View Case Diary
                       </Button>
                     </SimpleGrid>
                   </CardBody>
