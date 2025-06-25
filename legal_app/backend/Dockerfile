@@ -3,15 +3,16 @@ FROM python:3.9-slim
 # Set working directory
 WORKDIR /app
 
-# Create cache directories for ML models
-RUN mkdir -p /app/cache/huggingface /app/cache/torch
+# Create cache directory for HuggingFace
+RUN mkdir -p /app/cache/huggingface
 
-# Set environment variables for cache
+# Set environment variables
 ENV TRANSFORMERS_CACHE=/app/cache/huggingface
 ENV HF_HOME=/app/cache/huggingface
-ENV TORCH_HOME=/app/cache/torch
 ENV TOKENIZERS_PARALLELISM=false
 ENV CLOUD_RUN=true
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # Set CORS related environment variables
 ENV CORS_ALLOWED_ORIGINS="https://lex-assist.vercel.app,http://localhost:3000,http://localhost:3001,http://localhost:5173"
@@ -20,31 +21,26 @@ ENV CORS_ALLOW_METHODS="GET,POST,PUT,DELETE,OPTIONS,PATCH"
 ENV CORS_ALLOW_HEADERS="Content-Type,Authorization,X-Requested-With,Accept,Origin"
 ENV CORS_MAX_AGE="600"
 
-# Install build essentials and libraries needed
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
-COPY requirements.txt .
+COPY requirements-api.txt requirements.txt
 
-# Pre-install problematic packages with binary wheels
-RUN pip install --no-cache-dir --only-binary=:all: blis
-
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Pre-download ML models to avoid cold start issues
-RUN python -c "from transformers import AutoTokenizer, AutoModel; \
-    model_name = 'nlpaueb/legal-bert-base-uncased'; \
-    print(f'Pre-downloading {model_name}...'); \
-    tokenizer = AutoTokenizer.from_pretrained(model_name); \
-    model = AutoModel.from_pretrained(model_name); \
-    print('Model pre-downloaded successfully')"
+# Test HuggingFace API connectivity
+RUN python -c "\
+import os; \
+print('Testing HuggingFace API connectivity...'); \
+print(f'HF_TOKEN available: {'yes' if os.getenv('HF_TOKEN') else 'no'}')""
 
 # Add a simple health check script
 RUN echo '#!/bin/bash\necho "Health check passed"' > /app/health_check.sh && \

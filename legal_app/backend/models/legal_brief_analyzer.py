@@ -3,9 +3,11 @@ Legal Brief Analyzer model that processes legal text input
 and provides analysis, relevant laws, and case references using InLegalBERT.
 """
 
-from huggingface_hub import InferenceClient
-from typing import Dict, List, Tuple
+import os
+from typing import Dict, List, Tuple, Union
 import numpy as np
+from numpy.linalg import norm
+from huggingface_hub import InferenceClient
 from backend.services.indian_kanoon import IndianKanoonAPI
 
 class LegalBriefAnalyzer:
@@ -52,12 +54,27 @@ class LegalBriefAnalyzer:
     def _get_legal_embeddings(self, text: str) -> np.ndarray:
         """Get embeddings for the text using HuggingFace Inference API"""
         try:
+            if not text.strip():
+                raise ValueError("Input text cannot be empty")
+                
             # Use feature-extraction task from HF Inference API
             result = self.client.feature_extraction(
                 text,
                 model=self.model_name
             )
-            return np.array(result)
+            
+            # Ensure we have valid embeddings
+            if not result or not isinstance(result, (list, np.ndarray)):
+                raise ValueError("Invalid embeddings format received from API")
+                
+            # Convert to numpy array and ensure 1D vector
+            embeddings = np.array(result)
+            if embeddings.ndim > 1:
+                # If we get multiple vectors (e.g., for multiple tokens), average them
+                embeddings = np.mean(embeddings, axis=0)
+                
+            return embeddings.astype(np.float32)
+            
         except Exception as e:
             raise Exception(f"Error getting embeddings from HuggingFace API: {str(e)}")
     

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 import numpy as np
+from numpy.linalg import norm
 
 from models.legal_brief_analyzer import LegalBriefAnalyzer
 
@@ -50,21 +51,31 @@ async def get_text_embeddings(request: TextAnalysisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """Calculate cosine similarity between two vectors"""
+    return np.dot(a, b) / (norm(a) * norm(b))
+
 @router.post("/similarity", response_model=float)
 async def get_text_similarity(
     text1: str,
     text2: str,
     model_version: Optional[str] = "1.0"
 ):
-    """Calculate semantic similarity between two legal texts"""
+    """Calculate semantic similarity between two legal texts using cosine similarity"""
     try:
         analyzer = get_analyzer()
-        embeddings1 = analyzer._get_legal_embeddings(text1)
-        embeddings2 = analyzer._get_legal_embeddings(text2)
-        similarity = torch.nn.functional.cosine_similarity(
-            embeddings1, embeddings2, dim=1
-        ).item()
-        return similarity
+        
+        # Get embeddings for both texts
+        emb1 = analyzer._get_legal_embeddings(text1)
+        emb2 = analyzer._get_legal_embeddings(text2)
+        
+        # Convert to numpy arrays if they're not already
+        emb1 = np.array(emb1).flatten()
+        emb2 = np.array(emb2).flatten()
+        
+        # Calculate and return cosine similarity
+        return float(cosine_similarity(emb1, emb2))
+        
     except HTTPException as he:
         raise he
     except Exception as e:
@@ -90,21 +101,53 @@ async def analyze_legal_text(request: TextAnalysisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/health", response_model=Dict[str, str])
+@router.get("/health", response_model=Dict[str, Any])
 async def health_check():
-    """Check InLegalBERT service health"""
+    """Health check endpoint that verifies HuggingFace API connectivity"""
+    from huggingface_hub import HfApi
+    import os
+    
+    hf_token = os.getenv("HF_TOKEN")
+    if not hf_token:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "error",
+                "message": "HF_TOKEN environment variable not set",
+                "huggingface_connected": False,
+                "services": {
+                    "huggingface_api": False,
+                    "model_loading": False
+                }
+            }
+        )
+    
     try:
+        # Test HuggingFace API connection
+        api = HfApi(token=hf_token)
+        api.whoami()  # This will raise an exception if token is invalid
+        
+        # Test model loading
         analyzer = get_analyzer()
-        # Test model initialization
-        analyzer._get_legal_embeddings("Test text")
+        test_embeddings = analyzer._get_legal_embeddings("Test health check")
+        
+        if not isinstance(test_embeddings, np.ndarray) or test_embeddings.size == 0:
+            raise ValueError("Invalid embeddings received from model")
+            
         return {
             "status": "healthy",
-            "service": "inlegalbert",
-            "model_version": "1.0",
-            "timestamp": datetime.utcnow().isoformat()
+            "huggingface_connected": True,
+            "services": {
+                "huggingface_api": True,
+                "model_loading": True
+            },
+            "embedding_shape": list(test_embeddings.shape) if hasattr(test_embeddings, 'shape') else None,
+            "environment": {
+                "hf_home": os.getenv("HF_HOME"),
+                "transformers_cache": os.getenv("TRANSFORMERS_CACHE")
+            }
         }
-    except HTTPException as he:
-        raise he
+        
     except Exception as e:
         raise HTTPException(
             status_code=503,

@@ -1,0 +1,31 @@
+# Core dependencies
+fastapi>=0.68.0,<1.0.0
+uvicorn>=0.15.0,<1.0.0
+python-multipart>=0.0.5,<1.0.0
+python-jose[cryptography]>=3.3.0,<4.0.0
+passlib[bcrypt]>=1.7.4,<2.0.0
+python-dotenv>=0.19.0,<1.0.0
+
+# HuggingFace API
+huggingface-hub>=0.25.2,<1.0.0
+requests>=2.26.0,<3.0.0
+numpy>=1.21.0,<2.0.0
+
+# Database
+supabase>=2.0.0,<3.0.0
+python-jose>=3.3.0,<4.0.0
+
+# Utils
+python-multipart>=0.0.5,<1.0.0
+python-dotenv>=0.19.0,<1.0.0
+pydantic>=1.8.0,<2.0.0
+
+# Security
+python-jose[cryptography]>=3.3.0,<4.0.0
+passlib[bcrypt]>=1.7.4,<2.0.0
+
+# Async
+httpx>=0.23.0,<1.0.0
+
+# Logging
+python-json-logger>=2.0.2,<3.0.0
