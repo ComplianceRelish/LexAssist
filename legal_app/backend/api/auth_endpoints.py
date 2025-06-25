@@ -5,7 +5,7 @@ Authentication and User Management API Endpoints for Lex Assist
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import os
 import logging
@@ -256,7 +256,7 @@ class IndianLegalSystemMixin:
 
 # Pydantic models with legal system integration
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     firstName: str
     lastName: str
