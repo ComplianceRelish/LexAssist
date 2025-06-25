@@ -45,8 +45,22 @@ interface CaseDiaryEntry {
   created_at: string;
   updated_at?: string;
   ai_status?: string;
-  ai_analysis?: any;
+  ai_analysis?: {
+    analysis?: string;
+    law_sections?: Array<{
+      code: string;
+      title: string;
+    }>;
+    case_references?: Array<{
+      title: string;
+      year: string;
+    }>;
+  };
   ai_error?: string;
+}
+
+interface GroupedEntries {
+  [date: string]: CaseDiaryEntry[];
 }
 
 interface Statute {
@@ -104,11 +118,11 @@ const EnhancedCaseDiary: React.FC = () => {
       if (error) throw error;
       
       setDiaryData(data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error fetching case diary:', error);
       toast({
         title: 'Error fetching case diary',
-        description: error.message || 'Please try again later',
+        description: error instanceof Error ? error.message : 'Please try again later',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -163,11 +177,11 @@ const EnhancedCaseDiary: React.FC = () => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 500);
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error adding diary entry:', error);
       toast({
         title: 'Error adding entry',
-        description: error.message || 'Please try again later',
+        description: error instanceof Error ? error.message : 'Please try again later',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -203,10 +217,10 @@ const EnhancedCaseDiary: React.FC = () => {
   };
 
   // Group entries by date for timeline display
-  const groupedEntries = React.useMemo(() => {
+  const groupedEntries = React.useMemo<GroupedEntries>(() => {
     if (!diaryData?.diary_entries) return {};
     
-    const grouped = {};
+    const grouped: GroupedEntries = {};
     diaryData.diary_entries.forEach(entry => {
       const date = entry.entry_date;
       if (!grouped[date]) {
@@ -247,9 +261,9 @@ const EnhancedCaseDiary: React.FC = () => {
           <Divider />
           
           {Object.entries(groupedEntries).length > 0 ? (
-            Object.entries(groupedEntries)
+            Object.entries(groupedEntries as GroupedEntries)
               .sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime())
-              .map(([date, entries]) => (
+              .map(([date, entries]: [string, CaseDiaryEntry[]]) => (
                 <Box key={date} mb={6}>
                   <Flex align="center" mb={2}>
                     <TimeIcon mr={2} color="blue.500" />
@@ -320,7 +334,7 @@ const EnhancedCaseDiary: React.FC = () => {
                                         <Box mt={3}>
                                           <Text fontWeight="bold" fontSize="sm">Relevant Statutes:</Text>
                                           <VStack align="start" spacing={1} mt={1}>
-                                            {entry.ai_analysis.law_sections.map((statute, idx) => (
+                                            {entry.ai_analysis.law_sections.map((statute: {code: string; title: string}, idx: number) => (
                                               <Text key={idx} fontSize="sm">
                                                 • {statute.code}: {statute.title}
                                               </Text>
@@ -333,7 +347,7 @@ const EnhancedCaseDiary: React.FC = () => {
                                         <Box mt={3}>
                                           <Text fontWeight="bold" fontSize="sm">Relevant Cases:</Text>
                                           <VStack align="start" spacing={1} mt={1}>
-                                            {entry.ai_analysis.case_references.map((caseRef, idx) => (
+                                            {entry.ai_analysis.case_references.map((caseRef: {title: string; year: string}, idx: number) => (
                                               <Text key={idx} fontSize="sm">
                                                 • {caseRef.title} ({caseRef.year})
                                               </Text>
@@ -385,7 +399,7 @@ const EnhancedCaseDiary: React.FC = () => {
                     </h2>
                     <AccordionPanel pb={4}>
                       <VStack align="start" spacing={2}>
-                        {timelineItem.statutes.map((statute, idx) => (
+                        {timelineItem.statutes.map((statute: Statute, idx: number) => (
                           <Box key={idx} p={2} borderWidth="1px" borderRadius="md" w="100%">
                             <Text fontWeight="bold">{statute.code}</Text>
                             <Text fontSize="sm">{statute.title}</Text>
