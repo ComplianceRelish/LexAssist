@@ -395,7 +395,7 @@ async def analyze_legal_brief(
         brief_record = {
             "id": analysis_id,
             "user_id": brief.user_id,
-    "case_id": case_id,
+            "case_id": case_id,
             "title": brief.title,
             "brief_text": brief.brief_text,
             "court": brief.court,
@@ -538,7 +538,12 @@ async def find_precedent_cases_fallback(brief: CaseBriefSubmission, user_data: D
         logger.error(f"Error finding precedent cases: {str(e)}")
         return []
 
-async def perform_comprehensive_analysis_fallback(brief: CaseBriefSubmission, user_data: Dict, law_codes: List[Dict], precedent_cases: List[Dict]) -> Dict:
+async def perform_comprehensive_analysis_fallback(
+    brief: CaseBriefSubmission,
+    user_data: Dict,
+    law_codes: List[Dict],
+    precedent_cases: List[Dict]
+) -> Dict:
     """Fallback comprehensive analysis using rule-based logic"""
     try:
         # Basic analysis based on case type and content
@@ -643,107 +648,6 @@ async def generate_recommendations_fallback(brief: CaseBriefSubmission, ai_analy
         logger.error(f"Error generating recommendations: {str(e)}")
         return []
 
-@router.post("/legal/speech-to-brief")
-async def convert_speech_to_brief(
-    audio_file: UploadFile = File(...),
-    current_user=Depends(verify_user_access)
-):
-    """Convert speech input to legal brief text with fallback"""
-    if not SPEECH_SERVICE_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Speech-to-text service is currently unavailable. Please try typing your brief instead."
-        )
-    
-    try:
-        allowed_formats = ["audio/wav", "audio/mp3", "audio/m4a", "audio/ogg", "audio/flac", "audio/webm"]
-        if audio_file.content_type not in allowed_formats:
-            raise HTTPException(
-                status_code=400,
-                detail="Unsupported audio format. Please use WAV, MP3, M4A, OGG, FLAC, or WEBM."
-            )
-        
-        temp_audio_path = f"/tmp/{uuid.uuid4()}_{audio_file.filename}"
-        with open(temp_audio_path, "wb") as buffer:
-            content = await audio_file.read()
-            buffer.write(content)
-        
-        logger.info(f"Processing audio file: {audio_file.filename} ({len(content)} bytes)")
-        
-        transcription_result = await whisper_service.transcribe_audio_async(temp_audio_path)
-        
-        # Clean up temp file
-        if os.path.exists(temp_audio_path):
-            os.remove(temp_audio_path)
-        
-        formatted_brief = await format_legal_brief_from_speech_fallback(transcription_result["text"])
-        
-        return {
-            "transcribed_text": transcription_result["text"],
-            "confidence_score": transcription_result["confidence_score"],
-            "duration": transcription_result["duration"],
-            "legal_terms_detected": transcription_result["legal_terms_detected"],
-            "formatted_brief": formatted_brief,
-            "suggestions": {
-                "title": formatted_brief.get("suggested_title"),
-                "case_type": formatted_brief.get("suggested_case_type"),
-                "court": formatted_brief.get("suggested_court")
-            },
-            "word_timestamps": transcription_result.get("words", [])
-        }
-        
-    except Exception as e:
-        logger.error(f"Error processing speech input: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing speech input: {str(e)}"
-        )
-
-async def format_legal_brief_from_speech_fallback(transcribed_text: str) -> Dict:
-    """Fallback formatting for transcribed speech"""
-    try:
-        # Basic text analysis for suggestions
-        text = transcribed_text.lower()
-        
-        # Suggest case type based on keywords
-        suggested_case_type = "civil"
-        if any(word in text for word in ['criminal', 'theft', 'murder', 'assault']):
-            suggested_case_type = "criminal"
-        elif any(word in text for word in ['property', 'land', 'house', 'ownership']):
-            suggested_case_type = "property"
-        elif any(word in text for word in ['family', 'divorce', 'marriage', 'custody']):
-            suggested_case_type = "family"
-        elif any(word in text for word in ['company', 'corporate', 'business', 'partnership']):
-            suggested_case_type = "corporate"
-        
-        # Suggest court based on case complexity
-        suggested_court = "District Court"
-        if any(word in text for word in ['constitutional', 'fundamental rights', 'supreme']):
-            suggested_court = "Supreme Court"
-        elif any(word in text for word in ['high court', 'appeal', 'revision']):
-            suggested_court = "High Court"
-        
-        # Generate title
-        suggested_title = f"Legal Brief - {suggested_case_type.title()} Matter"
-        
-        return {
-            "formatted_text": transcribed_text,
-            "suggested_title": suggested_title,
-            "suggested_case_type": suggested_case_type,
-            "suggested_court": suggested_court,
-            "key_issues": [],
-            "relevant_facts": []
-        }
-        
-    except Exception as e:
-        logger.error(f"Error formatting speech to brief: {str(e)}")
-        return {
-            "formatted_text": transcribed_text,
-            "suggested_title": "Legal Brief",
-            "suggested_case_type": "civil",
-            "suggested_court": "District Court"
-        }
-
 @router.post("/cases")
 async def create_case(
     case_data: CaseData,
@@ -777,6 +681,22 @@ async def create_case(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating case: {str(e)}"
         )
+
+# ==============================================
+# 🆕 InLegalBERT Health Check
+# ==============================================
+
+@router.get("/inlegalbert/health")
+async def check_inlegalbert_health():
+    """Check if the InLegalBERT service is available and healthy"""
+    try:
+        if INLEGAL_BERT_PROCESSOR_AVAILABLE:
+            return {"status": "available", "service": "InLegalBERT"}
+        else:
+            return {"status": "unavailable", "service": "InLegalBERT", "reason": "Service not loaded"}
+    except Exception as e:
+        logger.error(f"Error checking InLegalBERT health: {e}")
+        return {"status": "error", "service": "InLegalBERT", "message": str(e)}
 
 # ==============================================
 # 🆕 Enhanced Legal Query Processing with inlegalBERT

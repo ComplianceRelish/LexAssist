@@ -452,6 +452,18 @@ try:
         logger.error(f"Transformers not available: {e}")
         ml_dependencies["transformers"] = None
     
+    # Load Legal API endpoints
+    try:
+        from api.legal_endpoints import router as legal_endpoints_router
+        app.include_router(legal_endpoints_router, prefix="/api", tags=["Legal"])
+        logger.info("✅ Legal endpoints loaded successfully")
+    except ImportError as e:
+        logger.error(f"❌ Legal endpoints failed to load: {e}")
+    except Exception as e:
+        logger.error(f"❌ Legal endpoints unexpected error: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+    
     # Load Legal BERT endpoints
     try:
         from api.legal_bert import router as legal_bert_router
