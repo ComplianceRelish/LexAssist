@@ -24,7 +24,7 @@ try:
     from services.inlegalbert_processor import InLegalBERTProcessor
 except ImportError:
     # Fallback import path for different contexts
-    from legal_app.backend.services.inlegalbert_processor import InLegalBERTProcessor
+    from services.inlegalbert_processor import InLegalBERTProcessor
 
 import logging
 import os

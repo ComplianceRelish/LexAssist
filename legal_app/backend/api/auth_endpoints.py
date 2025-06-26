@@ -313,7 +313,7 @@ class UserCreate(BaseModel):
 
 class UserResponse(BaseModel):
     id: str
-    email: EmailStr
+    email: Str
     full_name: str
     role: str
     subscription_tier: str

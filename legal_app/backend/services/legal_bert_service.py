@@ -4,7 +4,7 @@ LegalBert Service for LexAssist Application
 This service provides an interface to the InLegalBERT model for legal text processing.
 Using Hugging Face Inference API only - no local model loading.
 """
-
+import threading
 import os
 import logging
 import requests
