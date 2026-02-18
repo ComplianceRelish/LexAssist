@@ -11,20 +11,36 @@ app = Flask(__name__)
 CORS(app)
 logger = setup_logger()
 
-analyzer = LegalBriefAnalyzer()
+indian_kanoon = IndianKanoonAPI()
 inlegalbert = InLegalBERTProcessor()
 supabase = SupabaseClient()
+analyzer = LegalBriefAnalyzer(indian_kanoon=indian_kanoon, inlegalbert=inlegalbert)
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"}), 200
+    return jsonify({
+        "status": "ok",
+        "services": {
+            "supabase": "connected" if supabase.client else "disconnected",
+            "indian_kanoon": "configured" if indian_kanoon.api_key else "missing_key",
+            "inlegalbert": "loaded" if inlegalbert._initialized else "fallback_mode",
+        }
+    }), 200
 
 @app.route("/api/analyze-brief", methods=["POST"])
 def analyze_brief():
     data = request.json
+    if not data:
+        return jsonify({"error": "Request body required"}), 400
     text = data.get("text", "")
-    result = analyzer.analyze(text)
-    return jsonify(result)
+    if not text.strip():
+        return jsonify({"error": "Brief text cannot be empty"}), 400
+    try:
+        result = analyzer.analyze(text)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("Analysis error: %s", e)
+        return jsonify({"error": "Analysis failed", "details": str(e)}), 500
 
 # --- Auth Endpoints for Production ---
 from flask import make_response
@@ -36,15 +52,14 @@ def register():
     phone = data.get('phone')
     try:
         if email:
-            result = supabase.client.auth.sign_up(email=email)
+            result = supabase.client.auth.sign_up({"email": email})
         elif phone:
-            result = supabase.client.auth.sign_up(phone=phone)
+            result = supabase.client.auth.sign_up({"phone": phone})
         else:
             return jsonify({'error': 'Email or phone required'}), 400
-        if result.get('error'):
-            return jsonify({'error': result['error']['message']}), 400
         return jsonify({'message': 'Registration successful. Please verify OTP sent to your contact.'}), 201
     except Exception as e:
+        logger.error("Registration error: %s", e)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/send-otp', methods=['POST'])
@@ -55,15 +70,14 @@ def send_otp():
     channel = 'email' if email else 'sms'
     try:
         if email:
-            result = supabase.client.auth.sign_in_with_otp(email=email)
+            result = supabase.client.auth.sign_in_with_otp({"email": email})
         elif phone:
-            result = supabase.client.auth.sign_in_with_otp(phone=phone)
+            result = supabase.client.auth.sign_in_with_otp({"phone": phone})
         else:
             return jsonify({'error': 'Email or phone required'}), 400
-        if result.get('error'):
-            return jsonify({'error': result['error']['message']}), 400
         return jsonify({'message': f'OTP sent via {channel}'}), 200
     except Exception as e:
+        logger.error("Send OTP error: %s", e)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/verify-otp', methods=['POST'])
@@ -75,21 +89,21 @@ def verify_otp():
     type_ = data.get('type', 'email')  # 'email' or 'sms'
     try:
         if email:
-            result = supabase.client.auth.verify_otp(email=email, token=token, type=type_)
+            result = supabase.client.auth.verify_otp({"email": email, "token": token, "type": type_})
         elif phone:
-            result = supabase.client.auth.verify_otp(phone=phone, token=token, type=type_)
+            result = supabase.client.auth.verify_otp({"phone": phone, "token": token, "type": type_})
         else:
             return jsonify({'error': 'Email or phone required'}), 400
-        if result.get('error'):
-            return jsonify({'error': result['error']['message']}), 400
-        session = result.get('session')
+        session = getattr(result, 'session', None)
         if not session:
             return jsonify({'error': 'OTP verification failed'}), 401
-        resp = make_response(jsonify({'message': 'OTP verified', 'user': result.get('user')}))
-        resp.set_cookie('sb-access-token', session['access_token'], httponly=True, samesite='Lax')
-        resp.set_cookie('sb-refresh-token', session['refresh_token'], httponly=True, samesite='Lax')
+        user_data = getattr(result, 'user', None)
+        resp = make_response(jsonify({'message': 'OTP verified', 'user': user_data.model_dump() if user_data else None}))
+        resp.set_cookie('sb-access-token', session.access_token, httponly=True, samesite='Lax')
+        resp.set_cookie('sb-refresh-token', session.refresh_token, httponly=True, samesite='Lax')
         return resp
     except Exception as e:
+        logger.error("Verify OTP error: %s", e)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -99,8 +113,6 @@ def logout():
     resp.set_cookie('sb-refresh-token', '', expires=0)
     return resp
 
-from flask import request
-from supabase import create_client
 import jwt
 
 @app.route('/api/user/profile', methods=['POST'])
@@ -125,8 +137,6 @@ def update_profile():
         }
         # Upsert into 'profiles' table
         result = supabase.client.table('profiles').upsert(profile_data).execute()
-        if result.get('error'):
-            return jsonify({'error': result['error']['message']}), 400
         return jsonify({'message': 'Profile updated'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -142,14 +152,12 @@ def get_profile():
         if not user_id:
             return jsonify({'error': 'Invalid token'}), 401
         response = supabase.client.table('profiles').select('*').eq('user_id', user_id).single().execute()
-        if response.get('error'):
-            return jsonify({'error': response['error']['message']}), 400
-        return jsonify({'profile': response['data']}), 200
+        return jsonify({'profile': response.data}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 # Register subscription_tiers blueprint
-from subscription_tiers import subscription_tiers_bp
+from backend.subscription_tiers import subscription_tiers_bp
 app.register_blueprint(subscription_tiers_bp)
 
 @app.route('/api/admin/assign-tier', methods=['POST'])
@@ -160,16 +168,14 @@ def assign_tier():
         user_id = payload.get('sub')
         # Only super_admin or admin for org can assign tiers
         profile = supabase.client.table('profiles').select('role').eq('user_id', user_id).single().execute()
-        if not profile['data'] or profile['data'].get('role') not in ['super_admin', 'admin']:
+        if not profile.data or profile.data.get('role') not in ['super_admin', 'admin']:
             return jsonify({'error': 'Unauthorized'}), 403
         data = request.json
         org_id = data.get('org_id')
         tier = data.get('tier')
         # Update org's tier
         result = supabase.client.table('organizations').update({'tier': tier}).eq('id', org_id).execute()
-        if result.get('error'):
-            return jsonify({'error': result['error']['message']}), 400
-        return jsonify({'message': 'Tier assigned', 'org': result['data']}), 200
+        return jsonify({'message': 'Tier assigned', 'org': result.data}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -181,13 +187,11 @@ def revoke_admin():
         user_id = payload.get('sub')
         # Only super_admin can revoke admin
         profile = supabase.client.table('profiles').select('role').eq('user_id', user_id).single().execute()
-        if not profile['data'] or profile['data'].get('role') != 'super_admin':
+        if not profile.data or profile.data.get('role') != 'super_admin':
             return jsonify({'error': 'Unauthorized'}), 403
         data = request.json
         target_user_id = data.get('user_id')
         result = supabase.client.table('profiles').update({'role': 'user'}).eq('user_id', target_user_id).execute()
-        if result.get('error'):
-            return jsonify({'error': result['error']['message']}), 400
         return jsonify({'message': 'Admin role revoked'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -196,9 +200,7 @@ def revoke_admin():
 def get_organizations():
     try:
         orgs = supabase.client.table('organizations').select('id, name, tier').execute()
-        if orgs.get('error'):
-            return jsonify({'error': orgs['error']['message']}), 400
-        return jsonify(orgs['data']), 200
+        return jsonify(orgs.data), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -206,9 +208,7 @@ def get_organizations():
 def get_users():
     try:
         users = supabase.client.table('profiles').select('user_id, full_name, email, role').execute()
-        if users.get('error'):
-            return jsonify({'error': users['error']['message']}), 400
-        return jsonify(users['data']), 200
+        return jsonify(users.data), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

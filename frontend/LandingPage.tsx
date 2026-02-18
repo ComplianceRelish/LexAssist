@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import RegisterModal from './RegisterModal';
-// Import the logo directly
-import logoImage from '../public/images/logo.png'; // Adjust path as needed
+// Logo from public directory — use absolute URL path (Vite serves /public as root)
+const logoImage = '/images/logo.png';
 import './LandingPage.css';
 
 const LandingPage: React.FC = () => {
