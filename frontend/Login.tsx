@@ -113,19 +113,15 @@ const Login: React.FC = () => {
       
       setVerified(true);
       
-      // Redirect to home page on successful login
+      // Redirect to dashboard on successful login
       setTimeout(() => {
-        navigate('/');
+        navigate('/dashboard');
       }, 1000);
     } catch (err: any) {
       setError(err.message || 'An error occurred while verifying OTP');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleRegisterClick = () => {
-    navigate('/register');
   };
 
   return (
@@ -226,17 +222,6 @@ const Login: React.FC = () => {
         {verified && (
           <div className="success-message">Login successful! Redirecting...</div>
         )}
-        
-        <div className="login-footer">
-          <p>Don't have an account?</p>
-          <button
-            className="register-button"
-            onClick={handleRegisterClick}
-            disabled={loading}
-          >
-            Register
-          </button>
-        </div>
       </div>
     </div>
   );

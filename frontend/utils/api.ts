@@ -20,18 +20,6 @@ export async function healthCheck() {
   return response.json();
 }
 
-export async function registerUser({ email, phone }: { email?: string; phone?: string }) {
-  const response = await fetch(`${BASE_URL}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, phone }),
-    credentials: 'include',
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Failed to register');
-  return data;
-}
-
 export async function sendOtp({ email, phone }: { email?: string; phone?: string }) {
   const response = await fetch(`${BASE_URL}/api/auth/send-otp`, {
     method: 'POST',

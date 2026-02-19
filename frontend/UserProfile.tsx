@@ -7,13 +7,9 @@ interface UserProfileProps {
     id: string;
     email: string;
   };
-  subscription: {
-    tier: string;
-    status: string;
-  } | null;
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ user, subscription }) => {
+const UserProfile: React.FC<UserProfileProps> = ({ user }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('profile');
   const [usageStats, setUsageStats] = useState({
@@ -25,15 +21,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, subscription }) => {
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    // Fetch user usage statistics
     fetchUsageStats();
   }, []);
   
   const fetchUsageStats = async () => {
     setLoading(true);
     try {
-      // In a real implementation, this would call the API
-      // For now, we'll use mock data
       setUsageStats({
         briefsAnalyzed: 12,
         caseFilesGenerated: 5,
@@ -51,61 +44,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, subscription }) => {
     setActiveTab(tab);
   };
   
-  const handleUpgradeClick = () => {
-    navigate('/subscription');
-  };
-  
-  const getTierDetails = () => {
-    switch (subscription?.tier) {
-      case 'free':
-        return {
-          name: 'Free',
-          limits: {
-            searches: '10 per day',
-            lawSections: '5 per brief',
-            caseHistories: '5 per brief',
-            documentFormats: 'PDF only',
-            caseFileDrafting: 'Not available'
-          }
-        };
-      case 'pro':
-        return {
-          name: 'Pro',
-          limits: {
-            searches: '50 per day',
-            lawSections: '20 per brief',
-            caseHistories: '20 per brief',
-            documentFormats: 'PDF, DOCX, TXT',
-            caseFileDrafting: 'Basic (petitions and replies)'
-          }
-        };
-      case 'enterprise':
-        return {
-          name: 'Enterprise',
-          limits: {
-            searches: 'Unlimited',
-            lawSections: 'Unlimited',
-            caseHistories: 'Unlimited',
-            documentFormats: 'PDF, DOCX, TXT',
-            caseFileDrafting: 'Advanced (all document types)'
-          }
-        };
-      default:
-        return {
-          name: 'Unknown',
-          limits: {
-            searches: 'Unknown',
-            lawSections: 'Unknown',
-            caseHistories: 'Unknown',
-            documentFormats: 'Unknown',
-            caseFileDrafting: 'Unknown'
-          }
-        };
-    }
-  };
-  
-  const tierDetails = getTierDetails();
-  
   return (
     <div className="user-profile-container">
       <div className="profile-sidebar">
@@ -115,9 +53,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, subscription }) => {
           </div>
           <div className="user-details">
             <h3>{user.email}</h3>
-            <span className={`subscription-badge ${subscription?.tier || 'free'}`}>
-              {tierDetails.name}
-            </span>
           </div>
         </div>
         
@@ -127,12 +62,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, subscription }) => {
             onClick={() => handleTabChange('profile')}
           >
             Profile
-          </button>
-          <button 
-            className={`nav-item ${activeTab === 'subscription' ? 'active' : ''}`}
-            onClick={() => handleTabChange('subscription')}
-          >
-            Subscription
           </button>
           <button 
             className={`nav-item ${activeTab === 'usage' ? 'active' : ''}`}
@@ -177,110 +106,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, subscription }) => {
               
               <button className="save-button">Save Changes</button>
             </div>
-            
-            <div className="password-section">
-              <h2>Change Password</h2>
-              
-              <div className="form-group">
-                <label>Current Password</label>
-                <input type="password" placeholder="Enter current password" />
-              </div>
-              
-              <div className="form-group">
-                <label>New Password</label>
-                <input type="password" placeholder="Enter new password" />
-              </div>
-              
-              <div className="form-group">
-                <label>Confirm New Password</label>
-                <input type="password" placeholder="Confirm new password" />
-              </div>
-              
-              <button className="save-button">Update Password</button>
-            </div>
-          </div>
-        )}
-        
-        {activeTab === 'subscription' && (
-          <div className="subscription-tab">
-            <h1>Subscription Details</h1>
-            
-            <div className="current-plan">
-              <h2>Current Plan</h2>
-              <div className="plan-card">
-                <div className="plan-header">
-                  <h3>{tierDetails.name}</h3>
-                  <span className={`status-badge ${subscription?.status || 'active'}`}>
-                    {subscription?.status === 'canceled' ? 'Canceled' : 'Active'}
-                  </span>
-                </div>
-                
-                <div className="plan-details">
-                  <div className="detail-item">
-                    <span className="detail-label">Searches:</span>
-                    <span className="detail-value">{tierDetails.limits.searches}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Law Sections:</span>
-                    <span className="detail-value">{tierDetails.limits.lawSections}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Case Histories:</span>
-                    <span className="detail-value">{tierDetails.limits.caseHistories}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Document Formats:</span>
-                    <span className="detail-value">{tierDetails.limits.documentFormats}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Case File Drafting:</span>
-                    <span className="detail-value">{tierDetails.limits.caseFileDrafting}</span>
-                  </div>
-                </div>
-                
-                {subscription?.tier !== 'enterprise' && (
-                  <button className="upgrade-button" onClick={handleUpgradeClick}>
-                    Upgrade Plan
-                  </button>
-                )}
-                
-                {subscription?.tier !== 'free' && subscription?.status !== 'canceled' && (
-                  <button className="cancel-button">
-                    Cancel Subscription
-                  </button>
-                )}
-              </div>
-            </div>
-            
-            {subscription?.tier !== 'free' && (
-              <div className="payment-history">
-                <h2>Payment History</h2>
-                <table className="payment-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                      <th>Invoice</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>May 1, 2025</td>
-                      <td>₹{subscription?.tier === 'enterprise' ? '4,999' : '499'}</td>
-                      <td>Paid</td>
-                      <td><a href="#">Download</a></td>
-                    </tr>
-                    <tr>
-                      <td>April 1, 2025</td>
-                      <td>₹{subscription?.tier === 'enterprise' ? '4,999' : '499'}</td>
-                      <td>Paid</td>
-                      <td><a href="#">Download</a></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
         )}
         
@@ -291,44 +116,24 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, subscription }) => {
             {loading ? (
               <div className="loading">Loading usage statistics...</div>
             ) : (
-              <>
-                <div className="usage-stats">
-                  <div className="stat-card">
-                    <h3>Briefs Analyzed</h3>
-                    <p className="stat-value">{usageStats.briefsAnalyzed}</p>
-                  </div>
-                  <div className="stat-card">
-                    <h3>Case Files Generated</h3>
-                    <p className="stat-value">{usageStats.caseFilesGenerated}</p>
-                  </div>
-                  <div className="stat-card">
-                    <h3>Documents Downloaded</h3>
-                    <p className="stat-value">{usageStats.documentsDownloaded}</p>
-                  </div>
-                  <div className="stat-card">
-                    <h3>Searches Performed</h3>
-                    <p className="stat-value">{usageStats.searchesPerformed}</p>
-                  </div>
+              <div className="usage-stats">
+                <div className="stat-card">
+                  <h3>Briefs Analyzed</h3>
+                  <p className="stat-value">{usageStats.briefsAnalyzed}</p>
                 </div>
-                
-                <div className="usage-limits">
-                  <h2>Usage Limits</h2>
-                  <div className="limit-item">
-                    <span className="limit-label">Searches</span>
-                    <div className="limit-bar">
-                      <div 
-                        className="limit-progress" 
-                        style={{ 
-                          width: `${Math.min(100, (usageStats.searchesPerformed / (subscription?.tier === 'free' ? 10 : subscription?.tier === 'pro' ? 50 : 1000)) * 100)}%` 
-                        }}
-                      ></div>
-                    </div>
-                    <span className="limit-text">
-                      {usageStats.searchesPerformed} / {subscription?.tier === 'free' ? '10' : subscription?.tier === 'pro' ? '50' : 'Unlimited'} per day
-                    </span>
-                  </div>
+                <div className="stat-card">
+                  <h3>Case Files Generated</h3>
+                  <p className="stat-value">{usageStats.caseFilesGenerated}</p>
                 </div>
-              </>
+                <div className="stat-card">
+                  <h3>Documents Downloaded</h3>
+                  <p className="stat-value">{usageStats.documentsDownloaded}</p>
+                </div>
+                <div className="stat-card">
+                  <h3>Searches Performed</h3>
+                  <p className="stat-value">{usageStats.searchesPerformed}</p>
+                </div>
+              </div>
             )}
           </div>
         )}

@@ -2,8 +2,7 @@
    LexAssist — ProfileModal.css
    ═══════════════════════════════════════════════════ */
 
-/* Modal overlay + content already defined in RegisterModal.css */
-/* This file adds profile-specific styles */
+/* Profile modal styles */
 
 .profile-details {
   display: flex;
