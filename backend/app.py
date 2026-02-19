@@ -13,8 +13,8 @@ from backend.utils.logger import setup_logger
 # Admin configuration (no SaaS – hard-coded admin roster)
 # ---------------------------------------------------------------------------
 ADMIN_USERS = {
-    "motty.philip@gmail.com":   {"name": "Motty Philip",  "phone": "9446012324",  "role": "super_admin"},
-    "tarunphilip2308@gmail.com": {"name": "Tarun Philip",  "phone": "6282845274",  "role": "admin"},
+    "motty.philip@gmail.com":    {"name": "Motty Philip",  "phone": "9446012324",  "role": "super_admin", "default_password": "LexAdmin@2026!"},
+    "tarunphilip2308@gmail.com": {"name": "Tarun Philip",  "phone": "6282845274",  "role": "admin",       "default_password": "LexAdmin@2026!"},
 }
 
 import os
@@ -114,64 +114,81 @@ def analyze_brief():
         return jsonify({"error": "Analysis failed", "details": str(e)}), 500
 
 # ---------------------------------------------------------------------------
-# Auth – OTP based (Supabase)
+# Auth – Email + Password (Supabase)
 # ---------------------------------------------------------------------------
 
-@app.route("/api/auth/send-otp", methods=["POST"])
-def send_otp():
-    data = request.json
-    email = data.get("email")
-    phone = data.get("phone")
-    channel = "email" if email else "sms"
+@app.route("/api/auth/login", methods=["POST"])
+def login():
+    """Authenticate with email + password.  Sets session cookies."""
+    data = request.json or {}
+    email = data.get("email", "").strip()
+    password = data.get("password", "")
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
     try:
-        if email:
-            supabase.client.auth.sign_in_with_otp({"email": email})
-        elif phone:
-            supabase.client.auth.sign_in_with_otp({"phone": phone})
-        else:
-            return jsonify({"error": "Email or phone required"}), 400
-        return jsonify({"message": f"OTP sent via {channel}"}), 200
-    except Exception as e:
-        logger.error("Send OTP error: %s", e)
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/auth/verify-otp", methods=["POST"])
-def verify_otp():
-    data = request.json
-    email = data.get("email")
-    phone = data.get("phone")
-    token = data.get("token")
-    type_ = data.get("type", "email")
-    try:
-        if email:
-            result = supabase.client.auth.verify_otp({"email": email, "token": token, "type": type_})
-        elif phone:
-            result = supabase.client.auth.verify_otp({"phone": phone, "token": token, "type": type_})
-        else:
-            return jsonify({"error": "Email or phone required"}), 400
-
+        result = supabase.client.auth.sign_in_with_password(
+            {"email": email, "password": password}
+        )
         session = getattr(result, "session", None)
         if not session:
-            return jsonify({"error": "OTP verification failed"}), 401
+            return jsonify({"error": "Invalid credentials"}), 401
 
         user_data = getattr(result, "user", None)
-        user_email = (user_data.email if user_data else email or "").lower()
+        user_email = (user_data.email if user_data else email).lower()
         admin_info = _is_admin(user_email)
 
         body = {
-            "message": "OTP verified",
+            "message": "Login successful",
             "user": user_data.model_dump() if user_data else None,
             "is_admin": admin_info is not None,
             "role": admin_info["role"] if admin_info else "user",
         }
         resp = make_response(jsonify(body))
-        resp.set_cookie("sb-access-token", session.access_token, httponly=True, samesite="Lax")
-        resp.set_cookie("sb-refresh-token", session.refresh_token, httponly=True, samesite="Lax")
+        resp.set_cookie("sb-access-token", session.access_token,
+                        httponly=True, samesite="None", secure=True)
+        resp.set_cookie("sb-refresh-token", session.refresh_token,
+                        httponly=True, samesite="None", secure=True)
         return resp
     except Exception as e:
-        logger.error("Verify OTP error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        logger.error("Login error: %s", e)
+        msg = str(e)
+        if "Invalid login" in msg or "invalid" in msg.lower():
+            return jsonify({"error": "Invalid email or password"}), 401
+        return jsonify({"error": msg}), 500
+
+
+@app.route("/api/auth/setup-admins", methods=["POST"])
+def setup_admins():
+    """One-time endpoint: create admin users in Supabase Auth.
+    Body: {"secret": "<SETUP_SECRET>"}
+    Only works when SETUP_SECRET env var is set and matches.
+    """
+    setup_secret = os.getenv("SETUP_SECRET", "")
+    if not setup_secret:
+        return jsonify({"error": "Setup disabled (SETUP_SECRET not configured)"}), 403
+
+    body = request.json or {}
+    if body.get("secret") != setup_secret:
+        return jsonify({"error": "Invalid setup secret"}), 403
+
+    results = []
+    for email_key, info in ADMIN_USERS.items():
+        try:
+            # Create user with pre-confirmed email
+            user = supabase.client.auth.admin.create_user({
+                "email": email_key,
+                "password": info.get("default_password", "LexAssist@2026"),
+                "email_confirm": True,
+                "user_metadata": {"full_name": info["name"]},
+            })
+            results.append({"email": email_key, "status": "created", "id": user.user.id if user.user else None})
+        except Exception as e:
+            err_msg = str(e)
+            if "already" in err_msg.lower():
+                results.append({"email": email_key, "status": "already_exists"})
+            else:
+                results.append({"email": email_key, "status": "error", "detail": err_msg})
+    return jsonify({"results": results}), 200
 
 
 @app.route("/api/auth/logout", methods=["POST"])
