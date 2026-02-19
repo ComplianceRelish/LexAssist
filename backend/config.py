@@ -9,4 +9,3 @@ class Config:
     SUPABASE_URL = os.environ.get('SUPABASE_URL')
     SUPABASE_ANON_PUBLIC_KEY = os.environ.get('SUPABASE_ANON_PUBLIC_KEY')
     SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
-    REDIS_URL = os.environ.get('REDIS_URL')

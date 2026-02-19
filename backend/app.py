@@ -93,6 +93,21 @@ def analyze_brief():
         return jsonify({"error": "Brief text cannot be empty"}), 400
     try:
         result = analyzer.analyze(text)
+
+        # Log activity for the authenticated user
+        user_id, _ = _get_current_user()
+        if user_id and supabase.client:
+            try:
+                snippet = text[:200].replace("\n", " ")
+                supabase.client.table("activity_log").insert({
+                    "user_id": user_id,
+                    "action": "brief_analyzed",
+                    "title": "Brief Analysis",
+                    "detail": snippet,
+                }).execute()
+            except Exception as log_err:
+                logger.warning("Activity log write failed: %s", log_err)
+
         return jsonify(result)
     except Exception as e:
         logger.error("Analysis error: %s", e)
@@ -200,6 +215,62 @@ def get_profile():
         response = supabase.client.table("profiles").select("*").eq("user_id", user_id).single().execute()
         return jsonify({"profile": response.data}), 200
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ---------------------------------------------------------------------------
+# User stats & activity history  (real data from activity_log)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/user/stats", methods=["GET"])
+def user_stats():
+    """Aggregate usage counts from the activity_log table."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        rows = (
+            supabase.client.table("activity_log")
+            .select("action")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        actions = [r["action"] for r in (rows.data or [])]
+        return jsonify({
+            "briefsAnalyzed": actions.count("brief_analyzed"),
+            "caseFilesGenerated": actions.count("case_file_generated"),
+            "documentsDownloaded": actions.count("document_downloaded"),
+            "searchesPerformed": actions.count("search_performed"),
+        }), 200
+    except Exception as e:
+        logger.error("Stats error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/user/history", methods=["GET"])
+def user_history():
+    """Return the most recent activity entries (paginated)."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        limit = min(int(request.args.get("limit", 20)), 100)
+        offset = int(request.args.get("offset", 0))
+        action_filter = request.args.get("action")  # optional filter
+
+        query = (
+            supabase.client.table("activity_log")
+            .select("id, action, title, detail, created_at")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .range(offset, offset + limit - 1)
+        )
+        if action_filter:
+            query = query.eq("action", action_filter)
+
+        rows = query.execute()
+        return jsonify({"history": rows.data or []}), 200
+    except Exception as e:
+        logger.error("History error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 # ---------------------------------------------------------------------------

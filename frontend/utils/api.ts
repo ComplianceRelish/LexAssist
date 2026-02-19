@@ -83,3 +83,32 @@ export async function logout() {
   }
   return response.json();
 }
+
+// --- Usage stats (real data from activity_log) ---
+
+export async function fetchUserStats() {
+  const response = await fetch(`${BASE_URL}/api/user/stats`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch stats');
+  return data;
+}
+
+// --- Activity history (real data from activity_log) ---
+
+export async function fetchUserHistory(params?: { limit?: number; offset?: number; action?: string }) {
+  const q = new URLSearchParams();
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.offset) q.set('offset', String(params.offset));
+  if (params?.action) q.set('action', params.action);
+
+  const response = await fetch(`${BASE_URL}/api/user/history?${q.toString()}`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch history');
+  return data.history;
+}

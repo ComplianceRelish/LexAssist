@@ -7,7 +7,9 @@ class SupabaseClient:
     def __init__(self, url: str = None, key: str = None):
         self.logger = setup_logger("SupabaseClient")
         self.url = url or Config.SUPABASE_URL
-        self.key = key or Config.SUPABASE_ANON_PUBLIC_KEY
+        # Backend uses the service-role key so it can bypass RLS.
+        # Auth is validated separately via JWT cookies in app.py.
+        self.key = key or Config.SUPABASE_SERVICE_ROLE_KEY or Config.SUPABASE_ANON_PUBLIC_KEY
         self.client = None
         if self.url and self.key:
             try:

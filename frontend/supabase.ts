@@ -89,58 +89,7 @@ export const authService = {
   }
 };
 
-// Database Service
-export const dbService = {
-  // Briefs operations
-  briefs: {
-    create: async (userId: string, briefData: { title: string; content: string }) => {
-      const { data, error } = await supabase
-        .from('briefs')
-        .insert({ user_id: userId, ...briefData })
-        .select();
-      return error ? handleSupabaseError(error) : { data };
-    },
-    getById: async (briefId: string) => {
-      const { data, error } = await supabase
-        .from('briefs')
-        .select('*')
-        .eq('id', briefId)
-        .single();
-      return error ? handleSupabaseError(error) : { data };
-    }
-  },
-
-  // Analysis operations
-  analysis: {
-    saveResults: async (userId: string, briefId: string, results: AnalysisResult) => {
-      const { data, error } = await supabase
-        .from('analysis_results')
-        .insert({ user_id: userId, brief_id: briefId, ...results })
-        .select();
-      return error ? handleSupabaseError(error) : { data };
-    }
-  }
-};
-
-// Storage Service
-export const storageService = {
-  uploadFile: async (userId: string, path: string, file: File) => {
-    const { data, error } = await supabase.storage
-      .from('user_files')
-      .upload(`${userId}/${path}`, file);
-    return error ? handleSupabaseError(error) : { data };
-  },
-  getPublicUrl: (userId: string, path: string) => {
-    const { data } = supabase.storage
-      .from('user_files')
-      .getPublicUrl(`${userId}/${path}`);
-    return data.publicUrl;
-  }
-};
-
 export default {
   auth: authService,
-  db: dbService,
-  storage: storageService,
   client: supabase
 };

@@ -1,26 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 import './ProfileModal.css';
 
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// User profile functions
+// User profile functions — use shared Supabase client & correct column (user_id)
 async function fetchUserProfile(): Promise<UserProfile | null> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
-    
-    // Get profile from profiles table
+
     const { data } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', user.id)
+      .eq('user_id', user.id)
       .single();
-      
-    return data as UserProfile;
+
+    if (!data) return null;
+    // Map snake_case DB columns to camelCase UI fields
+    return {
+      fullName: data.full_name || '',
+      email: data.email || '',
+      phone: data.phone || '',
+      address: data.address || '',
+      age: data.age != null ? String(data.age) : '',
+    };
   } catch (error) {
     console.error('Error fetching user profile:', error);
     return null;
@@ -31,13 +33,18 @@ async function updateUserProfile(profile: UserProfile): Promise<void> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
-    
-    // Update profile in profiles table
+
     const { error } = await supabase
       .from('profiles')
-      .update(profile)
-      .eq('id', user.id);
-      
+      .upsert({
+        user_id: user.id,
+        full_name: profile.fullName,
+        email: profile.email,
+        phone: profile.phone,
+        address: profile.address,
+        age: profile.age ? parseInt(profile.age, 10) : null,
+      });
+
     if (error) throw error;
   } catch (error) {
     console.error('Error updating user profile:', error);
