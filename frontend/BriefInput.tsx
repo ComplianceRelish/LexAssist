@@ -299,7 +299,7 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
                   </div>
                   <div className="text-xs mt-1 opacity-75">
                     {analysisMode === 'ai'
-                      ? 'Claude AI is performing deep legal analysis — extracting entities, identifying precedents, mapping statutes, assessing risk'
+                      ? 'LexAssist AI is performing deep legal analysis — extracting entities, identifying precedents, mapping statutes, assessing risk'
                       : 'Extracting entities, searching precedents, mapping statutes'}
                   </div>
                 </div>

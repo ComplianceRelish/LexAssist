@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchUserProfile, updateUserProfile, fetchUserStats, fetchUserHistory } from './utils/api';
+import { fetchUserProfile, updateUserProfile, fetchUserStats, fetchUserHistory, fetchCaseDetail } from './utils/api';
 import './UserProfile.css';
 
 interface UserProfileProps {
@@ -23,21 +23,34 @@ interface HistoryEntry {
   action: string;
   title: string;
   detail: string;
+  metadata?: { brief_id?: string };
   created_at: string;
+}
+
+interface CaseDetail {
+  activity: any;
+  brief: { id: string; title: string; content: string; created_at: string } | null;
+  analysis: { id: string; analysis: any; law_sections: any; case_histories: any; created_at: string } | null;
 }
 
 const ACTION_LABELS: Record<string, string> = {
   brief_analyzed: 'Brief Analysis',
+  ai_brief_analyzed: 'AI Brief Analysis',
   case_file_generated: 'Case File Generated',
+  document_drafted: 'Document Drafted',
   document_downloaded: 'Document Downloaded',
   search_performed: 'Search Performed',
+  ai_chat: 'AI Legal Chat',
 };
 
 const ACTION_ICON_CLASS: Record<string, string> = {
   brief_analyzed: 'brief',
+  ai_brief_analyzed: 'brief',
   case_file_generated: 'case-file',
+  document_drafted: 'case-file',
   document_downloaded: 'download',
   search_performed: 'brief',
+  ai_chat: 'brief',
 };
 
 function formatDate(iso: string): string {
@@ -45,6 +58,79 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
     + ' - ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
+
+/** Renders AI analysis JSON as structured readable sections */
+const CaseAnalysisDisplay: React.FC<{ analysis: any }> = ({ analysis }) => {
+  if (!analysis) return null;
+
+  // The analysis may be the full merged result or just ai_analysis
+  const ai = analysis.ai_analysis || analysis;
+  const status = ai.status || analysis.status;
+
+  if (status === 'error' || status === 'unavailable') {
+    return <p className="case-no-data">Analysis was not available for this case.</p>;
+  }
+
+  const renderSection = (title: string, icon: string, content: any) => {
+    if (!content || (typeof content === 'object' && Object.keys(content).length === 0)) return null;
+    if (Array.isArray(content) && content.length === 0) return null;
+
+    return (
+      <div className="case-analysis-section" key={title}>
+        <h3>{icon} {title}</h3>
+        {typeof content === 'string' ? (
+          <p>{content}</p>
+        ) : Array.isArray(content) ? (
+          <ul>
+            {content.map((item: any, i: number) => (
+              <li key={i}>
+                {typeof item === 'string' ? item : (
+                  <div>
+                    <strong>{item.title || item.section || item.name || item.case_name || ''}</strong>
+                    {item.description && <span> — {item.description}</span>}
+                    {item.relevance && <span className="case-relevance"> (Relevance: {item.relevance})</span>}
+                    {item.citation && <span className="case-citation"> [{item.citation}]</span>}
+                    {item.key_principle && <div className="case-principle">{item.key_principle}</div>}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : typeof content === 'object' ? (
+          <div className="case-analysis-obj">
+            {Object.entries(content).map(([key, val]) => (
+              <div key={key} className="case-kv">
+                <strong>{key.replace(/_/g, ' ')}:</strong>{' '}
+                <span>{typeof val === 'string' ? val : JSON.stringify(val)}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  return (
+    <div className="case-analysis-display">
+      {renderSection('Case Summary', '📋', ai.case_summary)}
+      {renderSection('Case Type & Jurisdiction', '⚖️', ai.case_type || ai.jurisdiction)}
+      {renderSection('Key Issues', '🔑', ai.key_issues)}
+      {renderSection('Applicable Statutes', '📜', ai.applicable_statutes || ai.statutes)}
+      {renderSection('Relevant Precedents', '📚', ai.relevant_precedents || ai.precedents)}
+      {renderSection('Legal Analysis', '🔍', ai.legal_analysis || ai.analysis_text)}
+      {renderSection('Strategic Recommendations', '🎯', ai.strategic_recommendations || ai.recommendations)}
+      {renderSection('Risk Assessment', '⚠️', ai.risk_assessment)}
+      {renderSection('Strengths', '💪', ai.strengths)}
+      {renderSection('Weaknesses', '🔻', ai.weaknesses)}
+      {renderSection('Next Steps', '📝', ai.next_steps)}
+
+      {/* Regex-extracted entities if present */}
+      {analysis.entities && Object.keys(analysis.entities).length > 0 && (
+        renderSection('Extracted Entities', '🏷️', analysis.entities)
+      )}
+    </div>
+  );
+};
 
 const UserProfile: React.FC<UserProfileProps> = ({ user }) => {
   const navigate = useNavigate();
@@ -69,6 +155,11 @@ const UserProfile: React.FC<UserProfileProps> = ({ user }) => {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyFilter, setHistoryFilter] = useState('all');
+
+  // --- Case detail state ---
+  const [selectedCase, setSelectedCase] = useState<CaseDetail | null>(null);
+  const [caseLoading, setCaseLoading] = useState(false);
+  const [caseError, setCaseError] = useState<string | null>(null);
 
   // Load profile on mount
   useEffect(() => {
@@ -127,6 +218,30 @@ const UserProfile: React.FC<UserProfileProps> = ({ user }) => {
       setProfileMsg({ type: 'error', text: err.message || 'Failed to save profile.' });
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  // --- Case detail handler ---
+  const handleViewCase = async (entry: HistoryEntry) => {
+    const hasBrief = entry.metadata?.brief_id;
+    if (!hasBrief) {
+      // No full case stored — just show what we have
+      setSelectedCase({
+        activity: entry,
+        brief: null,
+        analysis: null,
+      });
+      return;
+    }
+    setCaseLoading(true);
+    setCaseError(null);
+    try {
+      const detail = await fetchCaseDetail(entry.id);
+      setSelectedCase(detail);
+    } catch (err: any) {
+      setCaseError(err.message || 'Failed to load case');
+    } finally {
+      setCaseLoading(false);
     }
   };
 
@@ -262,37 +377,100 @@ const UserProfile: React.FC<UserProfileProps> = ({ user }) => {
         {/* ── History Tab ── */}
         {activeTab === 'history' && (
           <div className="history-tab">
-            <h1>Activity History</h1>
+            {/* ── Case Detail View ── */}
+            {selectedCase ? (
+              <div className="case-detail-view">
+                <button className="case-back-btn" onClick={() => setSelectedCase(null)}>
+                  ← Back to History
+                </button>
 
-            <div className="history-filters">
-              <select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)}>
-                <option value="all">All Activities</option>
-                <option value="brief_analyzed">Brief Analyses</option>
-                <option value="case_file_generated">Case Files</option>
-                <option value="document_downloaded">Downloads</option>
-                <option value="search_performed">Searches</option>
-              </select>
-            </div>
+                <div className="case-detail-header">
+                  <h1>{selectedCase.activity?.title || 'Case Detail'}</h1>
+                  <span className="history-date">{formatDate(selectedCase.activity?.created_at)}</span>
+                </div>
 
-            {historyLoading ? (
-              <div className="loading">Loading activity history...</div>
-            ) : history.length === 0 ? (
-              <div className="loading" style={{ color: '#6b7280' }}>
-                No activity recorded yet. Start by analyzing a legal brief!
+                {/* Full Brief */}
+                <div className="case-section">
+                  <h2>📄 Full Case Brief</h2>
+                  {selectedCase.brief?.content ? (
+                    <div className="case-brief-content">
+                      {selectedCase.brief.content}
+                    </div>
+                  ) : (
+                    <p className="case-no-data">
+                      {selectedCase.activity?.detail || 'Brief text not available for this entry.'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Analysis Results */}
+                {selectedCase.analysis?.analysis && (
+                  <div className="case-section">
+                    <h2>🔍 AI Analysis</h2>
+                    <CaseAnalysisDisplay analysis={selectedCase.analysis.analysis} />
+                  </div>
+                )}
+
+                {!selectedCase.brief && !selectedCase.analysis && (
+                  <div className="case-section">
+                    <p className="case-no-data">
+                      Full case data is not available for older entries. New analyses will be saved automatically.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="history-list">
-                {history.map(entry => (
-                  <div className="history-item" key={entry.id}>
-                    <div className={`history-icon ${ACTION_ICON_CLASS[entry.action] || 'brief'}`}></div>
-                    <div className="history-details">
-                      <h3>{ACTION_LABELS[entry.action] || entry.title}</h3>
-                      <p>{entry.detail || '—'}</p>
-                      <span className="history-date">{formatDate(entry.created_at)}</span>
-                    </div>
+              <>
+                <h1>Activity History</h1>
+
+                <div className="history-filters">
+                  <select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)}>
+                    <option value="all">All Activities</option>
+                    <option value="brief_analyzed">Brief Analyses</option>
+                    <option value="ai_brief_analyzed">AI Brief Analyses</option>
+                    <option value="case_file_generated">Case Files</option>
+                    <option value="document_drafted">Documents Drafted</option>
+                    <option value="document_downloaded">Downloads</option>
+                    <option value="ai_chat">AI Chat Sessions</option>
+                  </select>
+                </div>
+
+                {caseError && (
+                  <div className="error-message" style={{ marginBottom: '1rem' }}>{caseError}</div>
+                )}
+
+                {historyLoading || caseLoading ? (
+                  <div className="loading">{caseLoading ? 'Loading case details...' : 'Loading activity history...'}</div>
+                ) : history.length === 0 ? (
+                  <div className="loading" style={{ color: '#6b7280' }}>
+                    No activity recorded yet. Start by analyzing a legal brief!
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <div className="history-list">
+                    {history.map(entry => {
+                      const isCase = ['brief_analyzed', 'ai_brief_analyzed'].includes(entry.action);
+                      return (
+                        <div
+                          className={`history-item ${isCase ? 'history-item-clickable' : ''}`}
+                          key={entry.id}
+                          onClick={isCase ? () => handleViewCase(entry) : undefined}
+                          title={isCase ? 'Click to view full case' : undefined}
+                        >
+                          <div className={`history-icon ${ACTION_ICON_CLASS[entry.action] || 'brief'}`}></div>
+                          <div className="history-details">
+                            <h3>{ACTION_LABELS[entry.action] || entry.title}</h3>
+                            <p>{entry.detail || '—'}</p>
+                            <span className="history-date">{formatDate(entry.created_at)}</span>
+                          </div>
+                          {isCase && (
+                            <div className="history-view-btn">View →</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

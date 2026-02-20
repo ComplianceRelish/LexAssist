@@ -102,7 +102,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
         <div className="flex items-center gap-2 mb-3 px-1">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-full text-xs font-medium text-blue-700">
             <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
-            AI-Enhanced Analysis • Claude
+            AI-Enhanced Analysis • LexAssist
           </span>
         </div>
       )}

@@ -31,6 +31,7 @@ const Header: React.FC<HeaderProps> = ({
 
   const navItems = [
     { path: '/dashboard', label: 'Analyze', icon: '📊' },
+    { path: '/cases', label: 'My Cases', icon: '📁' },
     { path: '/profile', label: 'Profile', icon: '👤' },
     ...((userRole === 'super_admin' || userRole === 'admin')
       ? [{ path: '/admin', label: 'Admin', icon: '🛡️' }]

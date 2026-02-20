@@ -10,6 +10,7 @@ import UserProfile from './UserProfile';
 import ProfileModal from './ProfileModal';
 import ChatPanel from './ChatPanel';
 import AdminPanel from './AdminPanel';
+import MyCases from './MyCases';
 import './App.css';
 
 // Error Boundary Component
@@ -171,6 +172,10 @@ function App() {
                   />
                 </div>
               ) : <Navigate to="/" />
+            } />
+
+            <Route path="/cases" element={
+              user ? <MyCases /> : <Navigate to="/" />
             } />
 
             <Route path="/profile" element={

@@ -338,6 +338,81 @@ export async function fetchUserHistory(params?: { limit?: number; offset?: numbe
   return data.history;
 }
 
+// --- Full case detail (brief + analysis) by activity_log ID ---
+
+export async function fetchCaseDetail(activityId: string) {
+  const response = await fetch(`${BASE_URL}/api/user/case/${activityId}`, {
+    method: 'GET',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch case detail');
+  return data;
+}
+
+// ── Case Diary API ────────────────────────────────────────────────
+
+export async function fetchCases(status?: string) {
+  const q = new URLSearchParams();
+  if (status) q.set('status', status);
+  const response = await fetch(`${BASE_URL}/api/cases?${q.toString()}`, {
+    method: 'GET',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch cases');
+  return data.cases;
+}
+
+export async function fetchCaseDiary(caseId: string) {
+  const response = await fetch(`${BASE_URL}/api/cases/${caseId}`, {
+    method: 'GET',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch case diary');
+  return data;
+}
+
+export async function createCase(title: string, notes?: string) {
+  const response = await fetch(`${BASE_URL}/api/cases`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    credentials: 'include',
+    body: JSON.stringify({ title, notes: notes || '' }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to create case');
+  return data.case;
+}
+
+export async function updateCase(caseId: string, updates: { title?: string; notes?: string; status?: string }) {
+  const response = await fetch(`${BASE_URL}/api/cases/${caseId}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    credentials: 'include',
+    body: JSON.stringify(updates),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to update case');
+  return data.case;
+}
+
+export async function addCaseEntry(caseId: string, text: string, analyze: boolean = false) {
+  const response = await fetch(`${BASE_URL}/api/cases/${caseId}/entry`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    credentials: 'include',
+    body: JSON.stringify({ text, analyze }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to add entry');
+  return data;
+}
+
 // ── Auth: Name + Phone Login ──────────────────────────────────────
 
 export async function loginWithNamePhone(name: string, phone: string) {

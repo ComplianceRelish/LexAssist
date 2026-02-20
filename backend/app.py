@@ -109,16 +109,46 @@ def analyze_brief():
         user_id, _ = _get_current_user()
         if user_id and supabase.client:
             try:
+                # Auto-create a case diary
+                case_id = data.get("case_id")
+                if not case_id:
+                    case_row = supabase.client.table("cases").insert({
+                        "user_id": user_id,
+                        "title": text[:100].replace("\n", " ").strip(),
+                        "status": "active",
+                    }).execute()
+                    case_id = case_row.data[0]["id"] if case_row.data else None
+
+                # Save full brief
+                brief_row = supabase.client.table("briefs").insert({
+                    "user_id": user_id,
+                    "case_id": case_id,
+                    "title": text[:100].replace("\n", " ").strip(),
+                    "content": text,
+                }).execute()
+                brief_id = brief_row.data[0]["id"] if brief_row.data else None
+
+                # Save analysis result
+                if brief_id:
+                    supabase.client.table("analysis_results").insert({
+                        "user_id": user_id,
+                        "brief_id": brief_id,
+                        "analysis": result,
+                    }).execute()
+
                 snippet = text[:200].replace("\n", " ")
                 supabase.client.table("activity_log").insert({
                     "user_id": user_id,
+                    "case_id": case_id,
                     "action": "brief_analyzed",
                     "title": "Brief Analysis",
                     "detail": snippet,
+                    "metadata": {"brief_id": brief_id, "case_id": case_id},
                 }).execute()
             except Exception as log_err:
                 logger.warning("Activity log write failed: %s", log_err)
 
+        result["case_id"] = case_id if user_id else None
         return jsonify(result)
     except Exception as e:
         logger.error("Analysis error: %s", e)
@@ -354,6 +384,66 @@ def user_stats():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/user/case/<activity_id>", methods=["GET"])
+def get_case_detail(activity_id):
+    """Retrieve the full brief + analysis for a given activity_log entry."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        # 1. Get the activity_log entry (verify ownership)
+        activity = (
+            supabase.client.table("activity_log")
+            .select("id, action, title, detail, metadata, created_at")
+            .eq("id", activity_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        if not activity.data:
+            return jsonify({"error": "Activity not found"}), 404
+
+        entry = activity.data
+        brief_id = (entry.get("metadata") or {}).get("brief_id")
+
+        result = {
+            "activity": entry,
+            "brief": None,
+            "analysis": None,
+        }
+
+        if brief_id:
+            # 2. Get full brief text
+            brief = (
+                supabase.client.table("briefs")
+                .select("id, title, content, created_at")
+                .eq("id", brief_id)
+                .eq("user_id", user_id)
+                .single()
+                .execute()
+            )
+            if brief.data:
+                result["brief"] = brief.data
+
+            # 3. Get analysis results
+            analysis = (
+                supabase.client.table("analysis_results")
+                .select("id, law_sections, case_histories, analysis, created_at")
+                .eq("brief_id", brief_id)
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if analysis.data:
+                result["analysis"] = analysis.data[0]
+
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error("Case detail error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/user/history", methods=["GET"])
 def user_history():
     """Return the most recent activity entries (paginated)."""
@@ -367,7 +457,7 @@ def user_history():
 
         query = (
             supabase.client.table("activity_log")
-            .select("id, action, title, detail, created_at")
+            .select("id, action, title, detail, metadata, created_at")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
             .range(offset, offset + limit - 1)
@@ -380,6 +470,257 @@ def user_history():
     except Exception as e:
         logger.error("History error: %s", e)
         return jsonify({"error": str(e)}), 500
+
+# ---------------------------------------------------------------------------
+# Case Diary – CRUD for persistent cases
+# ---------------------------------------------------------------------------
+
+@app.route("/api/cases", methods=["GET"])
+def list_cases():
+    """List all cases for the authenticated user."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        status_filter = request.args.get("status")  # optional: active, closed, archived
+        query = (
+            supabase.client.table("cases")
+            .select("id, title, status, notes, created_at, updated_at")
+            .eq("user_id", user_id)
+            .order("updated_at", desc=True)
+        )
+        if status_filter:
+            query = query.eq("status", status_filter)
+
+        rows = query.execute()
+        return jsonify({"cases": rows.data or []}), 200
+    except Exception as e:
+        logger.error("List cases error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cases", methods=["POST"])
+def create_case():
+    """Create a new case diary (standalone, without analysis)."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    data = request.json or {}
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "Case title is required"}), 400
+    try:
+        row = supabase.client.table("cases").insert({
+            "user_id": user_id,
+            "title": title,
+            "notes": data.get("notes", ""),
+            "status": "active",
+        }).execute()
+        return jsonify({"case": row.data[0] if row.data else None}), 201
+    except Exception as e:
+        logger.error("Create case error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cases/<case_id>", methods=["GET"])
+def get_case(case_id):
+    """Retrieve full case diary: case info + all briefs + all analyses (timeline)."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        # 1. Case metadata
+        case_row = (
+            supabase.client.table("cases")
+            .select("id, title, status, notes, created_at, updated_at")
+            .eq("id", case_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        if not case_row.data:
+            return jsonify({"error": "Case not found"}), 404
+
+        # 2. All briefs for this case (chronological)
+        briefs = (
+            supabase.client.table("briefs")
+            .select("id, title, content, created_at")
+            .eq("case_id", case_id)
+            .eq("user_id", user_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+
+        # 3. All analysis results linked to these briefs
+        brief_ids = [b["id"] for b in (briefs.data or [])]
+        analyses = []
+        if brief_ids:
+            analysis_rows = (
+                supabase.client.table("analysis_results")
+                .select("id, brief_id, analysis, law_sections, case_histories, created_at")
+                .eq("user_id", user_id)
+                .in_("brief_id", brief_ids)
+                .order("created_at", desc=False)
+                .execute()
+            )
+            analyses = analysis_rows.data or []
+
+        # 4. Activity log entries for this case
+        activities = (
+            supabase.client.table("activity_log")
+            .select("id, action, title, detail, created_at")
+            .eq("case_id", case_id)
+            .eq("user_id", user_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+
+        # Build timeline: merge briefs + analyses into entries
+        timeline = []
+        analysis_by_brief = {}
+        for a in analyses:
+            analysis_by_brief.setdefault(a["brief_id"], []).append(a)
+
+        for b in (briefs.data or []):
+            entry = {
+                "type": "brief",
+                "brief_id": b["id"],
+                "title": b["title"],
+                "content": b["content"],
+                "created_at": b["created_at"],
+                "analyses": analysis_by_brief.get(b["id"], []),
+            }
+            timeline.append(entry)
+
+        return jsonify({
+            "case": case_row.data,
+            "timeline": timeline,
+            "activities": activities.data or [],
+        }), 200
+    except Exception as e:
+        logger.error("Get case error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cases/<case_id>", methods=["PATCH"])
+def update_case(case_id):
+    """Update case title, notes, or status."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    data = request.json or {}
+    try:
+        # Verify ownership
+        existing = (
+            supabase.client.table("cases")
+            .select("id")
+            .eq("id", case_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        if not existing.data:
+            return jsonify({"error": "Case not found"}), 404
+
+        updates = {}
+        if "title" in data:
+            updates["title"] = data["title"]
+        if "notes" in data:
+            updates["notes"] = data["notes"]
+        if "status" in data and data["status"] in ("active", "closed", "archived"):
+            updates["status"] = data["status"]
+
+        if not updates:
+            return jsonify({"error": "No fields to update"}), 400
+
+        row = (
+            supabase.client.table("cases")
+            .update(updates)
+            .eq("id", case_id)
+            .execute()
+        )
+        return jsonify({"case": row.data[0] if row.data else None}), 200
+    except Exception as e:
+        logger.error("Update case error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cases/<case_id>/entry", methods=["POST"])
+def add_case_entry(case_id):
+    """Add a new brief/note entry to an existing case, optionally with AI analysis."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    data = request.json or {}
+    text = data.get("text", "").strip()
+    run_analysis = data.get("analyze", False)
+
+    if not text:
+        return jsonify({"error": "Entry text is required"}), 400
+
+    try:
+        # Verify case ownership
+        existing = (
+            supabase.client.table("cases")
+            .select("id, title")
+            .eq("id", case_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        if not existing.data:
+            return jsonify({"error": "Case not found"}), 404
+
+        # 1. Save brief entry to this case
+        brief_row = supabase.client.table("briefs").insert({
+            "user_id": user_id,
+            "case_id": case_id,
+            "title": text[:100].replace("\n", " ").strip(),
+            "content": text,
+        }).execute()
+        brief_id = brief_row.data[0]["id"] if brief_row.data else None
+
+        result = {"brief_id": brief_id, "analysis": None}
+
+        # 2. Optionally run AI analysis on the new entry
+        if run_analysis and claude.is_available and brief_id:
+            regex_context = analyzer.analyze(text)
+            ai_result = claude.analyze_brief(text, context=regex_context)
+            merged = {
+                "status": "success",
+                "ai_analysis": ai_result,
+                "entities": regex_context.get("entities", {}),
+                "case_type_regex": regex_context.get("case_type", {}),
+                "statutes_regex": regex_context.get("statutes", []),
+                "precedents_kanoon": regex_context.get("precedents", []),
+            }
+            supabase.client.table("analysis_results").insert({
+                "user_id": user_id,
+                "brief_id": brief_id,
+                "analysis": merged,
+            }).execute()
+            result["analysis"] = merged
+
+        # 3. Log activity
+        snippet = text[:200].replace("\n", " ")
+        action = "ai_brief_analyzed" if run_analysis else "brief_analyzed"
+        supabase.client.table("activity_log").insert({
+            "user_id": user_id,
+            "case_id": case_id,
+            "action": action,
+            "title": f"Entry: {existing.data['title'][:50]}",
+            "detail": snippet,
+            "metadata": {"brief_id": brief_id, "case_id": case_id},
+        }).execute()
+
+        # Touch the case updated_at
+        supabase.client.table("cases").update({"notes": existing.data.get("notes", "") or ""}).eq("id", case_id).execute()
+
+        return jsonify(result), 201
+    except Exception as e:
+        logger.error("Add case entry error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
 
 # ---------------------------------------------------------------------------
 # AI – Claude-powered endpoints
@@ -423,19 +764,54 @@ def ai_analyze():
             "nlp_enrichment": regex_context.get("nlp_enrichment", {}),
         }
 
-        # Log activity
+        # Save full brief + analysis as a Case Diary, then log activity
+        brief_id = None
+        case_id = data.get("case_id")  # optional: link to existing case
         if supabase.client:
             try:
+                # Auto-create a case if none specified
+                if not case_id:
+                    case_title = text[:100].replace("\n", " ").strip()
+                    # Use AI-generated summary as title if available
+                    ai_summary = ai_result.get("case_summary", "")
+                    if ai_summary and isinstance(ai_summary, str):
+                        case_title = ai_summary[:120]
+                    case_row = supabase.client.table("cases").insert({
+                        "user_id": user_id,
+                        "title": case_title,
+                        "status": "active",
+                    }).execute()
+                    case_id = case_row.data[0]["id"] if case_row.data else None
+
+                brief_row = supabase.client.table("briefs").insert({
+                    "user_id": user_id,
+                    "case_id": case_id,
+                    "title": text[:100].replace("\n", " ").strip(),
+                    "content": text,
+                }).execute()
+                brief_id = brief_row.data[0]["id"] if brief_row.data else None
+
+                if brief_id:
+                    supabase.client.table("analysis_results").insert({
+                        "user_id": user_id,
+                        "brief_id": brief_id,
+                        "analysis": merged,
+                    }).execute()
+
                 snippet = text[:200].replace("\n", " ")
                 supabase.client.table("activity_log").insert({
                     "user_id": user_id,
+                    "case_id": case_id,
                     "action": "ai_brief_analyzed",
                     "title": "AI Brief Analysis",
                     "detail": snippet,
+                    "metadata": {"brief_id": brief_id, "case_id": case_id},
                 }).execute()
             except Exception as log_err:
                 logger.warning("Activity log write failed: %s", log_err)
 
+        # Include case_id in response so frontend can navigate to the case diary
+        merged["case_id"] = case_id
         return jsonify(merged)
 
     except Exception as e:

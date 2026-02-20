@@ -266,7 +266,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ briefContext, isOpen, onClose }) 
             )}
           </div>
           <div className="chat-input-footer">
-            <span>Powered by Claude AI • Indian Law Specialist</span>
+            <span>Powered by LexAssist AI • Indian Law Specialist</span>
           </div>
         </form>
       </div>
