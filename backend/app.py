@@ -272,15 +272,33 @@ def update_profile():
         return jsonify({"error": "Not authenticated"}), 401
     try:
         data = request.json
-        profile_data = {
-            "user_id": user_id,
-            "full_name": data.get("fullName"),
-            "address": data.get("address"),
-            "age": data.get("age"),
-            "email": data.get("email"),
-            "phone": data.get("phone"),
-        }
-        supabase.client.table("profiles").upsert(profile_data).execute()
+        update_fields = {}
+        if data.get("fullName") is not None:
+            update_fields["full_name"] = data["fullName"]
+        if data.get("address") is not None:
+            update_fields["address"] = data["address"]
+        if data.get("age") is not None:
+            update_fields["age"] = data["age"]
+        if data.get("email") is not None:
+            update_fields["email"] = data["email"]
+        if data.get("phone") is not None:
+            update_fields["phone"] = data["phone"]
+
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+
+        supabase.client.table("profiles").update(update_fields).eq("user_id", user_id).execute()
+
+        # If phone changed, also update Supabase Auth password (phone = password)
+        if data.get("phone"):
+            try:
+                supabase.client.auth.admin.update_user_by_id(user_id, {
+                    "password": data["phone"],
+                    "phone": data["phone"],
+                })
+            except Exception as auth_err:
+                logger.warning("Auth phone/password sync failed: %s", auth_err)
+
         return jsonify({"message": "Profile updated"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
