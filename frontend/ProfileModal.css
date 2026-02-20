@@ -50,3 +50,29 @@
   color: #6b7280;
   font-size: 0.95rem;
 }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .profile-details input {
+    font-size: 16px; /* prevent mobile zoom */
+    padding: 0.7rem 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-details > div {
+    padding: 0.5rem 0;
+  }
+  .profile-details strong {
+    font-size: 0.75rem;
+  }
+  .profile-details input {
+    padding: 0.6rem 0.7rem;
+    font-size: 16px;
+    border-radius: 6px;
+  }
+}
+
+@media (pointer: coarse) {
+  .profile-details input { min-height: 44px; }
+}

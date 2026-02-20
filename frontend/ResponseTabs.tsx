@@ -108,13 +108,13 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
       )}
 
       {/* Tab Bar */}
-      <div className="border-b border-gray-200 mb-6 overflow-x-auto">
-        <nav className="-mb-px flex gap-1">
+      <div className="border-b border-gray-200 mb-4 sm:mb-6 -mx-1 overflow-x-auto scrollbar-hide">
+        <nav className="-mb-px flex gap-0 min-w-max px-1">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`whitespace-nowrap px-4 py-3 text-sm font-medium border-b-2 transition-all ${
+              className={`whitespace-nowrap px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-all ${
                 activeTab === tab.key
                   ? 'border-[#0a2e5c] text-[#0a2e5c]'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -147,7 +147,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
             )}
 
             {hasAI && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {ai.case_type && (
                   <Card>
                     <SectionHeading icon="📁" title="Case Classification" />
@@ -188,7 +188,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
             {hasAI && ai.limitation_period && (
               <Card>
                 <SectionHeading icon="⏰" title="Limitation Period" />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 text-sm">
                   <div>
                     <div className="text-gray-500 text-xs uppercase font-medium">Applicable Limitation</div>
                     <div className="font-medium text-gray-800 mt-1">{ai.limitation_period.applicable_limitation}</div>
@@ -496,7 +496,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                   </div>
                 </Card>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {ai.risk_assessment.strengths?.length > 0 && (
                     <Card>
                       <h4 className="font-bold text-green-700 mb-3">💪 Strengths</h4>

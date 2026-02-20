@@ -441,10 +441,101 @@
     border-bottom: 1px solid #e5e7eb;
     padding: 1rem;
   }
+  .user-info {
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+  }
   .profile-nav {
     flex-direction: row;
     overflow-x: auto;
+    gap: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+  }
+  .profile-nav .nav-item {
+    white-space: nowrap;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .profile-content {
+    padding: 1rem;
+  }
+  .profile-content h1 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
   }
   .plan-details { grid-template-columns: 1fr; }
   .usage-stats { grid-template-columns: repeat(2, 1fr); }
+  .profile-form { padding: 1rem; }
+  .profile-form input {
+    font-size: 16px; /* prevent mobile zoom */
+  }
+  .history-item {
+    padding: 0.8rem;
+    gap: 0.8rem;
+  }
+  .history-filters {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .history-filters select {
+    font-size: 16px;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-sidebar {
+    padding: 0.75rem;
+  }
+  .user-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 1.1rem;
+  }
+  .user-details h3 {
+    font-size: 0.85rem;
+  }
+  .profile-content {
+    padding: 0.75rem;
+  }
+  .profile-content h1 {
+    font-size: 1.15rem;
+  }
+  .profile-form { padding: 0.8rem; }
+  .usage-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem;
+  }
+  .stat-card {
+    padding: 1rem;
+  }
+  .stat-card h3 { font-size: 0.7rem; }
+  .stat-value { font-size: 1.5rem; }
+  .history-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+  }
+  .history-details h3 { font-size: 0.85rem; }
+  .history-details p { font-size: 0.78rem; }
+  .payment-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 0.8rem;
+  }
+  .save-button {
+    width: 100%;
+    padding: 0.8rem;
+  }
+}
+
+/* Touch-friendly targets */
+@media (pointer: coarse) {
+  .profile-nav .nav-item { min-height: 44px; }
+  .save-button { min-height: 48px; }
+  .history-item { min-height: 60px; }
+  .history-filters select { min-height: 44px; }
+  .profile-form input { min-height: 44px; }
 }

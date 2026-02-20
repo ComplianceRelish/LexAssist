@@ -17,6 +17,7 @@ const Header: React.FC<HeaderProps> = ({
   onOpenChat
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   let navigate: any;
   let location: any;
   try {
@@ -108,7 +109,61 @@ const Header: React.FC<HeaderProps> = ({
                 </>
               )}
             </div>
+
+            {/* Mobile Hamburger */}
+            <button 
+              className="lex-mobile-hamburger" 
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}
+              aria-label="Menu"
+            >
+              {mobileNavOpen ? '✕' : '☰'}
+            </button>
           </div>
+        )}
+
+        {/* Mobile Nav Drawer */}
+        {isLoggedIn && mobileNavOpen && (
+          <>
+            <div className="lex-mobile-backdrop" onClick={() => setMobileNavOpen(false)} />
+            <div className="lex-mobile-nav">
+              <div className="lex-mobile-nav-header">
+                <div className="lex-mobile-nav-user">
+                  <div className="lex-user-avatar" style={{ width: 40, height: 40, fontSize: '1rem' }}>
+                    {userName?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#0a2e5c' }}>{userName || 'User'}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Advocate</div>
+                  </div>
+                </div>
+              </div>
+              {navItems.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => { setMobileNavOpen(false); navigate?.(item.path); }}
+                  className={`lex-mobile-nav-item ${location?.pathname === item.path ? 'lex-mobile-nav-active' : ''}`}
+                >
+                  <span>{item.icon}</span> {item.label}
+                </button>
+              ))}
+              {onOpenChat && (
+                <button
+                  onClick={() => { setMobileNavOpen(false); onOpenChat(); }}
+                  className="lex-mobile-nav-item"
+                >
+                  💬 AI Chat Assistant
+                </button>
+              )}
+              <div style={{ height: 1, background: '#e5e7eb', margin: '8px 0' }} />
+              <button
+                onClick={() => { setMobileNavOpen(false); onLogoutClick(); }}
+                className="lex-mobile-nav-item"
+                style={{ color: '#dc2626' }}
+              >
+                🚪 Sign Out
+              </button>
+            </div>
+          </>
         )}
 
         {!isLoggedIn && (

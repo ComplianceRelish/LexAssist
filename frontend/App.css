@@ -29,7 +29,18 @@ body {
   color: var(--lex-text);
   background: var(--lex-bg);
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overflow-x: hidden;
 }
+
+/* Safe area support for notched devices */
+.lex-header { padding-top: env(safe-area-inset-top, 0); }
+.lex-footer { padding-bottom: env(safe-area-inset-bottom, 0); }
+
+/* Prevent horizontal overflow on mobile */
+html, body { max-width: 100vw; overflow-x: hidden; }
 
 /* ── Loading Screen ────────────────────────────────────────────── */
 .lex-loading-screen {
@@ -316,6 +327,97 @@ body {
 
 .lex-login-btn:hover {
   background: var(--lex-primary-light);
+}
+
+/* ── Mobile Hamburger & Nav ────────────────────────────────── */
+.lex-mobile-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  color: var(--lex-text);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: background 0.2s;
+  line-height: 1;
+}
+
+.lex-mobile-hamburger:hover { background: #f3f4f6; }
+
+.lex-mobile-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 46, 92, 0.3);
+  z-index: 200;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeInMobile {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.lex-mobile-nav {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 280px;
+  max-width: 85vw;
+  height: 100vh;
+  background: white;
+  z-index: 210;
+  box-shadow: -4px 0 20px rgba(10, 46, 92, 0.15);
+  padding: 8px 0;
+  animation: slideInMobileNav 0.25s ease;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@keyframes slideInMobileNav {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.lex-mobile-nav-header {
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--lex-border);
+  margin-bottom: 8px;
+}
+
+.lex-mobile-nav-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lex-mobile-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 20px;
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--lex-text);
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+
+.lex-mobile-nav-item:hover { background: #f3f4f6; }
+
+.lex-mobile-nav-active {
+  background: #eef2ff !important;
+  color: var(--lex-primary) !important;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .lex-mobile-hamburger { display: flex; }
+  .lex-user-menu-wrapper { display: none; }
 }
 
 /* ── Dashboard ─────────────────────────────────────────────────── */
@@ -763,23 +865,168 @@ body {
 }
 
 /* ── Responsive ──────────────────────────────────────────────── */
+
+/* Tablet */
 @media (max-width: 768px) {
-  .lex-header-inner { padding: 0 12px; }
+  .lex-header-inner {
+    padding: 0 12px;
+    height: 56px;
+  }
   .lex-nav-desktop { display: none; }
-  .lex-dashboard { padding: 16px 12px 32px; }
+  .lex-logo-text { font-size: 1.1rem; }
+  .lex-logo-sub { font-size: 0.55rem; }
+  .lex-ai-chat-btn span:not(.lex-ai-badge) { display: none; }
+  .lex-ai-chat-btn { padding: 8px 10px; }
+  
+  .lex-dashboard {
+    padding: 16px 12px 32px;
+  }
   .lex-welcome-banner {
     flex-direction: column;
-    gap: 16px;
-    padding: 20px;
+    gap: 14px;
+    padding: 18px 16px;
+    border-radius: 12px;
   }
-  .lex-welcome-text h1 { font-size: 1.2rem; }
-  .lex-welcome-actions { width: 100%; }
-  .lex-quick-action { flex: 1; justify-content: center; text-align: center; }
+  .lex-welcome-text h1 { font-size: 1.15rem; }
+  .lex-welcome-text p { font-size: 0.8rem; }
+  .lex-welcome-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .lex-quick-action {
+    flex: 1;
+    justify-content: center;
+    text-align: center;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+  }
+  
+  .lex-card { padding: 16px; }
+  .lex-brief-card { padding: 16px; }
+  .lex-textarea { font-size: 16px; padding: 14px; } /* 16px prevents iOS/Android zoom */
+
+  .lex-btn-primary {
+    padding: 12px 20px;
+    font-size: 0.88rem;
+    width: 100%;
+  }
+  .lex-btn-voice {
+    padding: 10px 12px;
+    font-size: 0.78rem;
+  }
+  .lex-btn-chat { padding: 8px 10px; font-size: 0.75rem; }
+
+  .lex-stat-card { padding: 12px 14px; }
+  .lex-stat-value { font-size: 1rem; }
+  .lex-stat-label { font-size: 0.65rem; }
+  
+  .lex-footer { padding: 12px 12px; }
+  .lex-footer-inner { font-size: 0.7rem; }
+  .lex-footer-divider { margin: 0 4px; }
+  
+  .lex-dropdown-menu { width: 200px; }
+
+  .lex-loading-title { font-size: 1.6rem; }
+  .lex-loading-logo { font-size: 2.8rem; }
 }
 
-@media (max-width: 640px) {
+/* Small phones (most Android devices) */
+@media (max-width: 480px) {
+  .lex-header-inner {
+    padding: 0 10px;
+    height: 52px;
+  }
+  .lex-logo-icon { font-size: 1.2rem; }
+  .lex-logo-text { font-size: 1rem; }
+  .lex-logo-sub { display: none; }
+  .lex-header-logo { gap: 6px; }
+  .lex-header-right { gap: 8px; }
+  .lex-user-avatar { width: 32px; height: 32px; font-size: 0.75rem; }
+  .lex-ai-chat-btn { padding: 7px 8px; border-radius: 6px; }
+  .lex-ai-badge { display: none; }
+  .lex-login-btn { padding: 6px 14px; font-size: 0.8rem; }
+  
+  .lex-dashboard { padding: 12px 10px 24px; }
+  .lex-welcome-banner {
+    padding: 14px 12px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+  }
+  .lex-welcome-text h1 { font-size: 1.05rem; }
+  .lex-welcome-text p { font-size: 0.75rem; line-height: 1.4; }
+  .lex-welcome-banner::before { display: none; }
+  
   .lex-mode-toggle { flex-direction: column; }
-  .lex-brief-card { padding: 16px; }
+  .lex-mode-btn { padding: 8px 12px; justify-content: center; }
+  
+  .lex-textarea {
+    font-size: 16px;
+    padding: 12px;
+    min-height: 160px;
+  }
+  
+  .lex-alert { padding: 10px 12px; font-size: 0.8rem; }
+  .lex-alert-icon { font-size: 0.85rem; }
+  
+  .lex-stat-card { padding: 10px 12px; }
+  .lex-stat-value { font-size: 0.95rem; }
+  .lex-stat-sub { font-size: 0.65rem; }
+  
+  .lex-btn-ghost { padding: 6px 8px; font-size: 0.75rem; }
+  
+  .lex-dropdown-menu {
+    width: calc(100vw - 24px);
+    right: -8px;
+  }
+  
+  .lex-footer-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.68rem;
+  }
+  .lex-footer-divider { display: none; }
+  
+  .error-container {
+    margin: 40px 12px;
+    padding: 20px;
+    border-radius: 12px;
+  }
+  .error-container h2 { font-size: 1.1rem; }
+}
+
+/* Very small phones (320px width) */
+@media (max-width: 360px) {
+  .lex-header-inner { height: 48px; }
+  .lex-logo-icon { font-size: 1rem; }
+  .lex-logo-text { font-size: 0.9rem; }
+  .lex-welcome-text h1 { font-size: 0.95rem; }
+  .lex-quick-action { font-size: 0.72rem; padding: 8px 10px; }
+  .lex-btn-primary { padding: 10px 16px; font-size: 0.85rem; }
+}
+
+/* Landscape phone */
+@media (max-height: 500px) and (orientation: landscape) {
+  .lex-header-inner { height: 48px; }
+  .lex-dashboard { padding: 8px 16px 16px; }
+  .lex-welcome-banner { padding: 12px 16px; margin-bottom: 12px; }
+  .lex-loading-screen { gap: 2px; }
+  .lex-loading-logo { font-size: 2rem; }
+  .lex-loading-title { font-size: 1.2rem; }
+}
+
+/* Touch-friendly interactive targets */
+@media (pointer: coarse) {
+  .lex-nav-item { min-height: 44px; padding: 10px 14px; }
+  .lex-dropdown-item { min-height: 44px; padding: 12px 16px; }
+  .lex-mode-btn { min-height: 40px; }
+  .lex-btn-voice { min-height: 44px; }
+  .lex-btn-chat { min-height: 40px; }
+  .lex-btn-primary { min-height: 48px; }
+  .lex-btn-ghost { min-height: 40px; }
+  .lex-quick-action { min-height: 44px; }
+  .lex-user-avatar { min-width: 40px; min-height: 40px; }
+  .lex-ai-chat-btn { min-height: 40px; }
 }
 
 /* ── Legacy compatibility (keep old class support) ──────────── */

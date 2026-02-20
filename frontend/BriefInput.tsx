@@ -307,8 +307,8 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
-            <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2 w-full">
               {/* Voice Input */}
               <button
                 type="button"
@@ -344,7 +344,7 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
 
             <button
               type="submit"
-              className={`lex-btn-primary w-full sm:w-auto ${analysisMode === 'ai' ? 'lex-btn-ai' : ''}`}
+              className={`lex-btn-primary w-full ${analysisMode === 'ai' ? 'lex-btn-ai' : ''}`}
               disabled={loading || !brief.trim()}
             >
               {analysisMode === 'ai' ? (
@@ -361,7 +361,7 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
       {transformedResult && (
         <>
           {/* Quick summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 mb-6">
             <div className="lex-stat-card">
               <div className="lex-stat-label">Case Type</div>
               <div className="lex-stat-value">
