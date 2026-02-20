@@ -7,6 +7,7 @@ import Header from './Header';
 import BriefInput from './BriefInput';
 import UserProfile from './UserProfile';
 import ProfileModal from './ProfileModal';
+import ChatPanel from './ChatPanel';
 import './App.css';
 
 // Error Boundary Component
@@ -42,6 +43,8 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [briefContext, setBriefContext] = useState<string | null>(null);
 
   // Check auth state on mount
   useEffect(() => {
@@ -70,18 +73,19 @@ function App() {
   const handleLogout = async () => {
     await authService.signOut();
     setUser(null);
+    setBriefContext(null);
+    setShowChat(false);
   };
 
   if (loading) {
     return (
-      <div className="loading-screen" style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', height: '100vh', background: '#f8f9fb'
-      }}>
-        <div style={{ fontSize: '2rem', color: '#0a2e5c', fontWeight: 700, marginBottom: '0.5rem' }}>
-          ⚖️ LexAssist
+      <div className="lex-loading-screen">
+        <div className="lex-loading-logo">⚖️</div>
+        <div className="lex-loading-title">LexAssist</div>
+        <div className="lex-loading-sub">AI-Powered Legal Research</div>
+        <div className="lex-loading-spinner">
+          <div className="lex-spinner"></div>
         </div>
-        <div style={{ color: '#6b7280' }}>Loading...</div>
       </div>
     );
   }
@@ -96,10 +100,11 @@ function App() {
             onLoginClick={() => {}}
             onLogoutClick={handleLogout}
             userName={user.email?.split('@')[0]}
+            onOpenChat={() => setShowChat(true)}
           />
         )}
 
-        <main style={{ flex: 1 }}>
+        <main style={{ flex: 1, background: '#f8fafc' }}>
           <Routes>
             {/* Login is the landing page */}
             <Route path="/" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
@@ -107,16 +112,33 @@ function App() {
             {/* Protected routes */}
             <Route path="/dashboard" element={
               user ? (
-                <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem' }}>
-                  <div style={{ marginBottom: '2rem' }}>
-                    <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#0a2e5c', marginBottom: '0.3rem' }}>
-                      Welcome, {user.email?.split('@')[0] || 'Advocate'}
-                    </h1>
-                    <p style={{ color: '#6b7280' }}>
-                      Enter your case brief below to get AI-powered legal analysis with precedents, statutes, and strategic recommendations.
-                    </p>
+                <div className="lex-dashboard">
+                  {/* Welcome Banner */}
+                  <div className="lex-welcome-banner">
+                    <div className="lex-welcome-text">
+                      <h1>
+                        Welcome back, <span className="lex-welcome-name">{user.email?.split('@')[0] || 'Advocate'}</span>
+                      </h1>
+                      <p>
+                        Enter your case brief below for AI-powered legal analysis with precedents, statutes, and strategic recommendations.
+                      </p>
+                    </div>
+                    <div className="lex-welcome-actions">
+                      <button
+                        className="lex-quick-action"
+                        onClick={() => setShowChat(true)}
+                      >
+                        💬 Ask AI Legal Query
+                      </button>
+                    </div>
                   </div>
-                  <BriefInput isLoggedIn={true} />
+
+                  {/* Main Content */}
+                  <BriefInput
+                    isLoggedIn={true}
+                    onBriefChange={(text: string) => setBriefContext(text)}
+                    onOpenChat={() => setShowChat(true)}
+                  />
                 </div>
               ) : <Navigate to="/" />
             } />
@@ -134,12 +156,22 @@ function App() {
 
         {/* Footer for authenticated pages */}
         {user && (
-          <footer style={{
-            background: '#0a2e5c', color: 'rgba(255,255,255,0.7)',
-            textAlign: 'center', padding: '1rem', fontSize: '0.85rem'
-          }}>
-            © {new Date().getFullYear()} LexAssist — Built by Adv. Tarun Philip ⚖️
+          <footer className="lex-footer">
+            <div className="lex-footer-inner">
+              <span>© {new Date().getFullYear()} LexAssist — AI-Powered Legal Research</span>
+              <span className="lex-footer-divider">•</span>
+              <span>Built by Adv. Tarun Philip ⚖️</span>
+            </div>
           </footer>
+        )}
+
+        {/* AI Chat Panel */}
+        {user && (
+          <ChatPanel
+            briefContext={briefContext}
+            isOpen={showChat}
+            onClose={() => setShowChat(false)}
+          />
         )}
 
         {/* Profile Modal */}

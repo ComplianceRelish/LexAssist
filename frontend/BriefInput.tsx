@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { analyzeBrief } from './utils/api';
+import { analyzeBrief, aiAnalyzeBrief } from './utils/api';
 import ResponseTabs from './ResponseTabs';
 
 // Web Speech API types
@@ -20,16 +20,22 @@ declare global {
 
 interface BriefInputProps {
   isLoggedIn: boolean;
+  onBriefChange?: (text: string) => void;
+  onOpenChat?: () => void;
 }
 
-const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
+type AnalysisMode = 'basic' | 'ai';
+
+const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOpenChat }) => {
   const [brief, setBrief] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('ai');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
+  const [aiResult, setAiResult] = useState<any>(null);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -40,6 +46,11 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     setSpeechSupported(!!SpeechRecognition);
   }, []);
+
+  // Notify parent of brief text changes
+  useEffect(() => {
+    onBriefChange?.(brief);
+  }, [brief, onBriefChange]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -55,13 +66,39 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
     e.preventDefault();
     setError(null);
     setResult(null);
+    setAiResult(null);
     if (!isLoggedIn) { setShowLoginPrompt(true); return; }
     if (!brief.trim()) { setError('Please enter or dictate your case brief'); return; }
 
     setLoading(true);
     try {
-      const res = await analyzeBrief(brief);
-      setResult(res);
+      if (analysisMode === 'ai') {
+        // AI-enhanced analysis (Claude + regex + Indian Kanoon)
+        const res = await aiAnalyzeBrief(brief);
+        setAiResult(res);
+        // Also extract the regex part for backward compat
+        setResult({
+          status: 'success',
+          statutes: res.statutes_regex || [],
+          precedents: res.precedents_kanoon || [],
+          entities: res.entities || {},
+          case_type: res.case_type_regex || {},
+          jurisdiction: res.jurisdiction_regex || {},
+          timeline: res.timeline || [],
+          analysis: res.ai_analysis?.strategic_recommendations
+            ? {
+                summary: res.ai_analysis.case_summary || '',
+                arguments: res.ai_analysis.arguments_for_petitioner || [],
+                challenges: res.ai_analysis.arguments_for_respondent || [],
+                recommendations: res.ai_analysis.strategic_recommendations || [],
+              }
+            : { summary: '', arguments: [], challenges: [], recommendations: [] },
+        });
+      } else {
+        // Basic regex-only analysis
+        const res = await analyzeBrief(brief);
+        setResult(res);
+      }
     } catch (err) {
       setError((err as Error).message || 'Failed to analyze brief');
     } finally {
@@ -79,7 +116,7 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN'; // Indian English
+    recognition.lang = 'en-IN';
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -120,7 +157,6 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
     };
 
     recognition.onend = () => {
-      // Auto-restart if still recording (browser sometimes stops after silence)
       if (recognitionRef.current && isRecording) {
         try { recognition.start(); } catch {}
       }
@@ -144,16 +180,14 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
   }, []);
 
   const handleVoiceInput = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
+    if (isRecording) stopRecording();
+    else startRecording();
   };
 
   const handleClear = () => {
     setBrief('');
     setResult(null);
+    setAiResult(null);
     setError(null);
     setInterimTranscript('');
   };
@@ -179,11 +213,11 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
       relevance: 7,
       date: '',
     })),
-    analysis: {
-      summary: result.analysis?.summary || result.brief_summary || '',
-      arguments: result.analysis?.arguments || [],
-      challenges: result.analysis?.challenges || [],
-      recommendations: result.analysis?.recommendations || [],
+    analysis: result.analysis || {
+      summary: result.brief_summary || '',
+      arguments: [],
+      challenges: [],
+      recommendations: [],
     },
     caseType: result.case_type,
     jurisdiction: result.jurisdiction,
@@ -197,26 +231,51 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
   
   return (
     <div>
-      <div className="lex-card mb-8">
+      {/* Brief Input Card */}
+      <div className="lex-card lex-brief-card mb-8">
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor="brief" className="block text-lg font-medium text-gray-700 mb-2">
-              Enter Your Case Brief
-            </label>
+            <div className="flex justify-between items-center mb-3">
+              <label htmlFor="brief" className="block text-lg font-semibold text-[#0a2e5c]">
+                Case Brief
+              </label>
+              
+              {/* Analysis Mode Toggle */}
+              <div className="lex-mode-toggle">
+                <button
+                  type="button"
+                  className={`lex-mode-btn ${analysisMode === 'basic' ? 'lex-mode-active' : ''}`}
+                  onClick={() => setAnalysisMode('basic')}
+                >
+                  📊 Basic
+                </button>
+                <button
+                  type="button"
+                  className={`lex-mode-btn ${analysisMode === 'ai' ? 'lex-mode-active lex-mode-ai' : ''}`}
+                  onClick={() => setAnalysisMode('ai')}
+                >
+                  🧠 AI Analysis
+                  <span className="lex-mode-sparkle">✨</span>
+                </button>
+              </div>
+            </div>
+
             <textarea
               id="brief"
-              rows={8}
-              className="lex-input"
+              rows={10}
+              className="lex-textarea"
               placeholder="Describe your case in detail — include parties, facts, dates, sections/acts involved, and the relief sought. You can also use the Voice Input button to dictate..."
               value={brief}
               onChange={(e) => setBrief(e.target.value)}
               disabled={loading}
             />
+            
             {interimTranscript && (
               <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm italic">
                 🎙️ Hearing: "{interimTranscript}"
               </div>
             )}
+            
             <div className="flex justify-between mt-2 text-xs text-gray-400">
               <span>{brief.length} characters</span>
               {brief.trim() && <span>{brief.trim().split(/\s+/).length} words</span>}
@@ -224,64 +283,57 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm">
-              ⚠️ {error}
+            <div className="lex-alert lex-alert-error mb-4">
+              <span className="lex-alert-icon">⚠️</span>
+              <span>{error}</span>
             </div>
           )}
 
           {loading && (
-            <div className="bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-lg mb-4 flex items-center gap-3">
-              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <div>
-                <div className="font-semibold">Analyzing your brief...</div>
-                <div className="text-xs mt-1">Extracting entities, searching precedents, mapping statutes</div>
+            <div className="lex-alert lex-alert-info mb-4">
+              <div className="flex items-center gap-3">
+                <div className="lex-spinner-sm"></div>
+                <div>
+                  <div className="font-semibold">
+                    {analysisMode === 'ai' ? 'AI is analyzing your brief...' : 'Analyzing your brief...'}
+                  </div>
+                  <div className="text-xs mt-1 opacity-75">
+                    {analysisMode === 'ai'
+                      ? 'Claude AI is performing deep legal analysis — extracting entities, identifying precedents, mapping statutes, assessing risk'
+                      : 'Extracting entities, searching precedents, mapping statutes'}
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
             <div className="flex items-center gap-3 w-full sm:w-auto">
+              {/* Voice Input */}
               <button
                 type="button"
                 onClick={handleVoiceInput}
                 disabled={loading || (!speechSupported && !isRecording)}
-                title={speechSupported ? (isRecording ? 'Stop recording' : 'Start voice dictation') : 'Speech not supported in this browser'}
-                className={`flex items-center px-4 py-2 rounded-md transition-all ${
-                  isRecording
-                    ? 'bg-red-600 text-white hover:bg-red-700 animate-pulse'
-                    : speechSupported
-                    ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                }`}
+                title={speechSupported ? (isRecording ? 'Stop recording' : 'Start voice dictation') : 'Speech not supported'}
+                className={`lex-btn-voice ${isRecording ? 'lex-btn-voice-active' : ''}`}
               >
                 {isRecording ? (
-                  <>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
-                    </svg>
-                    Stop ({formatTime(recordingTime)})
-                  </>
+                  <>⏹ Stop ({formatTime(recordingTime)})</>
                 ) : (
-                  <>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-                    </svg>
-                    🎙 Voice Input
-                  </>
+                  <>🎙 Voice Input</>
                 )}
               </button>
 
               {brief.trim() && (
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="text-sm text-gray-500 hover:text-red-600 transition-colors"
-                  disabled={loading}
-                >
+                <button type="button" onClick={handleClear} className="lex-btn-ghost" disabled={loading}>
                   Clear
+                </button>
+              )}
+
+              {/* Chat with AI about brief */}
+              {brief.trim() && onOpenChat && (
+                <button type="button" onClick={onOpenChat} className="lex-btn-chat" disabled={loading}>
+                  💬 Ask AI
                 </button>
               )}
 
@@ -292,13 +344,14 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
 
             <button
               type="submit"
-              className="lex-button-primary w-full sm:w-auto flex items-center justify-center"
+              className={`lex-btn-primary w-full sm:w-auto ${analysisMode === 'ai' ? 'lex-btn-ai' : ''}`}
               disabled={loading || !brief.trim()}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
-              </svg>
-              Analyze Brief
+              {analysisMode === 'ai' ? (
+                <>🧠 AI Analyze</>
+              ) : (
+                <>📊 Analyze Brief</>
+              )}
             </button>
           </div>
         </form>
@@ -309,27 +362,29 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
         <>
           {/* Quick summary cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <div className="lex-card text-center">
-              <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Case Type</div>
-              <div className="text-lg font-bold text-[#0a2e5c] mt-1">
-                {transformedResult.caseType?.primary || 'General'}
+            <div className="lex-stat-card">
+              <div className="lex-stat-label">Case Type</div>
+              <div className="lex-stat-value">
+                {(aiResult?.ai_analysis?.case_type?.primary) || transformedResult.caseType?.primary || 'General'}
               </div>
-              {transformedResult.caseType?.confidence && (
-                <div className="text-xs text-gray-400 mt-1">
-                  {Math.round(transformedResult.caseType.confidence * 100)}% confidence
+              {(aiResult?.ai_analysis?.case_type?.confidence || transformedResult.caseType?.confidence) && (
+                <div className="lex-stat-sub">
+                  {aiResult?.ai_analysis?.case_type?.confidence || (transformedResult.caseType?.confidence
+                    ? Math.round(transformedResult.caseType.confidence * 100) + '%'
+                    : '')} confidence
                 </div>
               )}
             </div>
-            <div className="lex-card text-center">
-              <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Jurisdiction</div>
-              <div className="text-lg font-bold text-[#0a2e5c] mt-1">
-                {transformedResult.jurisdiction?.suggested || 'TBD'}
+            <div className="lex-stat-card">
+              <div className="lex-stat-label">Jurisdiction</div>
+              <div className="lex-stat-value">
+                {aiResult?.ai_analysis?.jurisdiction?.recommended_court || transformedResult.jurisdiction?.suggested || 'TBD'}
               </div>
             </div>
-            <div className="lex-card text-center">
-              <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Legal Issues</div>
-              <div className="text-lg font-bold text-[#0a2e5c] mt-1">
-                {transformedResult.legalIssues?.length || 0} identified
+            <div className="lex-stat-card">
+              <div className="lex-stat-label">Legal Issues</div>
+              <div className="lex-stat-value">
+                {aiResult?.ai_analysis?.legal_issues?.length || transformedResult.legalIssues?.length || 0} identified
               </div>
             </div>
           </div>
@@ -339,35 +394,38 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn }) => {
             lawSections={transformedResult.lawSections}
             caseHistories={transformedResult.caseHistories}
             analysis={transformedResult.analysis}
+            aiAnalysis={aiResult}
           />
 
-          {/* Evidence checklist & Next steps */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            {transformedResult.evidenceChecklist?.length > 0 && (
-              <div className="lex-card">
-                <h3 className="text-lg font-semibold text-[#0a2e5c] mb-3">📋 Evidence Checklist</h3>
-                <ul className="space-y-2">
-                  {transformedResult.evidenceChecklist.map((item: string, i: number) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                      <input type="checkbox" className="mt-0.5 accent-[#0a2e5c]" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          {/* Only show these extra sections for non-AI results */}
+          {!aiResult && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              {transformedResult.evidenceChecklist?.length > 0 && (
+                <div className="lex-card">
+                  <h3 className="text-lg font-semibold text-[#0a2e5c] mb-3">📋 Evidence Checklist</h3>
+                  <ul className="space-y-2">
+                    {transformedResult.evidenceChecklist.map((item: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <input type="checkbox" className="mt-0.5 accent-[#0a2e5c]" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-            {transformedResult.nextSteps?.length > 0 && (
-              <div className="lex-card">
-                <h3 className="text-lg font-semibold text-[#0a2e5c] mb-3">🚀 Next Steps</h3>
-                <ol className="space-y-2">
-                  {transformedResult.nextSteps.map((step: string, i: number) => (
-                    <li key={i} className="text-sm text-gray-700 pl-2">{step}</li>
-                  ))}
-                </ol>
-              </div>
-            )}
-          </div>
+              {transformedResult.nextSteps?.length > 0 && (
+                <div className="lex-card">
+                  <h3 className="text-lg font-semibold text-[#0a2e5c] mb-3">🚀 Next Steps</h3>
+                  <ol className="space-y-2">
+                    {transformedResult.nextSteps.map((step: string, i: number) => (
+                      <li key={i} className="text-sm text-gray-700 pl-2">{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Entities extracted */}
           {transformedResult.entities && (

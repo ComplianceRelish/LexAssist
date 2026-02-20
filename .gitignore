@@ -38,4 +38,8 @@ logs/
 
 # Sensitive information
 **/API Keys.txt
+API-Keys.txt
 **/Indian Kanoon.txt
+
+# Backup files
+*.bak

@@ -3,7 +3,7 @@ services:
     name: lexassist-backend
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT --log-file -
+    startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT --timeout 120 --log-file -
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.7
@@ -16,6 +16,8 @@ services:
       - key: SUPABASE_JWT_SECRET
         sync: false
       - key: INDIAN_KANOON_API_KEY
+        sync: false
+      - key: CLAUDE_API_KEY
         sync: false
       - key: ENABLE_INLEGALBERT
         value: "false"

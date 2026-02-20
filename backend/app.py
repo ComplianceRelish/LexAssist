@@ -1,12 +1,14 @@
-from flask import Flask, jsonify, request, make_response
+from flask import Flask, jsonify, request, make_response, Response, stream_with_context
 from flask_cors import CORS
 import jwt
+import json
 
 from backend.config import Config
 from backend.models.legal_brief_analyzer import LegalBriefAnalyzer
 from backend.services.inlegalbert_processor import InLegalBERTProcessor
 from backend.services.indian_kanoon import IndianKanoonAPI
 from backend.services.supabase_client import SupabaseClient
+from backend.services.claude_client import ClaudeClient
 from backend.utils.logger import setup_logger
 
 # ---------------------------------------------------------------------------
@@ -41,6 +43,7 @@ indian_kanoon = IndianKanoonAPI()
 inlegalbert = InLegalBERTProcessor()
 supabase = SupabaseClient()
 analyzer = LegalBriefAnalyzer(indian_kanoon=indian_kanoon, inlegalbert=inlegalbert)
+claude = ClaudeClient()
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -76,6 +79,7 @@ def health():
             "supabase": "connected" if supabase.client else "disconnected",
             "indian_kanoon": "configured" if indian_kanoon.api_key else "missing_key",
             "inlegalbert": "loaded" if inlegalbert._initialized else "fallback_mode",
+            "claude_ai": "ready" if claude.is_available else "unavailable",
         }
     }), 200
 
@@ -289,6 +293,175 @@ def user_history():
     except Exception as e:
         logger.error("History error: %s", e)
         return jsonify({"error": str(e)}), 500
+
+# ---------------------------------------------------------------------------
+# AI – Claude-powered endpoints
+# ---------------------------------------------------------------------------
+
+@app.route("/api/ai/analyze", methods=["POST"])
+def ai_analyze():
+    """Deep AI analysis of a legal brief using Claude.
+    Combines regex extraction with Claude's deep analysis."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.json
+    if not data:
+        return jsonify({"error": "Request body required"}), 400
+    text = data.get("text", "")
+    if not text.strip():
+        return jsonify({"error": "Brief text cannot be empty"}), 400
+
+    if not claude.is_available:
+        return jsonify({"error": "AI service unavailable — Claude API key not configured"}), 503
+
+    try:
+        # Step 1: Quick regex extraction for context enrichment
+        regex_context = analyzer.analyze(text)
+
+        # Step 2: Deep AI analysis with context
+        ai_result = claude.analyze_brief(text, context=regex_context)
+
+        # Merge: AI analysis + regex-extracted entities
+        merged = {
+            "status": "success",
+            "ai_analysis": ai_result,
+            "entities": regex_context.get("entities", {}),
+            "case_type_regex": regex_context.get("case_type", {}),
+            "jurisdiction_regex": regex_context.get("jurisdiction", {}),
+            "statutes_regex": regex_context.get("statutes", []),
+            "precedents_kanoon": regex_context.get("precedents", []),
+            "timeline": regex_context.get("timeline", []),
+            "nlp_enrichment": regex_context.get("nlp_enrichment", {}),
+        }
+
+        # Log activity
+        if supabase.client:
+            try:
+                snippet = text[:200].replace("\n", " ")
+                supabase.client.table("activity_log").insert({
+                    "user_id": user_id,
+                    "action": "ai_brief_analyzed",
+                    "title": "AI Brief Analysis",
+                    "detail": snippet,
+                }).execute()
+            except Exception as log_err:
+                logger.warning("Activity log write failed: %s", log_err)
+
+        return jsonify(merged)
+
+    except Exception as e:
+        logger.error("AI analysis error: %s", e)
+        return jsonify({"error": "AI analysis failed", "details": str(e)}), 500
+
+
+@app.route("/api/ai/chat", methods=["POST"])
+def ai_chat():
+    """Streaming AI chat endpoint. Uses Server-Sent Events (SSE).
+    Body: { "messages": [...], "brief_context": "optional case text" }
+    """
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.json
+    if not data:
+        return jsonify({"error": "Request body required"}), 400
+
+    messages = data.get("messages", [])
+    if not messages:
+        return jsonify({"error": "Messages array required"}), 400
+
+    brief_context = data.get("brief_context", None)
+
+    if not claude.is_available:
+        return jsonify({"error": "AI service unavailable"}), 503
+
+    def generate():
+        try:
+            for chunk in claude.chat_stream(messages, brief_context=brief_context):
+                # SSE format
+                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except Exception as e:
+            logger.error("Chat streaming error: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'text': str(e)})}\n\n"
+
+    # Log activity
+    if supabase.client:
+        try:
+            last_msg = messages[-1].get("content", "")[:200] if messages else ""
+            supabase.client.table("activity_log").insert({
+                "user_id": user_id,
+                "action": "ai_chat",
+                "title": "AI Chat",
+                "detail": last_msg,
+            }).execute()
+        except Exception:
+            pass
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@app.route("/api/ai/draft", methods=["POST"])
+def ai_draft():
+    """Stream a legal document draft.
+    Body: { "doc_type": "Legal Notice", "details": {...}, "brief_context": "..." }
+    """
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.json or {}
+    doc_type = data.get("doc_type", "")
+    details = data.get("details", {})
+    brief_context = data.get("brief_context", None)
+
+    if not doc_type:
+        return jsonify({"error": "Document type required"}), 400
+    if not claude.is_available:
+        return jsonify({"error": "AI service unavailable"}), 503
+
+    def generate():
+        try:
+            for chunk in claude.draft_document(doc_type, details, brief_context):
+                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except Exception as e:
+            logger.error("Document draft error: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'text': str(e)})}\n\n"
+
+    # Log activity
+    if supabase.client:
+        try:
+            supabase.client.table("activity_log").insert({
+                "user_id": user_id,
+                "action": "document_drafted",
+                "title": f"Draft: {doc_type}",
+                "detail": json.dumps(details)[:200],
+            }).execute()
+        except Exception:
+            pass
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
+
 
 # ---------------------------------------------------------------------------
 # Admin – lightweight identity check (no SaaS tiers)

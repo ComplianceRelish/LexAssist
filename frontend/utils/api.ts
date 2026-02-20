@@ -2,18 +2,207 @@
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 export async function analyzeBrief(text: string) {
-  const response = await fetch(`${BASE_URL}/api/analyze-brief`, {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000); // 120s timeout
+  try {
+    const response = await fetch(`${BASE_URL}/api/analyze-brief`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to analyze brief');
+    }
+    return response.json();
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Analysis timed out — please try with a shorter brief or try again later.');
+    }
+    throw err;
+  }
+}
+
+// ── AI-Powered Analysis (Claude) ──────────────────────────────────
+
+export async function aiAnalyzeBrief(text: string) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3min timeout for AI
+  try {
+    const response = await fetch(`${BASE_URL}/api/ai/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'AI analysis failed');
+    }
+    return response.json();
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('AI analysis timed out — please try again.');
+    }
+    throw err;
+  }
+}
+
+// ── AI Chat (Streaming SSE) ──────────────────────────────────────
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export async function aiChatStream(
+  messages: ChatMessage[],
+  briefContext: string | null,
+  onChunk: (text: string) => void,
+  onDone: () => void,
+  onError: (error: string) => void,
+): Promise<() => void> {
+  const controller = new AbortController();
+
+  fetch(`${BASE_URL}/api/ai/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-    credentials: 'include'
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to analyze brief');
-  }
-  return response.json();
+    body: JSON.stringify({
+      messages,
+      brief_context: briefContext,
+    }),
+    credentials: 'include',
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Chat failed' }));
+        onError(err.error || 'Chat failed');
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        onError('Streaming not supported');
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'chunk') {
+                onChunk(data.text);
+              } else if (data.type === 'done') {
+                onDone();
+              } else if (data.type === 'error') {
+                onError(data.text);
+              }
+            } catch {
+              // ignore parse errors for partial chunks
+            }
+          }
+        }
+      }
+      onDone();
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError') {
+        onError(err.message || 'Chat connection failed');
+      }
+    });
+
+  return () => controller.abort();
 }
+
+// ── AI Document Drafting (Streaming SSE) ──────────────────────────
+
+export async function aiDraftStream(
+  docType: string,
+  details: Record<string, string>,
+  briefContext: string | null,
+  onChunk: (text: string) => void,
+  onDone: () => void,
+  onError: (error: string) => void,
+): Promise<() => void> {
+  const controller = new AbortController();
+
+  fetch(`${BASE_URL}/api/ai/draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      doc_type: docType,
+      details,
+      brief_context: briefContext,
+    }),
+    credentials: 'include',
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Draft failed' }));
+        onError(err.error || 'Draft failed');
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        onError('Streaming not supported');
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'chunk') onChunk(data.text);
+              else if (data.type === 'done') onDone();
+              else if (data.type === 'error') onError(data.text);
+            } catch { /* skip */ }
+          }
+        }
+      }
+      onDone();
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError') {
+        onError(err.message || 'Draft connection failed');
+      }
+    });
+
+  return () => controller.abort();
+}
+
+// ── Existing endpoints ────────────────────────────────────────────
 
 export async function healthCheck() {
   const response = await fetch(`${BASE_URL}/api/health`);
