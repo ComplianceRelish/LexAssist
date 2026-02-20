@@ -118,34 +118,56 @@ def analyze_brief():
         return jsonify({"error": "Analysis failed", "details": str(e)}), 500
 
 # ---------------------------------------------------------------------------
-# Auth – Email + Password (Supabase)
+# Auth – Name + Phone Login
 # ---------------------------------------------------------------------------
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():
-    """Authenticate with email + password.  Sets session cookies."""
+    """Authenticate with full name + mobile number.
+    Looks up the user in profiles, then signs in via Supabase Auth
+    using their email + phone-as-password.
+    """
     data = request.json or {}
-    email = data.get("email", "").strip()
-    password = data.get("password", "")
-    if not email or not password:
-        return jsonify({"error": "Email and password required"}), 400
+    name = data.get("name", "").strip()
+    phone = data.get("phone", "").strip()
+    if not name or not phone:
+        return jsonify({"error": "Name and mobile number are required"}), 400
+
     try:
+        # Look up user in profiles by name (case-insensitive) + phone
+        profiles = (
+            supabase.client.table("profiles")
+            .select("user_id, email, full_name, role")
+            .ilike("full_name", name)
+            .eq("phone", phone)
+            .execute()
+        )
+        if not profiles.data or len(profiles.data) == 0:
+            return jsonify({"error": "No account found. Check your name and mobile number."}), 401
+
+        profile = profiles.data[0]
+        user_email = profile.get("email", "").lower()
+        if not user_email:
+            return jsonify({"error": "Account has no email configured. Contact administrator."}), 401
+
+        # Sign in via Supabase Auth using email + phone (phone is the password)
         result = supabase.client.auth.sign_in_with_password(
-            {"email": email, "password": password}
+            {"email": user_email, "password": phone}
         )
         session = getattr(result, "session", None)
         if not session:
-            return jsonify({"error": "Invalid credentials"}), 401
+            return jsonify({"error": "Authentication failed"}), 401
 
         user_data = getattr(result, "user", None)
-        user_email = (user_data.email if user_data else email).lower()
         admin_info = _is_admin(user_email)
+        role = profile.get("role", "user")
 
         body = {
             "message": "Login successful",
             "user": user_data.model_dump() if user_data else None,
-            "is_admin": admin_info is not None,
-            "role": admin_info["role"] if admin_info else "user",
+            "is_admin": role in ("super_admin", "admin"),
+            "role": role,
+            "full_name": profile.get("full_name", ""),
         }
         resp = make_response(jsonify(body))
         resp.set_cookie("sb-access-token", session.access_token,
@@ -157,13 +179,13 @@ def login():
         logger.error("Login error: %s", e)
         msg = str(e)
         if "Invalid login" in msg or "invalid" in msg.lower():
-            return jsonify({"error": "Invalid email or password"}), 401
-        return jsonify({"error": msg}), 500
+            return jsonify({"error": "Invalid credentials. Contact your administrator."}), 401
+        return jsonify({"error": "Login failed. Please try again."}), 500
 
 
 @app.route("/api/auth/setup-admins", methods=["POST"])
 def setup_admins():
-    """One-time endpoint: create admin users in Supabase Auth.
+    """One-time endpoint: create admin users in Supabase Auth + profiles.
     Body: {"secret": "<SETUP_SECRET>"}
     Only works when SETUP_SECRET env var is set and matches.
     """
@@ -178,18 +200,55 @@ def setup_admins():
     results = []
     for email_key, info in ADMIN_USERS.items():
         try:
-            # Create user with pre-confirmed email
+            # Create user with phone as password (for Name+Phone login)
             user = supabase.client.auth.admin.create_user({
                 "email": email_key,
-                "password": info.get("default_password", "LexAssist@2026"),
+                "password": info["phone"],
+                "phone": info["phone"],
                 "email_confirm": True,
                 "user_metadata": {"full_name": info["name"]},
             })
-            results.append({"email": email_key, "status": "created", "id": user.user.id if user.user else None})
+            user_id = user.user.id if user.user else None
+            results.append({"email": email_key, "status": "created", "id": user_id})
+
+            # Also create their profile row with role
+            if user_id:
+                try:
+                    supabase.client.table("profiles").upsert({
+                        "user_id": user_id,
+                        "full_name": info["name"],
+                        "email": email_key,
+                        "phone": info.get("phone"),
+                        "role": info["role"],
+                    }).execute()
+                except Exception as pe:
+                    logger.warning("Profile insert for %s failed: %s", email_key, pe)
+
         except Exception as e:
             err_msg = str(e)
             if "already" in err_msg.lower():
-                results.append({"email": email_key, "status": "already_exists"})
+                # User exists — update password to phone and ensure profile
+                try:
+                    auth_users = supabase.client.auth.admin.list_users()
+                    for u in auth_users:
+                        if hasattr(u, 'email') and u.email and u.email.lower() == email_key:
+                            # Update password + phone for Name+Phone login
+                            supabase.client.auth.admin.update_user_by_id(
+                                u.id, {"password": info["phone"], "phone": info["phone"]}
+                            )
+                            supabase.client.table("profiles").upsert({
+                                "user_id": u.id,
+                                "full_name": info["name"],
+                                "email": email_key,
+                                "phone": info.get("phone"),
+                                "role": info["role"],
+                            }).execute()
+                            results.append({"email": email_key, "status": "updated_password", "id": u.id})
+                            break
+                    else:
+                        results.append({"email": email_key, "status": "already_exists_no_match"})
+                except Exception as ue:
+                    results.append({"email": email_key, "status": "already_exists", "update_error": str(ue)})
             else:
                 results.append({"email": email_key, "status": "error", "detail": err_msg})
     return jsonify({"results": results}), 200
@@ -464,6 +523,214 @@ def ai_draft():
 
 
 # ---------------------------------------------------------------------------
+# Admin – User Management CRUD
+# ---------------------------------------------------------------------------
+
+def _require_super_admin():
+    """Return (user_id, email) if caller is super_admin, else abort with 403 response."""
+    user_id, email = _get_current_user()
+    if not user_id:
+        return None, None, jsonify({"error": "Not authenticated"}), 401
+    admin_info = _is_admin(email)
+    # Also check profiles table for role
+    role = None
+    try:
+        profile = supabase.client.table("profiles").select("role").eq("user_id", user_id).single().execute()
+        if profile.data:
+            role = profile.data.get("role")
+    except Exception:
+        pass
+    if (admin_info and admin_info.get("role") == "super_admin") or role == "super_admin":
+        return user_id, email, None, None
+    return None, None, jsonify({"error": "Super admin access required"}), 403
+
+
+@app.route("/api/admin/users", methods=["GET"])
+def admin_list_users():
+    """List all users (profiles + auth metadata). Super-admin only."""
+    user_id, email, err_resp, err_code = _require_super_admin()
+    if err_resp:
+        return err_resp, err_code
+    try:
+        # Fetch all profiles via service_role (bypasses RLS)
+        profiles = supabase.client.table("profiles").select("*").order("created_at", desc=False).execute()
+        return jsonify({"users": profiles.data or []}), 200
+    except Exception as e:
+        logger.error("Admin list users error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/users", methods=["POST"])
+def admin_create_user():
+    """Create a new user (auth + profile). Super-admin only."""
+    user_id, email, err_resp, err_code = _require_super_admin()
+    if err_resp:
+        return err_resp, err_code
+    data = request.json or {}
+    new_email = data.get("email", "").strip().lower()
+    full_name = data.get("full_name", "").strip()
+    phone = data.get("phone", "").strip()
+    role = data.get("role", "user")
+    if not new_email or not full_name:
+        return jsonify({"error": "Email and full name are required"}), 400
+    if role not in ("user", "admin", "super_admin"):
+        return jsonify({"error": "Invalid role"}), 400
+    if not phone:
+        return jsonify({"error": "Phone number is required (used for login)"}), 400
+    try:
+        # Create in Supabase Auth with phone as password (for Name+Phone login)
+        auth_user = supabase.client.auth.admin.create_user({
+            "email": new_email,
+            "password": phone,
+            "phone": phone,
+            "email_confirm": True,
+            "user_metadata": {"full_name": full_name},
+        })
+        new_user_id = auth_user.user.id if auth_user.user else None
+        if not new_user_id:
+            return jsonify({"error": "User creation failed in auth"}), 500
+
+        # Create profile row
+        supabase.client.table("profiles").upsert({
+            "user_id": new_user_id,
+            "full_name": full_name,
+            "email": new_email,
+            "phone": phone or None,
+            "role": role,
+        }).execute()
+
+        return jsonify({
+            "message": f"User {new_email} created successfully",
+            "user_id": new_user_id,
+            "email": new_email,
+            "role": role,
+        }), 201
+    except Exception as e:
+        logger.error("Admin create user error: %s", e)
+        err_msg = str(e)
+        if "already" in err_msg.lower():
+            return jsonify({"error": "A user with this email already exists"}), 409
+        return jsonify({"error": err_msg}), 500
+
+
+@app.route("/api/admin/users/<user_id_param>", methods=["PUT"])
+def admin_update_user(user_id_param):
+    """Update a user's profile (name, phone, role). Super-admin only."""
+    caller_id, caller_email, err_resp, err_code = _require_super_admin()
+    if err_resp:
+        return err_resp, err_code
+    data = request.json or {}
+    try:
+        update_data = {}
+        if "full_name" in data:
+            update_data["full_name"] = data["full_name"].strip()
+        if "phone" in data:
+            update_data["phone"] = data["phone"].strip() or None
+        if "role" in data:
+            if data["role"] not in ("user", "admin", "super_admin"):
+                return jsonify({"error": "Invalid role"}), 400
+            update_data["role"] = data["role"]
+        if "address" in data:
+            update_data["address"] = data["address"].strip() or None
+        if "email" in data:
+            update_data["email"] = data["email"].strip().lower()
+        if not update_data:
+            return jsonify({"error": "No fields to update"}), 400
+
+        supabase.client.table("profiles").update(update_data).eq("user_id", user_id_param).execute()
+
+        # If email changed, update in Supabase Auth too
+        if "email" in data:
+            try:
+                supabase.client.auth.admin.update_user_by_id(user_id_param, {
+                    "email": data["email"].strip().lower(),
+                })
+            except Exception as auth_err:
+                logger.warning("Auth email update failed: %s", auth_err)
+
+        # If phone changed, update Supabase Auth password + phone field
+        if "phone" in data and data["phone"].strip():
+            try:
+                supabase.client.auth.admin.update_user_by_id(user_id_param, {
+                    "password": data["phone"].strip(),
+                    "phone": data["phone"].strip(),
+                })
+            except Exception as auth_err:
+                logger.warning("Auth password update failed: %s", auth_err)
+
+        return jsonify({"message": "User updated successfully"}), 200
+    except Exception as e:
+        logger.error("Admin update user error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/users/<user_id_param>", methods=["DELETE"])
+def admin_delete_user(user_id_param):
+    """Delete a user (auth + profile). Super-admin only."""
+    caller_id, caller_email, err_resp, err_code = _require_super_admin()
+    if err_resp:
+        return err_resp, err_code
+
+    # Prevent self-deletion
+    if user_id_param == caller_id:
+        return jsonify({"error": "Cannot delete your own account"}), 400
+
+    try:
+        # Delete from Supabase Auth (cascades to profiles via FK)
+        supabase.client.auth.admin.delete_user(user_id_param)
+        return jsonify({"message": "User deleted successfully"}), 200
+    except Exception as e:
+        logger.error("Admin delete user error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/seed", methods=["POST"])
+def admin_seed_profiles():
+    """Seed the two admin users into profiles table.
+    Uses service_role key so it bypasses RLS.
+    Body: {"secret": "<SETUP_SECRET>"}
+    """
+    setup_secret = os.getenv("SETUP_SECRET", "")
+    if not setup_secret:
+        return jsonify({"error": "Setup disabled (SETUP_SECRET not configured)"}), 403
+
+    body = request.json or {}
+    if body.get("secret") != setup_secret:
+        return jsonify({"error": "Invalid setup secret"}), 403
+
+    results = []
+    try:
+        # List all auth users to find our admins
+        auth_users = supabase.client.auth.admin.list_users()
+        auth_map = {}
+        for u in auth_users:
+            if hasattr(u, 'email') and u.email:
+                auth_map[u.email.lower()] = u.id
+
+        for email_key, info in ADMIN_USERS.items():
+            uid = auth_map.get(email_key)
+            if not uid:
+                results.append({"email": email_key, "status": "not_in_auth", "detail": "Run setup-admins first"})
+                continue
+            try:
+                supabase.client.table("profiles").upsert({
+                    "user_id": uid,
+                    "full_name": info["name"],
+                    "email": email_key,
+                    "phone": info.get("phone"),
+                    "role": info["role"],
+                }).execute()
+                results.append({"email": email_key, "status": "seeded", "user_id": uid})
+            except Exception as pe:
+                results.append({"email": email_key, "status": "error", "detail": str(pe)})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"results": results}), 200
+
+
+# ---------------------------------------------------------------------------
 # Admin – lightweight identity check (no SaaS tiers)
 # ---------------------------------------------------------------------------
 
@@ -474,11 +741,24 @@ def admin_me():
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
     admin_info = _is_admin(email)
+
+    # Also check profiles table for role
+    role = "user"
+    try:
+        profile = supabase.client.table("profiles").select("role, full_name").eq("user_id", user_id).single().execute()
+        if profile.data:
+            role = profile.data.get("role", "user")
+    except Exception:
+        pass
+
+    # Use profile role if set, otherwise fall back to ADMIN_USERS dict
+    final_role = role if role != "user" else (admin_info["role"] if admin_info else "user")
+
     return jsonify({
         "user_id": user_id,
         "email": email,
-        "is_admin": admin_info is not None,
-        "role": admin_info["role"] if admin_info else "user",
+        "is_admin": final_role in ("super_admin", "admin"),
+        "role": final_role,
         "name": admin_info["name"] if admin_info else None,
     }), 200
 

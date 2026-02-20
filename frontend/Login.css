@@ -169,19 +169,43 @@
   margin-bottom: 0.5rem;
 }
 
-.register-button {
-  background: #c8972c;
-  color: #ffffff;
-  border: none;
-  padding: 0.6rem 1.5rem;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.3s;
+/* ── Magic Link Flow ── */
+.login-subtitle {
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
 }
-.register-button:hover { background: #dab04e; transform: translateY(-1px); }
-.register-button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.login-hint {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.login-btn-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.login-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: loginSpin 0.7s linear infinite;
+}
+
+@keyframes loginSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* (magic-link styles removed – Name+Phone login) */
 
 /* ── Mobile Responsive ── */
 @media (max-width: 768px) {

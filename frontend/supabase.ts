@@ -63,18 +63,6 @@ const handleSupabaseError = (error: any) => {
 
 // Authentication Service
 export const authService = {
-  signUp: async (email: string, password: string, metadata: { full_name: string }) => {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: metadata }
-      });
-      return error ? handleSupabaseError(error) : { data };
-    } catch (error) {
-      return handleSupabaseError(error);
-    }
-  },
   signIn: async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     return error ? handleSupabaseError(error) : { data };

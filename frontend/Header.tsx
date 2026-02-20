@@ -7,6 +7,7 @@ interface HeaderProps {
   onLogoutClick: () => void;
   userName?: string;
   onOpenChat?: () => void;
+  userRole?: string;
 }
 
 const Header: React.FC<HeaderProps> = ({ 
@@ -14,7 +15,8 @@ const Header: React.FC<HeaderProps> = ({
   isLoggedIn, 
   onLogoutClick,
   userName,
-  onOpenChat
+  onOpenChat,
+  userRole
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -30,6 +32,9 @@ const Header: React.FC<HeaderProps> = ({
   const navItems = [
     { path: '/dashboard', label: 'Analyze', icon: '📊' },
     { path: '/profile', label: 'Profile', icon: '👤' },
+    ...((userRole === 'super_admin' || userRole === 'admin')
+      ? [{ path: '/admin', label: 'Admin', icon: '🛡️' }]
+      : []),
   ];
 
   return (
@@ -83,7 +88,9 @@ const Header: React.FC<HeaderProps> = ({
                   <div className="lex-dropdown-menu">
                     <div className="lex-dropdown-header">
                       <div className="lex-dropdown-name">{userName || 'User'}</div>
-                      <div className="lex-dropdown-role">Advocate</div>
+                      <div className="lex-dropdown-role">
+                        {userRole === 'super_admin' ? '🛡️ Super Admin' : userRole === 'admin' ? '🛡️ Admin' : 'Advocate'}
+                      </div>
                     </div>
                     <div className="lex-dropdown-divider" />
                     <button
@@ -98,6 +105,14 @@ const Header: React.FC<HeaderProps> = ({
                     >
                       📊 Dashboard
                     </button>
+                    {(userRole === 'super_admin' || userRole === 'admin') && (
+                      <button
+                        className="lex-dropdown-item"
+                        onClick={() => { setMenuOpen(false); navigate?.('/admin'); }}
+                      >
+                        🛡️ User Management
+                      </button>
+                    )}
                     <div className="lex-dropdown-divider" />
                     <button
                       className="lex-dropdown-item lex-dropdown-danger"
@@ -133,7 +148,9 @@ const Header: React.FC<HeaderProps> = ({
                   </div>
                   <div>
                     <div style={{ fontWeight: 600, color: '#0a2e5c' }}>{userName || 'User'}</div>
-                    <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Advocate</div>
+                    <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>
+                      {userRole === 'super_admin' ? 'Super Admin' : userRole === 'admin' ? 'Admin' : 'Advocate'}
+                    </div>
                   </div>
                 </div>
               </div>

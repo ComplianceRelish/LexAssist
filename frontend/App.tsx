@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User, Session } from '@supabase/supabase-js';
 import { authService, supabase } from './supabase';
+import { fetchAdminMe } from './utils/api';
 import Login from './Login';
 import Header from './Header';
 import BriefInput from './BriefInput';
 import UserProfile from './UserProfile';
 import ProfileModal from './ProfileModal';
 import ChatPanel from './ChatPanel';
+import AdminPanel from './AdminPanel';
 import './App.css';
 
 // Error Boundary Component
@@ -45,6 +47,7 @@ function App() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [briefContext, setBriefContext] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string>('user');
 
   // Check auth state on mount
   useEffect(() => {
@@ -54,7 +57,17 @@ function App() {
         console.error('Session error:', result.error);
         setUser(null);
       } else {
-        setUser(result.data?.session?.user || null);
+        const session = result.data?.session;
+        if (session?.user) {
+          setUser(session.user);
+          // Fetch user role
+          try {
+            const me = await fetchAdminMe();
+            setUserRole(me.role || 'user');
+          } catch { /* ignore */ }
+        } else {
+          setUser(null);
+        }
       }
       setLoading(false);
     };
@@ -62,8 +75,17 @@ function App() {
     checkAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event: string, session: Session | null) => {
-        setUser(session?.user || null);
+      async (_event: string, session: Session | null) => {
+        const newUser = session?.user || null;
+        setUser(newUser);
+        if (session && newUser) {
+          try {
+            const me = await fetchAdminMe();
+            setUserRole(me.role || 'user');
+          } catch { /* ignore */ }
+        } else {
+          setUserRole('user');
+        }
       }
     );
 
@@ -101,6 +123,7 @@ function App() {
             onLogoutClick={handleLogout}
             userName={user.email?.split('@')[0]}
             onOpenChat={() => setShowChat(true)}
+            userRole={userRole}
           />
         )}
 
@@ -146,6 +169,12 @@ function App() {
             <Route path="/profile" element={
               user ? (
                 <UserProfile user={{ id: user.id, email: user.email || '' }} />
+              ) : <Navigate to="/" />
+            } />
+
+            <Route path="/admin" element={
+              user && (userRole === 'super_admin' || userRole === 'admin') ? (
+                <AdminPanel currentUserId={user.id} />
               ) : <Navigate to="/" />
             } />
 

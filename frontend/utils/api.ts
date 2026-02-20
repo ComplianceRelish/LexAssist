@@ -301,3 +301,85 @@ export async function fetchUserHistory(params?: { limit?: number; offset?: numbe
   if (!response.ok) throw new Error(data.error || 'Failed to fetch history');
   return data.history;
 }
+
+// ── Auth: Name + Phone Login ──────────────────────────────────────
+
+export async function loginWithNamePhone(name: string, phone: string) {
+  const response = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, phone }),
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Login failed');
+  return data;
+}
+
+// ── Admin: Current user info ──────────────────────────────────────
+
+export async function fetchAdminMe() {
+  const response = await fetch(`${BASE_URL}/api/admin/me`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch admin info');
+  return data;
+}
+
+// ── Admin: User Management CRUD ──────────────────────────────────
+
+export async function adminListUsers() {
+  const response = await fetch(`${BASE_URL}/api/admin/users`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to list users');
+  return data.users;
+}
+
+export async function adminCreateUser(user: {
+  full_name: string;
+  email: string;
+  phone?: string;
+  role?: string;
+}) {
+  const response = await fetch(`${BASE_URL}/api/admin/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(user),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to create user');
+  return data;
+}
+
+export async function adminUpdateUser(userId: string, updates: {
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+}) {
+  const response = await fetch(`${BASE_URL}/api/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(updates),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to update user');
+  return data;
+}
+
+export async function adminDeleteUser(userId: string) {
+  const response = await fetch(`${BASE_URL}/api/admin/users/${userId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to delete user');
+  return data;
+}
