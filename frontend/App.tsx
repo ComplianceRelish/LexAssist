@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User, Session } from '@supabase/supabase-js';
 import { authService, supabase } from './supabase';
-import { fetchAdminMe } from './utils/api';
+import { fetchAdminMe, clearAuthTokens } from './utils/api';
 import Login from './Login';
 import Header from './Header';
 import BriefInput from './BriefInput';
@@ -48,6 +48,7 @@ function App() {
   const [showChat, setShowChat] = useState(false);
   const [briefContext, setBriefContext] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('user');
+  const [userFullName, setUserFullName] = useState<string>('');
 
   // Check auth state on mount
   useEffect(() => {
@@ -60,10 +61,11 @@ function App() {
         const session = result.data?.session;
         if (session?.user) {
           setUser(session.user);
-          // Fetch user role
+          // Fetch user role & full name
           try {
             const me = await fetchAdminMe();
             setUserRole(me.role || 'user');
+            setUserFullName(me.full_name || '');
           } catch { /* ignore */ }
         } else {
           setUser(null);
@@ -82,9 +84,11 @@ function App() {
           try {
             const me = await fetchAdminMe();
             setUserRole(me.role || 'user');
+            setUserFullName(me.full_name || '');
           } catch { /* ignore */ }
         } else {
           setUserRole('user');
+          setUserFullName('');
         }
       }
     );
@@ -93,8 +97,11 @@ function App() {
   }, []);
 
   const handleLogout = async () => {
+    clearAuthTokens();
     await authService.signOut();
     setUser(null);
+    setUserFullName('');
+    setUserRole('user');
     setBriefContext(null);
     setShowChat(false);
   };
@@ -121,7 +128,7 @@ function App() {
             isLoggedIn={true}
             onLoginClick={() => {}}
             onLogoutClick={handleLogout}
-            userName={user.email?.split('@')[0]}
+            userName={userFullName || user.email?.split('@')[0]}
             onOpenChat={() => setShowChat(true)}
             userRole={userRole}
           />
@@ -140,7 +147,7 @@ function App() {
                   <div className="lex-welcome-banner">
                     <div className="lex-welcome-text">
                       <h1>
-                        Welcome back, <span className="lex-welcome-name">{user.email?.split('@')[0] || 'Advocate'}</span>
+                        Welcome back, <span className="lex-welcome-name">{(userFullName ? userFullName.split(' ')[0] : user.email?.split('@')[0]) || 'Advocate'}</span>
                       </h1>
                       <p>
                         Enter your case brief below for AI-powered legal analysis with precedents, statutes, and strategic recommendations.

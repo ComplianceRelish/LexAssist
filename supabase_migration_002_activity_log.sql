@@ -21,10 +21,10 @@ CREATE INDEX IF NOT EXISTS idx_activity_action  ON public.activity_log(action);
 ALTER TABLE public.activity_log ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view own activity' AND tablename = 'activity_log') THEN
-    CREATE POLICY "Users can view own activity"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'activity_log_select_policy' AND tablename = 'activity_log') THEN
+    CREATE POLICY "activity_log_select_policy"
       ON public.activity_log FOR SELECT
-      USING (auth.uid() = user_id);
+      USING (user_id = (select auth.uid()));
   END IF;
 END $$;
 

@@ -45,29 +45,39 @@ END $$;
 -- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- RLS policies: users can read/write only their own profile
+-- RLS policies: users can read/write own profile; admins get broader access
+-- (merged policies to avoid multiple_permissive_policies warning;
+--  uses (select auth.uid()) to avoid auth_rls_initplan warning)
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view own profile' AND tablename = 'profiles') THEN
-    CREATE POLICY "Users can view own profile"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'profiles_select_policy' AND tablename = 'profiles') THEN
+    CREATE POLICY "profiles_select_policy"
       ON public.profiles FOR SELECT
-      USING (auth.uid() = user_id);
+      USING (user_id = (select auth.uid()) OR public.is_admin());
   END IF;
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can insert own profile' AND tablename = 'profiles') THEN
-    CREATE POLICY "Users can insert own profile"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'profiles_insert_policy' AND tablename = 'profiles') THEN
+    CREATE POLICY "profiles_insert_policy"
       ON public.profiles FOR INSERT
-      WITH CHECK (auth.uid() = user_id);
+      WITH CHECK (user_id = (select auth.uid()) OR public.is_super_admin());
   END IF;
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can update own profile' AND tablename = 'profiles') THEN
-    CREATE POLICY "Users can update own profile"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'profiles_update_policy' AND tablename = 'profiles') THEN
+    CREATE POLICY "profiles_update_policy"
       ON public.profiles FOR UPDATE
-      USING (auth.uid() = user_id)
-      WITH CHECK (auth.uid() = user_id);
+      USING (user_id = (select auth.uid()) OR public.is_super_admin())
+      WITH CHECK (user_id = (select auth.uid()) OR public.is_super_admin());
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'profiles_delete_policy' AND tablename = 'profiles') THEN
+    CREATE POLICY "profiles_delete_policy"
+      ON public.profiles FOR DELETE
+      USING (public.is_super_admin());
   END IF;
 END $$;
 
@@ -87,18 +97,18 @@ CREATE INDEX IF NOT EXISTS idx_briefs_user_id ON public.briefs(user_id);
 ALTER TABLE public.briefs ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view own briefs' AND tablename = 'briefs') THEN
-    CREATE POLICY "Users can view own briefs"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'briefs_select_policy' AND tablename = 'briefs') THEN
+    CREATE POLICY "briefs_select_policy"
       ON public.briefs FOR SELECT
-      USING (auth.uid() = user_id);
+      USING (user_id = (select auth.uid()));
   END IF;
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can insert own briefs' AND tablename = 'briefs') THEN
-    CREATE POLICY "Users can insert own briefs"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'briefs_insert_policy' AND tablename = 'briefs') THEN
+    CREATE POLICY "briefs_insert_policy"
       ON public.briefs FOR INSERT
-      WITH CHECK (auth.uid() = user_id);
+      WITH CHECK (user_id = (select auth.uid()));
   END IF;
 END $$;
 
@@ -121,18 +131,18 @@ CREATE INDEX IF NOT EXISTS idx_analysis_brief_id ON public.analysis_results(brie
 ALTER TABLE public.analysis_results ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view own analysis' AND tablename = 'analysis_results') THEN
-    CREATE POLICY "Users can view own analysis"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'analysis_results_select_policy' AND tablename = 'analysis_results') THEN
+    CREATE POLICY "analysis_results_select_policy"
       ON public.analysis_results FOR SELECT
-      USING (auth.uid() = user_id);
+      USING (user_id = (select auth.uid()));
   END IF;
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can insert own analysis' AND tablename = 'analysis_results') THEN
-    CREATE POLICY "Users can insert own analysis"
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'analysis_results_insert_policy' AND tablename = 'analysis_results') THEN
+    CREATE POLICY "analysis_results_insert_policy"
       ON public.analysis_results FOR INSERT
-      WITH CHECK (auth.uid() = user_id);
+      WITH CHECK (user_id = (select auth.uid()));
   END IF;
 END $$;
 
@@ -149,7 +159,7 @@ DO $$ BEGIN
       ON storage.objects FOR INSERT
       WITH CHECK (
         bucket_id = 'user_files'
-        AND (storage.foldername(name))[1] = auth.uid()::text
+        AND (storage.foldername(name))[1] = (select auth.uid())::text
       );
   END IF;
 END $$;
@@ -160,7 +170,7 @@ DO $$ BEGIN
       ON storage.objects FOR SELECT
       USING (
         bucket_id = 'user_files'
-        AND (storage.foldername(name))[1] = auth.uid()::text
+        AND (storage.foldername(name))[1] = (select auth.uid())::text
       );
   END IF;
 END $$;

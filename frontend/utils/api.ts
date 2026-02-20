@@ -1,13 +1,44 @@
 // Centralized API helper for frontend/backend integration
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
+// ── Token management ──────────────────────────────────────────────
+// Stores the Supabase JWT in localStorage so it can be sent as a
+// Bearer token on every request (avoids cross-site cookie issues).
+
+const TOKEN_KEY = 'lex_access_token';
+const REFRESH_KEY = 'lex_refresh_token';
+
+export function setAuthTokens(access: string, refresh: string) {
+  localStorage.setItem(TOKEN_KEY, access);
+  localStorage.setItem(REFRESH_KEY, refresh);
+}
+
+export function getAccessToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function clearAuthTokens() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+}
+
+/** Build headers with Authorization Bearer token */
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...extra };
+  const token = getAccessToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export async function analyzeBrief(text: string) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 120_000); // 120s timeout
   try {
     const response = await fetch(`${BASE_URL}/api/analyze-brief`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ text }),
       credentials: 'include',
       signal: controller.signal,
@@ -35,7 +66,7 @@ export async function aiAnalyzeBrief(text: string) {
   try {
     const response = await fetch(`${BASE_URL}/api/ai/analyze`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ text }),
       credentials: 'include',
       signal: controller.signal,
@@ -73,7 +104,7 @@ export async function aiChatStream(
 
   fetch(`${BASE_URL}/api/ai/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       messages,
       brief_context: briefContext,
@@ -147,7 +178,7 @@ export async function aiDraftStream(
 
   fetch(`${BASE_URL}/api/ai/draft`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       doc_type: docType,
       details,
@@ -212,7 +243,7 @@ export async function healthCheck() {
 export async function sendOtp({ email, phone }: { email?: string; phone?: string }) {
   const response = await fetch(`${BASE_URL}/api/auth/send-otp`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ email, phone }),
     credentials: 'include',
   });
@@ -224,7 +255,7 @@ export async function sendOtp({ email, phone }: { email?: string; phone?: string
 export async function verifyOtp({ email, phone, token, type }: { email?: string; phone?: string; token: string; type: 'email' | 'sms' }) {
   const response = await fetch(`${BASE_URL}/api/auth/verify-otp`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ email, phone, token, type }),
     credentials: 'include',
   });
@@ -242,7 +273,7 @@ export async function updateUserProfile(profile: {
 }) {
   const response = await fetch(`${BASE_URL}/api/user/profile`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     credentials: 'include',
     body: JSON.stringify(profile),
   });
@@ -254,6 +285,7 @@ export async function updateUserProfile(profile: {
 export async function fetchUserProfile() {
   const response = await fetch(`${BASE_URL}/api/user/profile`, {
     method: 'GET',
+    headers: authHeaders(),
     credentials: 'include',
   });
   const data = await response.json();
@@ -262,8 +294,10 @@ export async function fetchUserProfile() {
 }
 
 export async function logout() {
+  clearAuthTokens();
   const response = await fetch(`${BASE_URL}/api/auth/logout`, {
     method: 'POST',
+    headers: authHeaders(),
     credentials: 'include',
   });
   if (!response.ok) {
@@ -278,6 +312,7 @@ export async function logout() {
 export async function fetchUserStats() {
   const response = await fetch(`${BASE_URL}/api/user/stats`, {
     method: 'GET',
+    headers: authHeaders(),
     credentials: 'include',
   });
   const data = await response.json();
@@ -295,6 +330,7 @@ export async function fetchUserHistory(params?: { limit?: number; offset?: numbe
 
   const response = await fetch(`${BASE_URL}/api/user/history?${q.toString()}`, {
     method: 'GET',
+    headers: authHeaders(),
     credentials: 'include',
   });
   const data = await response.json();
@@ -313,6 +349,10 @@ export async function loginWithNamePhone(name: string, phone: string) {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Login failed');
+  // Store tokens in localStorage for Bearer auth
+  if (data.access_token) {
+    setAuthTokens(data.access_token, data.refresh_token || '');
+  }
   return data;
 }
 
@@ -321,6 +361,7 @@ export async function loginWithNamePhone(name: string, phone: string) {
 export async function fetchAdminMe() {
   const response = await fetch(`${BASE_URL}/api/admin/me`, {
     method: 'GET',
+    headers: authHeaders(),
     credentials: 'include',
   });
   const data = await response.json();
@@ -333,6 +374,7 @@ export async function fetchAdminMe() {
 export async function adminListUsers() {
   const response = await fetch(`${BASE_URL}/api/admin/users`, {
     method: 'GET',
+    headers: authHeaders(),
     credentials: 'include',
   });
   const data = await response.json();
@@ -348,7 +390,7 @@ export async function adminCreateUser(user: {
 }) {
   const response = await fetch(`${BASE_URL}/api/admin/users`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     credentials: 'include',
     body: JSON.stringify(user),
   });
@@ -365,7 +407,7 @@ export async function adminUpdateUser(userId: string, updates: {
 }) {
   const response = await fetch(`${BASE_URL}/api/admin/users/${userId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     credentials: 'include',
     body: JSON.stringify(updates),
   });
@@ -377,6 +419,7 @@ export async function adminUpdateUser(userId: string, updates: {
 export async function adminDeleteUser(userId: string) {
   const response = await fetch(`${BASE_URL}/api/admin/users/${userId}`, {
     method: 'DELETE',
+    headers: authHeaders(),
     credentials: 'include',
   });
   const data = await response.json();

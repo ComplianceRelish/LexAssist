@@ -13,7 +13,7 @@ RETURNS boolean AS $$
 BEGIN
   RETURN EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid()
+    WHERE user_id = (select auth.uid())
       AND role = 'super_admin'
   );
 END;
@@ -25,49 +25,19 @@ RETURNS boolean AS $$
 BEGIN
   RETURN EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid()
+    WHERE user_id = (select auth.uid())
       AND role IN ('super_admin', 'admin')
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 4. Update RLS policies on profiles
---    Allow admins to read ALL profiles (for admin panel)
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins can view all profiles' AND tablename = 'profiles') THEN
-    CREATE POLICY "Admins can view all profiles"
-      ON public.profiles FOR SELECT
-      USING (public.is_admin());
-  END IF;
-END $$;
-
---    Allow super_admin to INSERT any profile (create users)
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Super admin can insert any profile' AND tablename = 'profiles') THEN
-    CREATE POLICY "Super admin can insert any profile"
-      ON public.profiles FOR INSERT
-      WITH CHECK (public.is_super_admin());
-  END IF;
-END $$;
-
---    Allow super_admin to UPDATE any profile (edit users)
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Super admin can update any profile' AND tablename = 'profiles') THEN
-    CREATE POLICY "Super admin can update any profile"
-      ON public.profiles FOR UPDATE
-      USING (public.is_super_admin())
-      WITH CHECK (public.is_super_admin());
-  END IF;
-END $$;
-
---    Allow super_admin to DELETE any profile
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Super admin can delete any profile' AND tablename = 'profiles') THEN
-    CREATE POLICY "Super admin can delete any profile"
-      ON public.profiles FOR DELETE
-      USING (public.is_super_admin());
-  END IF;
-END $$;
+-- 4. Admin RLS policies on profiles
+-- NOTE: These are now merged into the base schema's combined policies
+-- (profiles_select_policy, profiles_insert_policy, profiles_update_policy,
+--  profiles_delete_policy) to avoid multiple_permissive_policies warnings.
+-- See supabase_schema.sql for the merged definitions.
+-- If running migrations in order on a fresh DB, the base schema already
+-- creates the combined policies. This section is kept as documentation only.
 
 -- 5. Done! 
 -- NOTE: The actual seeding of the 2 admin users into profiles is done

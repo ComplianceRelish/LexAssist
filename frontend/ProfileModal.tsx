@@ -1,19 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from './supabase';
+import {
+  fetchUserProfile as apiFetchProfile,
+  updateUserProfile as apiUpdateProfile,
+} from './utils/api';
 import './ProfileModal.css';
 
-// User profile functions — use shared Supabase client & correct column (user_id)
+// Fetch profile via backend API (uses cookie auth + service-role key, bypasses RLS)
 async function fetchUserProfile(): Promise<UserProfile | null> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
-
+    const data = await apiFetchProfile();
     if (!data) return null;
     // Map snake_case DB columns to camelCase UI fields
     return {
@@ -29,23 +24,16 @@ async function fetchUserProfile(): Promise<UserProfile | null> {
   }
 }
 
+// Update profile via backend API
 async function updateUserProfile(profile: UserProfile): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({
-        user_id: user.id,
-        full_name: profile.fullName,
-        email: profile.email,
-        phone: profile.phone,
-        address: profile.address,
-        age: profile.age ? parseInt(profile.age, 10) : null,
-      });
-
-    if (error) throw error;
+    await apiUpdateProfile({
+      fullName: profile.fullName,
+      email: profile.email,
+      phone: profile.phone,
+      address: profile.address,
+      age: profile.age,
+    });
   } catch (error) {
     console.error('Error updating user profile:', error);
     throw new Error('Failed to update profile');

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabase';
+import { setAuthTokens } from './utils/api';
 import './Login.css';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -38,6 +39,11 @@ const Login: React.FC = () => {
 
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Login failed');
+
+      // Store tokens in localStorage for Bearer auth (cross-origin safe)
+      if (data.access_token) {
+        setAuthTokens(data.access_token, data.refresh_token || '');
+      }
 
       // Also sign in on the frontend Supabase client to sync session
       // Backend already set cookies; now get the user's email from response and sign in client-side

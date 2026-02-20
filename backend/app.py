@@ -50,8 +50,15 @@ claude = ClaudeClient()
 # ---------------------------------------------------------------------------
 
 def _get_current_user():
-    """Return (user_id, email) from the session cookie, or (None, None)."""
-    access_token = request.cookies.get("sb-access-token")
+    """Return (user_id, email) from Bearer token or session cookie, or (None, None)."""
+    # 1. Try Authorization header first (works cross-origin without cookies)
+    auth_header = request.headers.get("Authorization", "")
+    access_token = None
+    if auth_header.startswith("Bearer "):
+        access_token = auth_header[7:]
+    # 2. Fall back to cookie
+    if not access_token:
+        access_token = request.cookies.get("sb-access-token")
     if not access_token:
         return None, None
     try:
@@ -168,8 +175,11 @@ def login():
             "is_admin": role in ("super_admin", "admin"),
             "role": role,
             "full_name": profile.get("full_name", ""),
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
         }
         resp = make_response(jsonify(body))
+        # Keep cookies as fallback for same-site scenarios
         resp.set_cookie("sb-access-token", session.access_token,
                         httponly=True, samesite="None", secure=True)
         resp.set_cookie("sb-refresh-token", session.refresh_token,
@@ -334,10 +344,10 @@ def user_stats():
         )
         actions = [r["action"] for r in (rows.data or [])]
         return jsonify({
-            "briefsAnalyzed": actions.count("brief_analyzed"),
-            "caseFilesGenerated": actions.count("case_file_generated"),
+            "briefsAnalyzed": actions.count("brief_analyzed") + actions.count("ai_brief_analyzed"),
+            "caseFilesGenerated": actions.count("case_file_generated") + actions.count("document_drafted"),
             "documentsDownloaded": actions.count("document_downloaded"),
-            "searchesPerformed": actions.count("search_performed"),
+            "searchesPerformed": actions.count("search_performed") + actions.count("ai_chat"),
         }), 200
     except Exception as e:
         logger.error("Stats error: %s", e)
@@ -772,12 +782,21 @@ def admin_me():
     # Use profile role if set, otherwise fall back to ADMIN_USERS dict
     final_role = role if role != "user" else (admin_info["role"] if admin_info else "user")
 
+    # Get full_name from profile if available
+    profile_full_name = None
+    try:
+        if profile.data:
+            profile_full_name = profile.data.get("full_name")
+    except Exception:
+        pass
+
     return jsonify({
         "user_id": user_id,
         "email": email,
         "is_admin": final_role in ("super_admin", "admin"),
         "role": final_role,
         "name": admin_info["name"] if admin_info else None,
+        "full_name": profile_full_name,
     }), 200
 
 

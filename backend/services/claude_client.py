@@ -12,6 +12,7 @@ Features:
 """
 
 import json
+import re
 from typing import Any, Dict, Generator, List, Optional
 from backend.config import Config
 from backend.utils.logger import setup_logger
@@ -201,6 +202,33 @@ class ClaudeClient:
     def is_available(self) -> bool:
         return self._available and self.client is not None
 
+    # ── JSON extraction helper ───────────────────────────────────
+
+    @staticmethod
+    def _extract_json(text: str) -> str:
+        """
+        Robustly extract JSON from Claude's response.
+        Handles: raw JSON, ```json blocks, ``` blocks, or JSON buried in prose.
+        """
+        stripped = text.strip()
+
+        # 1. Already valid JSON (starts with { or [)
+        if stripped.startswith("{") or stripped.startswith("["):
+            return stripped
+
+        # 2. Markdown code block: ```json ... ``` or ``` ... ```
+        code_block = re.search(r"```(?:json)?\s*\n?(.*?)```", stripped, re.DOTALL)
+        if code_block:
+            return code_block.group(1).strip()
+
+        # 3. Find the first { ... last } (greedy brace matching)
+        brace_match = re.search(r"\{.*\}", stripped, re.DOTALL)
+        if brace_match:
+            return brace_match.group(0)
+
+        # 4. Give up — return original text (will trigger JSONDecodeError)
+        return stripped
+
     # ── Structured Brief Analysis ────────────────────────────────
 
     def analyze_brief(self, brief_text: str, context: Optional[Dict] = None) -> Dict[str, Any]:
@@ -246,25 +274,22 @@ class ClaudeClient:
 
             text = response.content[0].text.strip()
 
-            # Parse JSON from response — handle markdown code blocks
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1]  # remove first line
-                if text.endswith("```"):
-                    text = text[:-3]
-                text = text.strip()
+            # Extract JSON from response — handle markdown code blocks, preamble text, etc.
+            json_text = self._extract_json(text)
 
-            result = json.loads(text)
+            result = json.loads(json_text)
             result["status"] = "success"
             result["ai_model"] = self.MODEL
             return result
 
         except json.JSONDecodeError as e:
             logger.warning("Claude returned non-JSON, wrapping as text: %s", e)
+            raw = text if text else "Analysis generated"
             return {
                 "status": "success",
                 "ai_model": self.MODEL,
-                "raw_analysis": text if 'text' in dir() else "Analysis generated",
-                "case_summary": text[:2000] if 'text' in dir() else "",
+                "raw_analysis": raw,
+                "case_summary": raw[:2000],
             }
         except anthropic.APIError as e:
             logger.error("Claude API error: %s", e)
