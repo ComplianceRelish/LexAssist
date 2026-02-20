@@ -250,6 +250,11 @@ class ClaudeClient:
 
         if context:
             enrichment_parts = []
+
+            # ── Jurisdiction data (verified geographic lookup) ──
+            if context.get("jurisdiction_prompt"):
+                enrichment_parts.append(context["jurisdiction_prompt"])
+
             if context.get("entities", {}).get("sections"):
                 enrichment_parts.append(f"Sections mentioned: {', '.join(context['entities']['sections'])}")
             if context.get("entities", {}).get("articles"):

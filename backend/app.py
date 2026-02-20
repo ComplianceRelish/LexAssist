@@ -9,6 +9,7 @@ from backend.services.inlegalbert_processor import InLegalBERTProcessor
 from backend.services.indian_kanoon import IndianKanoonAPI
 from backend.services.supabase_client import SupabaseClient
 from backend.services.claude_client import ClaudeClient
+from backend.services.jurisdiction_resolver import JurisdictionResolver
 from backend.utils.logger import setup_logger
 
 # ---------------------------------------------------------------------------
@@ -43,6 +44,7 @@ indian_kanoon = IndianKanoonAPI()
 inlegalbert = InLegalBERTProcessor()
 supabase = SupabaseClient()
 analyzer = LegalBriefAnalyzer(indian_kanoon=indian_kanoon, inlegalbert=inlegalbert)
+jurisdiction_resolver = JurisdictionResolver()
 claude = ClaudeClient()
 
 # ---------------------------------------------------------------------------
@@ -87,6 +89,7 @@ def health():
             "indian_kanoon": "configured" if indian_kanoon.api_key else "missing_key",
             "inlegalbert": "loaded" if inlegalbert._initialized else "fallback_mode",
             "claude_ai": "ready" if claude.is_available else "unavailable",
+            "jurisdiction_resolver": "active",
         }
     }), 200
 
@@ -104,6 +107,9 @@ def analyze_brief():
         return jsonify({"error": "Brief text cannot be empty"}), 400
     try:
         result = analyzer.analyze(text)
+
+        # Enrich with verified jurisdiction data
+        jurisdiction_resolver.enrich_context(result, text)
 
         # Log activity for the authenticated user
         user_id, _ = _get_current_user()
@@ -685,6 +691,7 @@ def add_case_entry(case_id):
         # 2. Optionally run AI analysis on the new entry
         if run_analysis and claude.is_available and brief_id:
             regex_context = analyzer.analyze(text)
+            jurisdiction_resolver.enrich_context(regex_context, text)
             ai_result = claude.analyze_brief(text, context=regex_context)
             merged = {
                 "status": "success",
@@ -748,16 +755,20 @@ def ai_analyze():
         # Step 1: Quick regex extraction for context enrichment
         regex_context = analyzer.analyze(text)
 
-        # Step 2: Deep AI analysis with context
+        # Step 1b: Jurisdiction resolution (authoritative geographic lookup)
+        jurisdiction_resolver.enrich_context(regex_context, text)
+
+        # Step 2: Deep AI analysis with context (now includes verified jurisdiction)
         ai_result = claude.analyze_brief(text, context=regex_context)
 
-        # Merge: AI analysis + regex-extracted entities
+        # Merge: AI analysis + regex-extracted entities + jurisdiction
         merged = {
             "status": "success",
             "ai_analysis": ai_result,
             "entities": regex_context.get("entities", {}),
             "case_type_regex": regex_context.get("case_type", {}),
             "jurisdiction_regex": regex_context.get("jurisdiction", {}),
+            "jurisdiction_verified": regex_context.get("jurisdiction_data", {}),
             "statutes_regex": regex_context.get("statutes", []),
             "precedents_kanoon": regex_context.get("precedents", []),
             "timeline": regex_context.get("timeline", []),
