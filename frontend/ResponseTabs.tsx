@@ -238,7 +238,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                 <div className="space-y-4">
                   {ai.applicable_statutes.map((s: any, i: number) => (
                     <Card key={i}>
-                      <h4 className="font-bold text-[#0a2e5c] text-base">{s.act}</h4>
+                      <h4 className="font-bold text-[#0a2e5c] text-base">{s.act || s.relevance || 'Statute'}</h4>
                       {s.sections?.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {s.sections.map((sec: string, j: number) => (
@@ -248,7 +248,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                           ))}
                         </div>
                       )}
-                      {s.relevance && <p className="text-sm text-gray-600 mt-2">{s.relevance}</p>}
+                      {s.act && s.relevance && <p className="text-sm text-gray-600 mt-2">(Relevance: {s.relevance})</p>}
                       {s.key_provisions && <p className="text-xs text-gray-500 mt-1 italic">{s.key_provisions}</p>}
                     </Card>
                   ))}

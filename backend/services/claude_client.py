@@ -89,16 +89,16 @@ Your response MUST be valid JSON with exactly this structure:
   ],
   "applicable_statutes": [
     {
-      "act": "Full name of the Act",
-      "sections": ["Section numbers"],
+      "act": "Full name of the Act (REQUIRED — never omit this field)",
+      "sections": ["Section numbers (REQUIRED — always include at least one)"],
       "relevance": "How this statute applies",
       "key_provisions": "What these sections provide"
     }
   ],
   "relevant_precedents": [
     {
-      "case_name": "Full case name",
-      "citation": "Citation if known",
+      "case_name": "Full case name (REQUIRED)",
+      "citation": "Citation if known (REQUIRED)",
       "court": "Which court decided it",
       "principle": "The legal principle established",
       "applicability": "How it applies to this case"
