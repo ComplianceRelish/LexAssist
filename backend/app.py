@@ -58,12 +58,30 @@ def handle_exception(e):
 
 @app.after_request
 def add_cors_headers(response):
-    """Ensure CORS headers are present on ALL responses, including errors."""
+    """Ensure CORS headers are present on ALL responses, including errors and preflights."""
     origin = request.headers.get("Origin", "")
     if origin in ALLOWED_ORIGINS:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept"
+        response.headers["Access-Control-Max-Age"] = "86400"
     return response
+
+
+@app.before_request
+def handle_preflight():
+    """Return 200 immediately for CORS preflight (OPTIONS) requests."""
+    if request.method == "OPTIONS":
+        response = make_response()
+        origin = request.headers.get("Origin", "")
+        if origin in ALLOWED_ORIGINS:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept"
+            response.headers["Access-Control-Max-Age"] = "86400"
+        return response, 200
 
 # ---------------------------------------------------------------------------
 # Service init (after error handlers so crashes during init are caught)
