@@ -138,7 +138,30 @@ Your response MUST be valid JSON with exactly this structure:
   "strategic_recommendations": [
     "Recommendation 1 — detailed and actionable",
     "Recommendation 2 — detailed and actionable"
-  ]
+  ],
+  "court_fees": {
+    "estimated_amount": "Estimated court fee amount or range",
+    "basis": "Applicable court fee schedule / ad valorem basis"
+  },
+  "interim_reliefs": [
+    {
+      "relief": "Specific interim relief available",
+      "provision": "Statutory provision (e.g., Order XXXIX Rule 1 & 2 CPC)",
+      "urgency": "Whether ex-parte/urgent hearing is warranted and why"
+    }
+  ],
+  "old_new_code_mapping": [
+    {
+      "old_provision": "e.g., Section 498A IPC",
+      "new_provision": "e.g., Section 85 BNS",
+      "changes": "Key differences between old and new provision"
+    }
+  ],
+  "cause_of_action": {
+    "facts_constituting_cause": "What facts give rise to the legal claim",
+    "accrual_date": "When the cause of action arose or is deemed to have arisen",
+    "place_of_cause": "Where it arose (determines territorial jurisdiction)"
+  }
 }
 
 **CRITICAL REQUIREMENTS — Your response will be used by practicing advocates in court:**
@@ -151,7 +174,11 @@ Your response MUST be valid JSON with exactly this structure:
 7. Always consider the latest amendments including BNS/BNSS/BSA 2023 and provide old↔new code mapping
 8. Risk assessment must explain WHY something is a strength or weakness with legal reasoning
 9. Evidence checklist must specify what each document proves and under which provision it is admissible
-10. Limitation period must cite the specific Article from the Schedule to the Limitation Act 1963"""
+10. Limitation period must cite the specific Article from the Schedule to the Limitation Act 1963
+11. Court fees must reference the applicable court fee schedule or ad valorem basis
+12. Interim reliefs must cite the specific CPC Order/Rule or statutory provision with grounds for urgency
+13. NEVER fabricate a case citation. If you cannot recall the exact citation, state the legal principle and explicitly note "citation to be verified". An incorrect citation filed in court causes real harm — it can result in costs, contempt proceedings, and professional misconduct charges against the advocate.
+14. For EVERY case you cite, verify: Is this a real case? Is the reporter and year plausible? If ANY doubt, prefix with ⚠️."""
 
 DOCUMENT_DRAFTER_SYSTEM = """You are **LexAssist AI**, a senior legal document drafter with 20+ years of Indian litigation experience. You produce court-ready documents that meet the exacting standards of Indian High Courts and the Supreme Court.
 
@@ -194,8 +221,9 @@ class ClaudeClient:
     - Document drafting                         — uses Sonnet 4.6 for speed
     """
 
-    MODEL = "claude-sonnet-4-6"            # Default workhorse — fast, capable
+    MODEL = "claude-sonnet-4-6"            # Workhorse — chat, drafting, verification
     MODEL_DEEP = "claude-opus-4-6"         # Deep analysis — maximum intelligence
+    MODEL_FAST = "claude-haiku-4-5-20251001"  # Fast preprocessing — context summarization
     MAX_TOKENS = 16384
 
     def __init__(self):
@@ -217,7 +245,7 @@ class ClaudeClient:
                 timeout=240.0,  # 4-minute timeout for deep legal analysis
             )
             self._available = True
-            logger.info("Claude client initialized (chat: %s, analysis: %s)", self.MODEL, self.MODEL_DEEP)
+            logger.info("Claude client initialized (chat: %s, deep: %s, fast: %s)", self.MODEL, self.MODEL_DEEP, self.MODEL_FAST)
         except Exception as e:
             logger.error("Claude client init failed: %s", e)
 
@@ -293,33 +321,224 @@ class ClaudeClient:
 
         return repaired
 
-    # ── Structured Brief Analysis ────────────────────────────────
+    # ── Smart Context Builder ────────────────────────────────────
+
+    def _build_smart_context(self, text: str, max_chars: int = 12000) -> str:
+        """
+        Intelligently extract and prioritize key parts of a legal brief.
+        For short texts, returns as-is. For long texts, creates a structured
+        summary using a fast model, preserving legally critical details.
+        """
+        if not text or len(text) <= max_chars:
+            return text or ""
+
+        if not self.is_available:
+            return text[:max_chars]
+
+        try:
+            response = self.client.messages.create(
+                model=self.MODEL_FAST,
+                max_tokens=3000,
+                messages=[{"role": "user", "content": f"""Create a dense, structured summary of this legal brief preserving ALL of the following in order of priority:
+
+1. **Prayer/Relief sought** — exact reliefs claimed
+2. **Key facts** — with specific dates, amounts, names, places
+3. **Statutory provisions** — every section/article number mentioned
+4. **Court history** — previous orders, pending proceedings
+5. **Party details** — names, relationships, capacities
+6. **Cause of action** — what happened, when, where
+
+Do NOT add commentary or analysis — only extract and organize the information present in the brief.
+
+Brief:
+{text[:30000]}"""}],
+                temperature=0.0,
+            )
+            summary = response.content[0].text
+            logger.info("Smart context: compressed %d chars → %d chars", len(text), len(summary))
+            return summary
+        except Exception as e:
+            logger.warning("Smart context extraction failed, truncating: %s", e)
+            return text[:max_chars]
+        finally:
+            gc.collect()
+
+    # ── Multi-Pass Analysis Helpers ──────────────────────────────
+
+    def _identify_issues(self, brief_text: str, context: Optional[Dict] = None) -> Dict:
+        """
+        Pass 1 — Fast issue identification and case classification.
+        Uses Sonnet for speed. Feeds results into Pass 2 for deeper analysis.
+        """
+        prompt = f"""You are a senior Indian legal analyst. Quickly analyze this brief and extract:
+
+1. **Case Type**: Criminal / Civil / Constitutional / Family / Labour / Consumer / Commercial / Property
+2. **Core Legal Issues**: Each distinct legal question with the most relevant statute + section
+3. **Key Statutes**: All applicable Acts with specific section numbers
+4. **Parties**: Who is involved, in what capacity (petitioner/respondent/complainant/accused)
+5. **Critical Dates**: Any dates affecting limitation, accrual, or procedural deadlines
+6. **Jurisdiction**: Which court/tribunal should hear this and why
+7. **Urgency Indicators**: Bail needed, injunction required, limitation about to expire?
+
+Brief:
+---
+{brief_text[:8000]}
+---"""
+
+        if context:
+            extras = []
+            if context.get("entities", {}).get("sections"):
+                extras.append(f"Sections detected: {', '.join(context['entities']['sections'])}")
+            if context.get("case_type", {}).get("primary"):
+                extras.append(f"Auto-classification: {context['case_type']['primary']}")
+            if context.get("entities", {}).get("courts"):
+                extras.append(f"Courts detected: {', '.join(context['entities']['courts'])}")
+            if extras:
+                prompt += "\n\nRegex pre-extraction:\n" + "\n".join(extras)
+
+        prompt += "\n\nRespond in JSON format."
+
+        try:
+            response = self.client.messages.create(
+                model=self.MODEL,
+                max_tokens=4096,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+            )
+            text = response.content[0].text
+            json_text = self._extract_json(text)
+            result = json.loads(json_text)
+            logger.info("Pass 1 identified %d issues",
+                        len(result.get("core_legal_issues", result.get("legal_issues", []))))
+            return result
+        except Exception as e:
+            logger.warning("Pass 1 (issue identification) failed: %s — continuing without", e)
+            return {}
+        finally:
+            gc.collect()
+
+    def _verify_citations(self, analysis: Dict) -> Dict:
+        """
+        Pass 3 — Citation verification.
+        Sends generated citations back for confidence scoring.
+        Citations scoring <= 3/5 are flagged with ⚠️.
+        """
+        precedents = analysis.get("relevant_precedents", [])
+        if not precedents:
+            return analysis
+
+        citations_text = "\n".join([
+            f"{i+1}. {p.get('case_name', 'Unknown')} — {p.get('citation', 'No citation')} ({p.get('court', 'Unknown court')})"
+            for i, p in enumerate(precedents)
+        ])
+
+        try:
+            response = self.client.messages.create(
+                model=self.MODEL,
+                max_tokens=2048,
+                messages=[{"role": "user", "content": f"""You are a citation verification assistant for Indian law. For each case citation below, rate your confidence (1-5) that this is a REAL Indian case with a CORRECT citation:
+
+5 = Certain — landmark case, well-known citation
+4 = Very likely real — recognized case, citation format correct
+3 = Plausible — could be real but not fully certain of details
+2 = Uncertain — might be fabricated or confused with a different case
+1 = Almost certainly wrong — citation format implausible or case doesn't exist
+
+Be BRUTALLY honest. A fabricated citation filed in an Indian court can result in costs, contempt proceedings, and professional misconduct charges. It is FAR better to flag a real case as uncertain than to let a fake citation through.
+
+Citations to verify:
+{citations_text}
+
+Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or corrections"}}]"""}],
+                temperature=0.0,
+            )
+            text = response.content[0].text
+            json_text = self._extract_json(text)
+            verifications = json.loads(json_text)
+
+            verified_count = 0
+            flagged_count = 0
+
+            if isinstance(verifications, list):
+                for v in verifications:
+                    idx = v.get("index", 0) - 1
+                    if 0 <= idx < len(precedents):
+                        confidence = v.get("confidence", 5)
+                        precedents[idx]["citation_confidence"] = confidence
+                        if confidence <= 3:
+                            name = precedents[idx].get("case_name", "")
+                            if not name.startswith("⚠️"):
+                                precedents[idx]["case_name"] = f"⚠️ {name}"
+                            precedents[idx]["verification_note"] = v.get(
+                                "note", "Citation confidence low — verify before filing")
+                            flagged_count += 1
+                        else:
+                            verified_count += 1
+
+            analysis["relevant_precedents"] = precedents
+            analysis["citation_verification"] = {
+                "verified": verified_count,
+                "flagged": flagged_count,
+                "total": len(precedents),
+                "note": "Citations with ⚠️ should be independently verified before filing in court"
+            }
+            logger.info("Pass 3 verified %d citations: %d confirmed, %d flagged",
+                        len(precedents), verified_count, flagged_count)
+            return analysis
+
+        except Exception as e:
+            logger.warning("Pass 3 (citation verification) failed: %s", e)
+            for p in precedents:
+                if "citation_confidence" not in p:
+                    p["verification_note"] = "Auto-verification unavailable — verify all citations before filing"
+            analysis["citation_verification"] = {
+                "verified": 0, "flagged": 0, "total": len(precedents),
+                "note": "Verification service unavailable — manually verify all citations"
+            }
+            return analysis
+        finally:
+            gc.collect()
+
+    # ── Structured Brief Analysis (Multi-Pass Pipeline) ──────────
 
     def analyze_brief(self, brief_text: str, context: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Deep AI analysis of a legal brief. Returns structured JSON.
-        Uses streaming internally to avoid memory spikes and worker timeouts.
-        
+        Multi-pass AI analysis of a legal brief. Returns structured JSON.
+
+        Pipeline:
+          Pass 1 (Sonnet 4.6 — fast):   Issue identification & classification
+          Pass 2 (Opus 4.6 — deep):     Full structured analysis enriched by Pass 1
+          Pass 3 (Sonnet 4.6 — fast):   Citation verification & flagging
+
         Args:
             brief_text: The raw legal brief text
             context: Optional dict with regex-extracted entities for enrichment
-        
+
         Returns:
-            Structured analysis dict
+            Structured analysis dict with verified citations
         """
         if not self.is_available:
             return {"error": "AI service unavailable", "status": "unavailable"}
 
-        # Build the user prompt with optional context enrichment
+        # ── Pass 1: Issue Identification (Sonnet — fast) ─────────
+        logger.info("▶ Analysis Pass 1/3: Issue identification (Sonnet 4.6)")
+        issues_context = self._identify_issues(brief_text, context)
+
+        # ── Pass 2: Deep Structured Analysis (Opus — maximum depth) ──
+        logger.info("▶ Analysis Pass 2/3: Deep structured analysis (Opus 4.6)")
+
         prompt = f"Analyze the following Indian legal brief thoroughly:\n\n---\n{brief_text}\n---"
 
+        # Enrich with Pass 1 results
+        if issues_context:
+            prompt += "\n\n**Preliminary Issue Analysis (from Pass 1 — use this to go DEEPER on each issue, do not merely repeat it):**\n"
+            prompt += json.dumps(issues_context, indent=2, default=str)[:6000]
+
+        # Enrich with regex context
         if context:
             enrichment_parts = []
-
-            # ── Jurisdiction data (verified geographic lookup) ──
             if context.get("jurisdiction_prompt"):
                 enrichment_parts.append(context["jurisdiction_prompt"])
-
             if context.get("entities", {}).get("sections"):
                 enrichment_parts.append(f"Sections mentioned: {', '.join(context['entities']['sections'])}")
             if context.get("entities", {}).get("articles"):
@@ -329,36 +548,45 @@ class ClaudeClient:
             if context.get("entities", {}).get("courts"):
                 enrichment_parts.append(f"Courts mentioned: {', '.join(context['entities']['courts'])}")
             if enrichment_parts:
-                prompt += "\n\nPreliminary extraction (verify and expand):\n" + "\n".join(enrichment_parts)
+                prompt += "\n\nRegex extraction (verify and expand):\n" + "\n".join(enrichment_parts)
 
         prompt += """\n\nProvide your complete structured JSON analysis. Be EXHAUSTIVE and SPECIFIC:
-- Every section/article number must be exact
-- Every case citation must include case name, year, court, and reporter
-- Arguments must be detailed enough for a court filing
-- Strategic recommendations must specify exact steps with timelines"""
+- For EACH legal issue from Pass 1, provide deep analysis with at least 2 relevant case citations
+- Every section/article number must be exact — cite the specific sub-section where applicable
+- Every case citation must include: full case name, (year) volume reporter page, and court
+- Arguments must be detailed enough to include in a court filing — not bullet-point summaries
+- Map ALL applicable old code sections to new code (IPC→BNS, CrPC→BNSS, Evidence Act→BSA)
+- Strategic recommendations must specify: what to file, under which section, in which court, within what deadline
+- If you are NOT confident about a case citation, mark it with ⚠️ — NEVER fabricate"""
 
         try:
             # Stream the response to avoid memory spikes and gunicorn worker kills.
-            # Collect chunks incrementally instead of buffering the entire response.
             chunks: List[str] = []
             with self.client.messages.stream(
                 model=self.MODEL_DEEP,
                 max_tokens=self.MAX_TOKENS,
                 system=BRIEF_ANALYSIS_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
+                temperature=0.0,
             ) as stream:
                 for chunk in stream.text_stream:
                     chunks.append(chunk)
 
             text = "".join(chunks).strip()
-
-            # Extract JSON from response — handle markdown code blocks, preamble text, etc.
             json_text = self._extract_json(text)
 
             result = json.loads(json_text)
             result["status"] = "success"
             result["ai_model"] = self.MODEL_DEEP
+
+            gc.collect()
+
+            # ── Pass 3: Citation Verification (Sonnet — fast) ────
+            logger.info("▶ Analysis Pass 3/3: Citation verification (Sonnet 4.6)")
+            result = self._verify_citations(result)
+            result["analysis_pipeline"] = "multi-pass-v1"
+
+            gc.collect()
             return result
 
         except json.JSONDecodeError as e:
@@ -369,6 +597,9 @@ class ClaudeClient:
                 result = json.loads(repaired)
                 result["status"] = "success"
                 result["ai_model"] = self.MODEL_DEEP
+                # Still verify citations on repaired JSON
+                result = self._verify_citations(result)
+                result["analysis_pipeline"] = "multi-pass-v1-repaired"
                 logger.info("JSON repair succeeded")
                 return result
             except Exception:
@@ -376,7 +607,6 @@ class ClaudeClient:
 
             logger.warning("Claude returned non-JSON even after repair, wrapping as text")
             raw = text if text else "Analysis generated"
-            # Strip markdown / JSON wrapping so downstream never sees raw JSON as a title
             clean = raw.lstrip("`").lstrip("json").strip()
             if clean.startswith("{"):
                 summary = "AI analysis completed (structured parsing failed)"
@@ -387,6 +617,7 @@ class ClaudeClient:
                 "ai_model": self.MODEL_DEEP,
                 "raw_analysis": raw,
                 "case_summary": summary,
+                "analysis_pipeline": "multi-pass-v1-fallback",
             }
         except anthropic.APIError as e:
             logger.error("Claude API error: %s", e)
@@ -397,7 +628,6 @@ class ClaudeClient:
             gc.collect()
             return {"error": str(e), "status": "error"}
         finally:
-            # Aggressive cleanup — essential on Render free tier (512MB)
             gc.collect()
 
     # ── Streaming Chat ───────────────────────────────────────────
@@ -423,7 +653,8 @@ class ClaudeClient:
 
         system = LEGAL_ANALYST_SYSTEM
         if brief_context:
-            system += f"\n\n**Current Case Context (use this to give SPECIFIC answers):**\n{brief_context[:12000]}"
+            smart_ctx = self._build_smart_context(brief_context)
+            system += f"\n\n**Current Case Context (use this to give SPECIFIC answers):**\n{smart_ctx}"
 
         try:
             with self.client.messages.stream(
@@ -456,7 +687,8 @@ class ClaudeClient:
 
         system = LEGAL_ANALYST_SYSTEM
         if brief_context:
-            system += f"\n\n**Current Case Context (use this to give SPECIFIC answers):**\n{brief_context[:12000]}"
+            smart_ctx = self._build_smart_context(brief_context)
+            system += f"\n\n**Current Case Context (use this to give SPECIFIC answers):**\n{smart_ctx}"
 
         try:
             response = self.client.messages.create(
@@ -496,7 +728,8 @@ class ClaudeClient:
             prompt += f"- **{key}**: {value}\n"
 
         if brief_context:
-            prompt += f"\n\n**Case Background (incorporate all relevant details):**\n{brief_context[:12000]}"
+            smart_ctx = self._build_smart_context(brief_context)
+            prompt += f"\n\n**Case Background (incorporate all relevant details):**\n{smart_ctx}"
 
         prompt += """\n\nDraft the COMPLETE document with:
 - Full cause title with proper court header
