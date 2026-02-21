@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './AdminPanel.css';
-
-const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+import { adminListUsers, adminCreateUser, adminUpdateUser, adminDeleteUser } from './utils/api';
 
 interface UserProfile {
   id: string;
@@ -41,15 +40,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUserId }) => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(`${BACKEND}/api/admin/users`, {
-        credentials: 'include',
-      });
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({}));
-        throw new Error(body.error || 'Failed to fetch users');
-      }
-      const data = await resp.json();
-      setUsers(data.users || []);
+      const data = await adminListUsers();
+      setUsers(data || []);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -93,19 +85,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUserId }) => {
     setActionLoading(true);
     setFormError(null);
     try {
-      const resp = await fetch(`${BACKEND}/api/admin/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          full_name: formName.trim(),
-          email: formEmail.trim(),
-          phone: formPhone.trim(),
-          role: formRole,
-        }),
+      await adminCreateUser({
+        full_name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone.trim(),
+        role: formRole,
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to create user');
       setShowAddModal(false);
       showSuccess(`User ${formEmail} created successfully`);
       fetchUsers();
@@ -126,19 +111,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUserId }) => {
     setActionLoading(true);
     setFormError(null);
     try {
-      const resp = await fetch(`${BACKEND}/api/admin/users/${editingUser.user_id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          full_name: formName.trim(),
-          email: formEmail.trim(),
-          phone: formPhone.trim(),
-          role: formRole,
-        }),
+      await adminUpdateUser(editingUser.user_id, {
+        full_name: formName.trim(),
+        email: formEmail.trim(),
+        phone: formPhone.trim(),
+        role: formRole,
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to update user');
       setEditingUser(null);
       showSuccess('User updated successfully');
       fetchUsers();
@@ -152,12 +130,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ currentUserId }) => {
   const handleDeleteUser = async (userId: string) => {
     setActionLoading(true);
     try {
-      const resp = await fetch(`${BACKEND}/api/admin/users/${userId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to delete user');
+      await adminDeleteUser(userId);
       setDeleteConfirm(null);
       showSuccess('User deleted successfully');
       fetchUsers();
