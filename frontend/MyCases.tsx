@@ -7,6 +7,7 @@ import {
   addCaseEntry,
   deleteCase,
 } from './utils/api';
+import ResponseTabs from './ResponseTabs';
 import './MyCases.css';
 
 interface CaseSummary {
@@ -59,59 +60,45 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   archived: { label: 'Archived', className: 'status-archived' },
 };
 
-// ── Analysis renderer ──
+// ── Analysis renderer (reuses the same tabbed UI as the initial analysis) ──
 const AnalysisDisplay: React.FC<{ analysis: any }> = ({ analysis }) => {
   if (!analysis) return null;
-  const ai = analysis.ai_analysis || analysis;
 
-  const renderSection = (title: string, icon: string, content: any) => {
-    if (!content || (Array.isArray(content) && content.length === 0)) return null;
-    if (typeof content === 'object' && !Array.isArray(content) && Object.keys(content).length === 0) return null;
+  // The stored analysis object is the full merged result from /api/ai/analyze
+  // which contains: ai_analysis, entities, statutes_regex, precedents_kanoon, etc.
+  // Transform it into the same shape that BriefInput passes to ResponseTabs.
+  const stored = analysis;
+  const lawSections = (stored.statutes_regex || stored.statutes || []).map((s: any, i: number) => ({
+    title: s.full_name || s.short_name || s.act || `Statute ${i + 1}`,
+    sectionNumber: (s.sections || []).join(', ') || 'N/A',
+    content: `${s.full_name || s.short_name || s.act || ''}${s.sections?.length ? ' — Section(s) ' + s.sections.join(', ') : ''}`,
+    relevance: s.relevance === 'high' ? 9 : s.relevance === 'medium' ? 6 : 4,
+  }));
 
-    return (
-      <div className="diary-analysis-section" key={title}>
-        <h4>{icon} {title}</h4>
-        {typeof content === 'string' ? (
-          <p>{content}</p>
-        ) : Array.isArray(content) ? (
-          <ul>
-            {content.map((item: any, i: number) => (
-              <li key={i}>
-                {typeof item === 'string' ? item : (
-                  <>
-                    <strong>{item.title || item.section || item.name || item.case_name || ''}</strong>
-                    {item.description && <span> — {item.description}</span>}
-                    {item.relevance && <span className="text-muted"> (Relevance: {item.relevance})</span>}
-                    {item.citation && <span className="text-link"> [{item.citation}]</span>}
-                    {item.key_principle && <div className="text-principle">{item.key_principle}</div>}
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : typeof content === 'object' ? (
-          <div className="analysis-kv-list">
-            {Object.entries(content).map(([key, val]) => (
-              <div key={key}><strong>{key.replace(/_/g, ' ')}:</strong> {typeof val === 'string' ? val : JSON.stringify(val)}</div>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    );
+  const caseHistories = (stored.precedents_kanoon || stored.precedents || []).map((p: any) => ({
+    citation: p.citation || p.doc_id || '',
+    parties: p.title || '',
+    holdings: p.headline || 'View full judgment on Indian Kanoon',
+    relevance: 7,
+    date: '',
+  }));
+
+  const summaryText = stored.analysis?.summary || stored.brief_summary || '';
+  const analysisObj = stored.analysis || {
+    summary: summaryText,
+    arguments: [],
+    challenges: [],
+    recommendations: [],
   };
 
   return (
-    <div className="diary-analysis-body">
-      {renderSection('Case Summary', '📋', ai.case_summary)}
-      {renderSection('Key Issues', '🔑', ai.key_issues)}
-      {renderSection('Applicable Statutes', '📜', ai.applicable_statutes || ai.statutes)}
-      {renderSection('Relevant Precedents', '📚', ai.relevant_precedents || ai.precedents)}
-      {renderSection('Legal Analysis', '🔍', ai.legal_analysis || ai.analysis_text)}
-      {renderSection('Strategic Recommendations', '🎯', ai.strategic_recommendations || ai.recommendations)}
-      {renderSection('Risk Assessment', '⚠️', ai.risk_assessment)}
-      {renderSection('Strengths', '💪', ai.strengths)}
-      {renderSection('Weaknesses', '🔻', ai.weaknesses)}
-      {renderSection('Next Steps', '📝', ai.next_steps)}
+    <div className="diary-tabbed-analysis">
+      <ResponseTabs
+        lawSections={lawSections}
+        caseHistories={caseHistories}
+        analysis={analysisObj}
+        aiAnalysis={stored}
+      />
     </div>
   );
 };
