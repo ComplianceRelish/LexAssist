@@ -14,6 +14,7 @@ Features:
 import gc
 import json
 import re
+import time
 from typing import Any, Dict, Generator, List, Optional
 from backend.config import Config
 from backend.utils.logger import setup_logger
@@ -480,6 +481,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 "verified": verified_count,
                 "flagged": flagged_count,
                 "total": len(precedents),
+                "methodology": "AI self-verification (same model family) — independent database verification recommended for high-stakes filings",
                 "note": "Citations with ⚠️ should be independently verified before filing in court"
             }
             logger.info("Pass 3 verified %d citations: %d confirmed, %d flagged",
@@ -501,18 +503,23 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
 
     # ── Structured Brief Analysis (Multi-Pass Pipeline) ──────────
 
-    def analyze_brief(self, brief_text: str, context: Optional[Dict] = None) -> Dict[str, Any]:
+    def analyze_brief(self, brief_text: str, context: Optional[Dict] = None,
+                       deep: bool = True) -> Dict[str, Any]:
         """
         Multi-pass AI analysis of a legal brief. Returns structured JSON.
 
-        Pipeline:
+        Pipeline (deep=True, default):
           Pass 1 (Sonnet 4.6 — fast):   Issue identification & classification
           Pass 2 (Opus 4.6 — deep):     Full structured analysis enriched by Pass 1
           Pass 3 (Sonnet 4.6 — fast):   Citation verification & flagging
 
+        Quick mode (deep=False):
+          Single-pass Sonnet analysis — faster, cheaper, suitable for initial review.
+
         Args:
             brief_text: The raw legal brief text
             context: Optional dict with regex-extracted entities for enrichment
+            deep: If True (default), run full 3-pass pipeline. If False, single-pass quick analysis.
 
         Returns:
             Structured analysis dict with verified citations
@@ -520,9 +527,24 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
         if not self.is_available:
             return {"error": "AI service unavailable", "status": "unavailable"}
 
+        pipeline_start = time.time()
+        pipeline_notes: List[str] = []
+
+        # ── Quick mode: single-pass Sonnet analysis ──────────────
+        if not deep:
+            return self._quick_analyze(brief_text, context, pipeline_start)
+
         # ── Pass 1: Issue Identification (Sonnet — fast) ─────────
         logger.info("▶ Analysis Pass 1/3: Issue identification (Sonnet 4.6)")
+        pass1_start = time.time()
         issues_context = self._identify_issues(brief_text, context)
+        pass1_time = round(time.time() - pass1_start, 1)
+        logger.info("Pass 1 completed in %.1fs", pass1_time)
+
+        if not issues_context:
+            pipeline_notes.append(
+                "Pass 1 (issue identification) failed — analysis may lack depth on some issues"
+            )
 
         # ── Pass 2: Deep Structured Analysis (Opus — maximum depth) ──
         logger.info("▶ Analysis Pass 2/3: Deep structured analysis (Opus 4.6)")
@@ -561,16 +583,20 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
 
         try:
             # Stream the response to avoid memory spikes and gunicorn worker kills.
+            pass2_start = time.time()
             chunks: List[str] = []
             with self.client.messages.stream(
                 model=self.MODEL_DEEP,
                 max_tokens=self.MAX_TOKENS,
                 system=BRIEF_ANALYSIS_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
+                temperature=0.05,
             ) as stream:
                 for chunk in stream.text_stream:
                     chunks.append(chunk)
+
+            pass2_time = round(time.time() - pass2_start, 1)
+            logger.info("Pass 2 completed in %.1fs", pass2_time)
 
             text = "".join(chunks).strip()
             json_text = self._extract_json(text)
@@ -583,8 +609,26 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
 
             # ── Pass 3: Citation Verification (Sonnet — fast) ────
             logger.info("▶ Analysis Pass 3/3: Citation verification (Sonnet 4.6)")
-            result = self._verify_citations(result)
+            pass3_start = time.time()
+            if result.get("relevant_precedents"):
+                result = self._verify_citations(result)
+            else:
+                result["citation_verification"] = {
+                    "note": "No precedents found in analysis — request re-analysis if needed"
+                }
+                pipeline_notes.append("No precedents to verify — citation verification skipped")
+            pass3_time = round(time.time() - pass3_start, 1)
+            logger.info("Pass 3 completed in %.1fs", pass3_time)
+
             result["analysis_pipeline"] = "multi-pass-v1"
+            if pipeline_notes:
+                result["pipeline_notes"] = pipeline_notes
+            result["timing"] = {
+                "pass1_issue_id_sec": pass1_time,
+                "pass2_deep_analysis_sec": pass2_time,
+                "pass3_citation_verify_sec": pass3_time,
+                "total_sec": round(time.time() - pipeline_start, 1),
+            }
 
             gc.collect()
             return result
@@ -597,9 +641,18 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 result = json.loads(repaired)
                 result["status"] = "success"
                 result["ai_model"] = self.MODEL_DEEP
-                # Still verify citations on repaired JSON
-                result = self._verify_citations(result)
+                # Only verify citations if precedents survived the truncation repair
+                if result.get("relevant_precedents"):
+                    result = self._verify_citations(result)
+                else:
+                    result["citation_verification"] = {
+                        "note": "No precedents found after JSON repair (possible truncation) — request re-analysis if needed"
+                    }
+                    pipeline_notes.append("Precedents lost during JSON repair — citation verification skipped")
                 result["analysis_pipeline"] = "multi-pass-v1-repaired"
+                if pipeline_notes:
+                    result["pipeline_notes"] = pipeline_notes
+                result["timing"] = {"total_sec": round(time.time() - pipeline_start, 1)}
                 logger.info("JSON repair succeeded")
                 return result
             except Exception:
@@ -618,6 +671,8 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 "raw_analysis": raw,
                 "case_summary": summary,
                 "analysis_pipeline": "multi-pass-v1-fallback",
+                "pipeline_notes": pipeline_notes if pipeline_notes else ["JSON parsing failed — raw text returned"],
+                "timing": {"total_sec": round(time.time() - pipeline_start, 1)},
             }
         except anthropic.APIError as e:
             logger.error("Claude API error: %s", e)
@@ -747,7 +802,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 max_tokens=self.MAX_TOKENS,
                 system=DOCUMENT_DRAFTER_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.15,
+                temperature=0.05,
             ) as stream:
                 for text in stream.text_stream:
                     yield text
@@ -755,3 +810,148 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
         except Exception as e:
             logger.error("Document drafting error: %s", e)
             yield f"\n\n[Error drafting document: {str(e)}]"
+
+    # ── Quick Analysis (Single-Pass) ─────────────────────────────
+
+    def _quick_analyze(self, brief_text: str, context: Optional[Dict] = None,
+                       pipeline_start: Optional[float] = None) -> Dict[str, Any]:
+        """
+        Single-pass Sonnet analysis — faster and cheaper than the full 3-pass pipeline.
+        Good for initial review, routine queries, or when cost/latency is a concern.
+        """
+        if pipeline_start is None:
+            pipeline_start = time.time()
+
+        logger.info("▶ Quick analysis (single-pass Sonnet 4.6)")
+
+        prompt = f"Analyze the following Indian legal brief thoroughly:\n\n---\n{brief_text}\n---"
+
+        if context:
+            enrichment_parts = []
+            if context.get("jurisdiction_prompt"):
+                enrichment_parts.append(context["jurisdiction_prompt"])
+            if context.get("entities", {}).get("sections"):
+                enrichment_parts.append(f"Sections mentioned: {', '.join(context['entities']['sections'])}")
+            if context.get("case_type", {}).get("primary"):
+                enrichment_parts.append(f"Preliminary case classification: {context['case_type']['primary']}")
+            if enrichment_parts:
+                prompt += "\n\nPreliminary extraction (verify and expand):\n" + "\n".join(enrichment_parts)
+
+        prompt += """\n\nProvide your complete structured JSON analysis. Be specific and cite exact section numbers and case law."""
+
+        try:
+            chunks: List[str] = []
+            with self.client.messages.stream(
+                model=self.MODEL,
+                max_tokens=self.MAX_TOKENS,
+                system=BRIEF_ANALYSIS_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.05,
+            ) as stream:
+                for chunk in stream.text_stream:
+                    chunks.append(chunk)
+
+            text = "".join(chunks).strip()
+            json_text = self._extract_json(text)
+            result = json.loads(json_text)
+            result["status"] = "success"
+            result["ai_model"] = self.MODEL
+            result["analysis_pipeline"] = "quick-single-pass"
+            result["timing"] = {"total_sec": round(time.time() - pipeline_start, 1)}
+            result["pipeline_notes"] = [
+                "Quick analysis mode — single-pass without issue pre-identification or citation verification.",
+                "For deeper analysis with citation verification, use deep=True."
+            ]
+            return result
+        except json.JSONDecodeError:
+            try:
+                repaired = self._repair_truncated_json(json_text)
+                result = json.loads(repaired)
+                result["status"] = "success"
+                result["ai_model"] = self.MODEL
+                result["analysis_pipeline"] = "quick-single-pass-repaired"
+                result["timing"] = {"total_sec": round(time.time() - pipeline_start, 1)}
+                return result
+            except Exception:
+                pass
+            return {
+                "status": "success",
+                "ai_model": self.MODEL,
+                "raw_analysis": text if text else "Analysis generated",
+                "analysis_pipeline": "quick-single-pass-fallback",
+                "timing": {"total_sec": round(time.time() - pipeline_start, 1)},
+            }
+        except Exception as e:
+            logger.error("Quick analysis error: %s", e)
+            return {"error": str(e), "status": "error"}
+        finally:
+            gc.collect()
+
+    # ── STT Preprocessing ────────────────────────────────────────
+
+    def preprocess_voice_input(self, transcript: str) -> str:
+        """
+        Normalize a speech-to-text transcript for legal processing.
+
+        Corrects common STT errors in Indian legal terminology:
+        - Misheard section numbers ("section for 98 A" → "Section 498A")
+        - Statute name normalization ("I P C" → "IPC", "code of criminal procedure" → "CrPC")
+        - Court name normalization ("supreme court" → "Supreme Court of India")
+        - Proper noun capitalization for legal terms
+
+        Args:
+            transcript: Raw speech-to-text output
+
+        Returns:
+            Cleaned transcript ready for analyze_brief or chat_stream
+        """
+        if not transcript or not transcript.strip():
+            return transcript or ""
+
+        if not self.is_available:
+            # Basic regex cleanup when AI is unavailable
+            return self._basic_stt_cleanup(transcript)
+
+        try:
+            response = self.client.messages.create(
+                model=self.MODEL_FAST,
+                max_tokens=2048,
+                messages=[{"role": "user", "content": f"""You are a legal transcription corrector for Indian law. Clean up this speech-to-text transcript:
+
+1. Fix misheard legal terms (e.g., "section for 98 A" → "Section 498A IPC")
+2. Correct statute names (e.g., "I P C" → "IPC", "see are pee see" → "CrPC")
+3. Fix court names (e.g., "supreme court" → "Supreme Court of India") 
+4. Correct legal Latin (e.g., "rex ipsa loquitor" → "res ipsa loquitur")
+5. Add proper punctuation and paragraph breaks
+6. Do NOT change the substance or meaning — only fix transcription errors
+
+Transcript:
+{transcript[:8000]}
+
+Return ONLY the corrected text, nothing else."""}],
+                temperature=0.0,
+            )
+            corrected = response.content[0].text.strip()
+            logger.info("STT preprocessing: %d chars → %d chars", len(transcript), len(corrected))
+            return corrected
+        except Exception as e:
+            logger.warning("STT preprocessing failed, using raw transcript: %s", e)
+            return self._basic_stt_cleanup(transcript)
+        finally:
+            gc.collect()
+
+    @staticmethod
+    def _basic_stt_cleanup(text: str) -> str:
+        """Basic regex-based STT cleanup when AI is unavailable."""
+        # Common STT misheard legal abbreviations
+        replacements = {
+            r'\bi p c\b': 'IPC', r'\bc r p c\b': 'CrPC', r'\bc p c\b': 'CPC',
+            r'\bb n s\b': 'BNS', r'\bb n s s\b': 'BNSS', r'\bb s a\b': 'BSA',
+            r'\bfir\b': 'FIR', r'\bn c l t\b': 'NCLT', r'\bn c d r c\b': 'NCDRC',
+            r'\bsection (\d)': r'Section \1',
+            r'\barticle (\d)': r'Article \1',
+        }
+        result = text
+        for pattern, replacement in replacements.items():
+            result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+        return result

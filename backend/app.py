@@ -813,6 +813,7 @@ def ai_analyze():
     if not data:
         return jsonify({"error": "Request body required"}), 400
     text = data.get("text", "")
+    deep = data.get("deep", True)  # deep=True (default) for full 3-pass, False for quick
     if not text.strip():
         return jsonify({"error": "Brief text cannot be empty"}), 400
 
@@ -827,7 +828,7 @@ def ai_analyze():
         jurisdiction_resolver.enrich_context(regex_context, text)
 
         # Step 2: Deep AI analysis with context (now includes verified jurisdiction)
-        ai_result = claude.analyze_brief(text, context=regex_context)
+        ai_result = claude.analyze_brief(text, context=regex_context, deep=deep)
 
         # Merge: AI analysis + regex-extracted entities + jurisdiction
         merged = {
