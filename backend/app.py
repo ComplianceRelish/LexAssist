@@ -363,10 +363,14 @@ def get_profile():
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
     try:
-        response = supabase.client.table("profiles").select("*").eq("user_id", user_id).single().execute()
-        return jsonify({"profile": response.data}), 200
+        response = supabase.client.table("profiles").select("*").eq("user_id", user_id).execute()
+        if response.data and len(response.data) > 0:
+            return jsonify({"profile": response.data[0]}), 200
+        # No profile row yet — return empty shell so frontend doesn't error
+        return jsonify({"profile": {"user_id": user_id, "full_name": "", "email": "", "phone": "", "address": "", "age": None}}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.warning("Profile fetch error for %s: %s", user_id, e)
+        return jsonify({"profile": {"user_id": user_id, "full_name": "", "email": "", "phone": "", "address": "", "age": None}}), 200
 
 # ---------------------------------------------------------------------------
 # User stats & activity history  (real data from activity_log)

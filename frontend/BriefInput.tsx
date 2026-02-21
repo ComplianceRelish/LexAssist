@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { analyzeBrief, aiAnalyzeBrief, SpeechTranscriptionResult, DocumentScanResult } from './utils/api';
 import SpeechInput from './SpeechInput';
 import DocumentScanner from './DocumentScanner';
@@ -29,6 +30,7 @@ interface BriefInputProps {
 type AnalysisMode = 'basic' | 'ai';
 
 const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOpenChat }) => {
+  const navigate = useNavigate();
   const [brief, setBrief] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -423,6 +425,26 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
       {/* Structured analysis results */}
       {transformedResult && (
         <>
+          {/* Case Diary link — auto-saved case */}
+          {aiResult?.case_id && (
+            <div className="lex-card mb-4" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '1.2rem' }}>📁</span>
+                <div>
+                  <div style={{ fontWeight: 600, color: '#166534', fontSize: '0.9rem' }}>Case saved to your Case Diary</div>
+                  <div style={{ fontSize: '0.78rem', color: '#4ade80' }}>Your analysis, briefs, and timeline are saved automatically</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/cases')}
+                style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+              >
+                📁 View Case Diary
+              </button>
+            </div>
+          )}
+
           {/* Quick summary cards */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 mb-6">
             <div className="lex-stat-card">
