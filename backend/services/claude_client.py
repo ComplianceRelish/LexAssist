@@ -226,13 +226,15 @@ class ClaudeClient:
     MODEL = "claude-sonnet-4-6"            # Workhorse — chat, drafting, verification
     MODEL_DEEP = "claude-opus-4-6"         # Deep analysis — maximum intelligence
     MODEL_FAST = "claude-haiku-4-5-20251001"  # Fast preprocessing — context summarization
-    MAX_TOKENS = 16384
+    MAX_TOKENS = 8192
+    MAX_TOKENS_DEEP = 12288                   # Slightly larger for deep analysis only
 
     def __init__(self):
         self.client = None
         self.api_key = Config.CLAUDE_API_KEY
         self._available = False
-        self._context_cache: Dict[str, str] = {}  # Cache for smart context summaries
+        self._context_cache: Dict[str, dict] = {}  # Cache for smart context summaries {key: {text, ts}}
+        self._cache_ttl = 3600  # 1-hour TTL for cached context summaries
 
         if not _ANTHROPIC_AVAILABLE:
             logger.warning("Anthropic SDK not available — install with: pip install anthropic")
@@ -341,10 +343,16 @@ class ClaudeClient:
             return text[:max_chars]
 
         # Check cache — same brief across multiple chat turns shouldn't re-summarize
+        import time as _time
         cache_key = hashlib.md5(text[:2000].encode("utf-8", errors="ignore")).hexdigest()
         if cache_key in self._context_cache:
-            logger.debug("Smart context cache hit")
-            return self._context_cache[cache_key]
+            entry = self._context_cache[cache_key]
+            if _time.time() - entry["ts"] < self._cache_ttl:
+                logger.debug("Smart context cache hit")
+                return entry["text"]
+            else:
+                del self._context_cache[cache_key]
+                logger.debug("Smart context cache expired, regenerating")
 
         try:
             response = self.client.messages.create(
@@ -370,7 +378,7 @@ Brief:
             # Cache the result (limit cache size to 20 entries to bound memory)
             if len(self._context_cache) >= 20:
                 self._context_cache.pop(next(iter(self._context_cache)))
-            self._context_cache[cache_key] = summary
+            self._context_cache[cache_key] = {"text": summary, "ts": _time.time()}
             return summary
         except Exception as e:
             logger.warning("Smart context extraction failed, truncating: %s", e)
@@ -480,7 +488,7 @@ Brief:
                     norm_kt = re.sub(r'\bv\.?\s*s?\.?\b|\bversus\b', 'v', kt)
                     if (norm_name and norm_kt and
                             (norm_name in norm_kt or norm_kt in norm_name) and
-                            len(min(norm_name, norm_kt, key=len)) > 10):
+                            len(min(norm_name, norm_kt, key=len)) > 15):
                         matched = True
                         match_data = kd
                         break
@@ -611,7 +619,8 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
     # ── Structured Brief Analysis (Multi-Pass Pipeline) ──────────
 
     def analyze_brief(self, brief_text: str, context: Optional[Dict] = None,
-                       deep: bool = True) -> Dict[str, Any]:
+                       deep: bool = True,
+                       progress_callback: Optional[callable] = None) -> Dict[str, Any]:
         """
         Multi-pass AI analysis of a legal brief. Returns structured JSON.
 
@@ -627,10 +636,19 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             brief_text: The raw legal brief text
             context: Optional dict with regex-extracted entities for enrichment
             deep: If True (default), run full 3-pass pipeline. If False, single-pass quick analysis.
+            progress_callback: Optional callable(step, message, pct) for real-time progress updates.
 
         Returns:
             Structured analysis dict with verified citations
         """
+        def _progress(step: str, message: str, pct: int = 0):
+            """Emit progress if callback is provided."""
+            if progress_callback:
+                try:
+                    progress_callback(step, message, pct)
+                except Exception:
+                    pass  # Never let progress emission kill the pipeline
+
         if not self.is_available:
             return {"error": "AI service unavailable", "status": "unavailable"}
 
@@ -639,14 +657,17 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
 
         # ── Quick mode: single-pass Sonnet analysis ──────────────
         if not deep:
+            _progress("analyzing", "Running quick single-pass analysis...", 10)
             return self._quick_analyze(brief_text, context, pipeline_start)
 
         # ── Pass 1: Issue Identification (Sonnet — fast) ─────────
+        _progress("pass1", "Pass 1/3 — Identifying legal issues & classifying case type...", 10)
         logger.info("▶ Analysis Pass 1/3: Issue identification (Sonnet 4.6)")
         pass1_start = time.time()
         issues_context = self._identify_issues(brief_text, context)
         pass1_time = round(time.time() - pass1_start, 1)
         logger.info("Pass 1 completed in %.1fs", pass1_time)
+        _progress("pass1_done", f"Pass 1 complete ({pass1_time}s) — issues identified", 25)
 
         if not issues_context:
             pipeline_notes.append(
@@ -654,6 +675,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             )
 
         # ── Pass 2: Deep Structured Analysis (Opus — maximum depth) ──
+        _progress("pass2", "Pass 2/3 — Deep legal analysis in progress (this is the longest step)...", 30)
         logger.info("▶ Analysis Pass 2/3: Deep structured analysis (Opus 4.6)")
 
         prompt = f"Analyze the following Indian legal brief thoroughly:\n\n---\n{brief_text}\n---"
@@ -720,30 +742,53 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             text = ""
             json_text = ""
             pass2_start = time.time()
+            pass2_model = self.MODEL_DEEP  # Will fallback to MODEL (Sonnet) if Opus fails
+
+            # Try Opus first, fallback to Sonnet if it fails
             chunks: List[str] = []
-            with self.client.messages.stream(
-                model=self.MODEL_DEEP,
-                max_tokens=self.MAX_TOKENS,
-                system=BRIEF_ANALYSIS_SYSTEM,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.05,
-            ) as stream:
-                for chunk in stream.text_stream:
-                    chunks.append(chunk)
+            try:
+                with self.client.messages.stream(
+                    model=self.MODEL_DEEP,
+                    max_tokens=self.MAX_TOKENS_DEEP,
+                    system=BRIEF_ANALYSIS_SYSTEM,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.05,
+                ) as stream:
+                    for chunk in stream.text_stream:
+                        chunks.append(chunk)
+            except Exception as opus_err:
+                logger.warning("Pass 2 Opus failed (%s), falling back to Sonnet", opus_err)
+                pipeline_notes.append(f"Opus model unavailable ({type(opus_err).__name__}), used Sonnet fallback")
+                pass2_model = self.MODEL
+                chunks = []
+                gc.collect()
+                with self.client.messages.stream(
+                    model=self.MODEL,
+                    max_tokens=self.MAX_TOKENS,
+                    system=BRIEF_ANALYSIS_SYSTEM,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.05,
+                ) as stream:
+                    for chunk in stream.text_stream:
+                        chunks.append(chunk)
 
             pass2_time = round(time.time() - pass2_start, 1)
-            logger.info("Pass 2 completed in %.1fs", pass2_time)
+            logger.info("Pass 2 completed in %.1fs (model: %s)", pass2_time, pass2_model)
+            _progress("pass2_done", f"Pass 2 complete ({pass2_time}s) — deep analysis finished", 70)
 
             text = "".join(chunks).strip()
+            del chunks  # Free chunk list memory immediately
+            gc.collect()
             json_text = self._extract_json(text)
 
             result = json.loads(json_text)
             result["status"] = "success"
-            result["ai_model"] = self.MODEL_DEEP
+            result["ai_model"] = pass2_model
 
             gc.collect()
 
             # ── Pass 3: Citation Verification with Ground-Truth (Sonnet — fast) ──
+            _progress("pass3", "Pass 3/3 — Verifying citations against Indian Kanoon database...", 75)
             logger.info("▶ Analysis Pass 3/3: Citation verification (Sonnet 4.6)")
             pass3_start = time.time()
             if result.get("relevant_precedents"):
@@ -755,6 +800,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 pipeline_notes.append("No precedents to verify — citation verification skipped")
             pass3_time = round(time.time() - pass3_start, 1)
             logger.info("Pass 3 completed in %.1fs", pass3_time)
+            _progress("pass3_done", f"Pass 3 complete ({pass3_time}s) — citations verified", 95)
 
             result["analysis_pipeline"] = "multi-pass-v1"
             if pipeline_notes:
@@ -776,7 +822,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 repaired = self._repair_truncated_json(json_text)
                 result = json.loads(repaired)
                 result["status"] = "success"
-                result["ai_model"] = self.MODEL_DEEP
+                result["ai_model"] = pass2_model
                 # Only verify citations if precedents survived the truncation repair
                 if result.get("relevant_precedents"):
                     result = self._verify_citations(result, kanoon_precedents=kanoon_precedents)
@@ -803,7 +849,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 summary = clean[:2000]
             return {
                 "status": "success",
-                "ai_model": self.MODEL_DEEP,
+                "ai_model": pass2_model,
                 "raw_analysis": raw,
                 "case_summary": summary,
                 "analysis_pipeline": "multi-pass-v1-fallback",

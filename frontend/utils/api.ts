@@ -45,8 +45,15 @@ export async function analyzeBrief(text: string) {
     });
     clearTimeout(timeoutId);
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to analyze brief');
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to analyze brief');
+      }
+      if (response.status >= 500) {
+        throw new Error('Analysis server error — please wait a moment and try again.');
+      }
+      throw new Error(`Analysis failed (${response.status})`);
     }
     return response.json();
   } catch (err: any) {
@@ -54,17 +61,107 @@ export async function analyzeBrief(text: string) {
     if (err.name === 'AbortError') {
       throw new Error('Analysis timed out — please try with a shorter brief or try again later.');
     }
+    if (err.name === 'TypeError' && err.message?.includes('Failed to fetch')) {
+      throw new Error('Cannot reach the server — please check your connection and try again.');
+    }
     throw err;
   }
 }
 
 // ── AI-Powered Analysis (Claude) ──────────────────────────────────
 
-export async function aiAnalyzeBrief(text: string) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3min timeout for AI
+export interface AnalysisProgress {
+  step: string;
+  message: string;
+  pct: number;
+}
+
+/**
+ * AI analysis with real-time progress via SSE.
+ * Falls back to the non-streaming endpoint if SSE fails to connect.
+ */
+export async function aiAnalyzeBrief(
+  text: string,
+  onProgress?: (progress: AnalysisProgress) => void,
+) {
+  // Outer timeout caps the entire operation (stream attempt + possible fallback)
+  const outerController = new AbortController();
+  const outerTimeout = setTimeout(() => outerController.abort(), 270_000); // 4.5min hard cap
+
   try {
-    const response = await fetch(`${BASE_URL}/api/ai/analyze`, {
+    // If caller wants progress updates, use the SSE streaming endpoint
+    if (onProgress) {
+      try {
+        return await _aiAnalyzeStream(text, onProgress, outerController.signal);
+      } catch (streamErr: any) {
+        if (outerController.signal.aborted) throw new Error('AI analysis timed out — please try again.');
+        // If the streaming endpoint is unavailable (404, network error), fall back
+        if (streamErr?.message?.includes('fallback')) {
+          // Explicit fallback signal — use non-streaming endpoint
+        } else {
+          throw streamErr;
+        }
+      }
+    }
+
+    // Non-streaming fallback (original implementation)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3min timeout for AI
+    // Also abort if outer timeout fires
+    outerController.signal.addEventListener('abort', () => controller.abort());
+    try {
+      const response = await fetch(`${BASE_URL}/api/ai/analyze`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ text }),
+        credentials: 'include',
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        // Server may return HTML (e.g. gunicorn crash) instead of JSON
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const error = await response.json();
+          throw new Error(error.error || 'AI analysis failed');
+        }
+        // Non-JSON error (worker crash, proxy error, etc.)
+        if (response.status >= 500) {
+          throw new Error('AI analysis server error — the server may be restarting. Please wait a moment and try again.');
+        }
+        throw new Error(`AI analysis failed (${response.status})`);
+      }
+      return response.json();
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('AI analysis timed out — please try again.');
+      }
+      if (err.name === 'TypeError' && err.message?.includes('Failed to fetch')) {
+        throw new Error('Cannot reach the AI server — please check your connection and try again.');
+      }
+      throw err;
+    }
+  } finally {
+    clearTimeout(outerTimeout);
+  }
+}
+
+/** Internal: SSE-streaming analysis with progress events. */
+async function _aiAnalyzeStream(
+  text: string,
+  onProgress: (progress: AnalysisProgress) => void,
+  externalSignal?: AbortSignal,
+): Promise<any> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 240_000); // 4min for streaming
+  // Also abort if external (outer) signal fires
+  if (externalSignal) {
+    externalSignal.addEventListener('abort', () => controller.abort());
+  }
+
+  try {
+    const response = await fetch(`${BASE_URL}/api/ai/analyze-stream`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ text }),
@@ -72,15 +169,83 @@ export async function aiAnalyzeBrief(text: string) {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'AI analysis failed');
+      // If 404, the backend doesn't support streaming yet — signal fallback
+      if (response.status === 404) {
+        throw new Error('fallback');
+      }
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const error = await response.json();
+        throw new Error(error.error || 'AI analysis failed');
+      }
+      if (response.status >= 500) {
+        throw new Error('AI analysis server error — the server may be restarting. Please wait a moment and try again.');
+      }
+      throw new Error(`AI analysis failed (${response.status})`);
     }
-    return response.json();
+
+    // Read SSE stream
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('fallback');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResult: any = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process complete SSE lines
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+
+          if (event.type === 'progress') {
+            onProgress({
+              step: event.step || '',
+              message: event.message || '',
+              pct: event.pct || 0,
+            });
+          } else if (event.type === 'result') {
+            finalResult = event.data;
+          } else if (event.type === 'error') {
+            throw new Error(event.error || 'AI analysis failed');
+          }
+          // Ignore heartbeat events
+        } catch (parseErr: any) {
+          if (parseErr.message && !parseErr.message.includes('JSON')) {
+            throw parseErr; // Re-throw non-parse errors (like our error events)
+          }
+          // Ignore JSON parse errors on partial data
+        }
+      }
+    }
+
+    if (!finalResult) {
+      throw new Error('Analysis completed but no result was returned — please try again.');
+    }
+
+    return finalResult;
+
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
       throw new Error('AI analysis timed out — please try again.');
+    }
+    if (err.name === 'TypeError' && err.message?.includes('Failed to fetch')) {
+      throw new Error('Cannot reach the AI server — please check your connection and try again.');
     }
     throw err;
   }

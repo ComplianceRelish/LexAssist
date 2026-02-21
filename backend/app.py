@@ -42,6 +42,33 @@ if extra:
 CORS(app, supports_credentials=True, origins=ALLOWED_ORIGINS)
 logger = setup_logger()
 
+# ---------------------------------------------------------------------------
+# Global error handlers — ensure JSON + CORS headers even on crashes
+# ---------------------------------------------------------------------------
+
+@app.errorhandler(500)
+def handle_500(e):
+    logger.error("Unhandled 500 error: %s", e)
+    return jsonify({"error": "Internal server error", "details": str(e)}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error("Unhandled exception: %s", e)
+    return jsonify({"error": "Server error", "details": str(e)}), 500
+
+@app.after_request
+def add_cors_headers(response):
+    """Ensure CORS headers are present on ALL responses, including errors."""
+    origin = request.headers.get("Origin", "")
+    if origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
+
+# ---------------------------------------------------------------------------
+# Service init (after error handlers so crashes during init are caught)
+# ---------------------------------------------------------------------------
+
 indian_kanoon = IndianKanoonAPI()
 inlegalbert = InLegalBERTProcessor()
 supabase = SupabaseClient()
@@ -282,7 +309,8 @@ def setup_admins():
             if "already" in err_msg.lower():
                 # User exists — update password to phone and ensure profile
                 try:
-                    auth_users = supabase.client.auth.admin.list_users()
+                    auth_resp = supabase.client.auth.admin.list_users(page=1, per_page=1000)
+                    auth_users = auth_resp if isinstance(auth_resp, list) else getattr(auth_resp, 'users', auth_resp)
                     for u in auth_users:
                         if hasattr(u, 'email') and u.email and u.email.lower() == email_key:
                             # Update password + phone for Name+Phone login
@@ -700,8 +728,7 @@ def delete_case(case_id):
         briefs = supabase.client.table("briefs").select("id").eq("case_id", case_id).execute()
         brief_ids = [b["id"] for b in (briefs.data or [])]
         if brief_ids:
-            for bid in brief_ids:
-                supabase.client.table("analysis_results").delete().eq("brief_id", bid).execute()
+            supabase.client.table("analysis_results").delete().in_("brief_id", brief_ids).execute()
 
         # 2. Delete briefs
         supabase.client.table("briefs").delete().eq("case_id", case_id).execute()
@@ -789,7 +816,8 @@ def add_case_entry(case_id):
         }).execute()
 
         # Touch the case updated_at
-        supabase.client.table("cases").update({"notes": existing.data.get("notes", "") or ""}).eq("id", case_id).execute()
+        from datetime import datetime, timezone
+        supabase.client.table("cases").update({"updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", case_id).execute()
 
         return jsonify(result), 201
     except Exception as e:
@@ -822,13 +850,25 @@ def ai_analyze():
 
     try:
         # Step 1: Quick regex extraction for context enrichment
-        regex_context = analyzer.analyze(text)
+        try:
+            regex_context = analyzer.analyze(text)
+        except Exception as regex_err:
+            logger.warning("Regex analysis failed: %s — continuing with empty context", regex_err)
+            regex_context = {"entities": {}, "case_type": {}, "jurisdiction": {}, "statutes": [], "precedents": [], "timeline": [], "nlp_enrichment": {}}
 
         # Step 1b: Jurisdiction resolution (authoritative geographic lookup)
-        jurisdiction_resolver.enrich_context(regex_context, text)
+        try:
+            jurisdiction_resolver.enrich_context(regex_context, text)
+        except Exception as jr_err:
+            logger.warning("Jurisdiction resolution failed: %s — continuing without", jr_err)
 
         # Step 2: Deep AI analysis with context (now includes verified jurisdiction)
         ai_result = claude.analyze_brief(text, context=regex_context, deep=deep)
+
+        # Check if Claude returned an error
+        if ai_result.get("status") == "error":
+            logger.error("Claude analysis returned error: %s", ai_result.get("error"))
+            return jsonify({"error": ai_result.get("error", "AI analysis failed"), "details": ai_result}), 502
 
         # Merge: AI analysis + regex-extracted entities + jurisdiction
         merged = {
@@ -903,6 +943,197 @@ def ai_analyze():
     except Exception as e:
         logger.error("AI analysis error: %s", e)
         return jsonify({"error": "AI analysis failed", "details": str(e)}), 500
+
+
+@app.route("/api/ai/analyze-stream", methods=["POST"])
+def ai_analyze_stream():
+    """SSE-streaming AI analysis — sends progress events during the multi-pass pipeline,
+    then the final result as a JSON payload.
+
+    Event types:
+      progress  — { step, message, pct }   (real-time pipeline progress)
+      result    — full merged analysis JSON  (final payload)
+      error     — { error, details }         (on failure)
+    """
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.json
+    if not data:
+        return jsonify({"error": "Request body required"}), 400
+    text = data.get("text", "")
+    deep = data.get("deep", True)
+    if not text.strip():
+        return jsonify({"error": "Brief text cannot be empty"}), 400
+
+    if not claude.is_available:
+        return jsonify({"error": "AI service unavailable — Claude API key not configured"}), 503
+
+    # We need a mutable container to pass progress events from the callback
+    # into the SSE generator running in the same thread.
+    import queue
+    import threading
+    progress_queue = queue.Queue()
+    cancel_event = threading.Event()
+
+    def progress_cb(step: str, message: str, pct: int = 0):
+        if cancel_event.is_set():
+            raise RuntimeError("Client disconnected — analysis cancelled")
+        progress_queue.put({"step": step, "message": message, "pct": pct})
+
+    def generate():
+        try:
+            # Emit initial progress
+            yield f"data: {json.dumps({'type': 'progress', 'step': 'start', 'message': 'Starting analysis pipeline...', 'pct': 5})}\n\n"
+
+            # Step 1: Regex extraction
+            yield f"data: {json.dumps({'type': 'progress', 'step': 'regex', 'message': 'Extracting entities, statutes & precedents...', 'pct': 8})}\n\n"
+            try:
+                regex_context = analyzer.analyze(text)
+            except Exception as regex_err:
+                logger.warning("Regex analysis failed: %s — continuing with empty context", regex_err)
+                regex_context = {"entities": {}, "case_type": {}, "jurisdiction": {}, "statutes": [], "precedents": [], "timeline": [], "nlp_enrichment": {}}
+
+            # Step 1b: Jurisdiction resolution
+            try:
+                jurisdiction_resolver.enrich_context(regex_context, text)
+            except Exception as jr_err:
+                logger.warning("Jurisdiction resolution failed: %s — continuing without", jr_err)
+
+            # Step 2: Deep AI analysis with progress callback
+            # The callback will put events into progress_queue, but since analyze_brief
+            # is synchronous and runs in the same thread, we run it in a background thread
+            # and drain the queue from here.
+
+            result_container = [None]
+            error_container = [None]
+
+            def run_analysis():
+                try:
+                    result_container[0] = claude.analyze_brief(
+                        text, context=regex_context, deep=deep,
+                        progress_callback=progress_cb,
+                    )
+                except Exception as e:
+                    error_container[0] = e
+                finally:
+                    progress_queue.put(None)  # Sentinel to signal completion
+
+            thread = threading.Thread(target=run_analysis, daemon=True)
+            thread.start()
+
+            # Drain progress events while analysis runs
+            while True:
+                try:
+                    event = progress_queue.get(timeout=1.0)
+                    if event is None:
+                        break  # Analysis thread finished
+                    yield f"data: {json.dumps({'type': 'progress', **event})}\n\n"
+                except queue.Empty:
+                    # Heartbeat to keep connection alive
+                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                except GeneratorExit:
+                    # Client disconnected — signal the analysis thread to stop
+                    logger.info("SSE client disconnected — cancelling analysis")
+                    cancel_event.set()
+                    thread.join(timeout=10.0)
+                    return
+
+            thread.join(timeout=5.0)
+
+            if error_container[0]:
+                raise error_container[0]
+
+            ai_result = result_container[0]
+            if not ai_result:
+                raise RuntimeError("Analysis returned no result")
+
+            # Check if Claude returned an error
+            if ai_result.get("status") == "error":
+                yield f"data: {json.dumps({'type': 'error', 'error': ai_result.get('error', 'AI analysis failed')})}\n\n"
+                return
+
+            yield f"data: {json.dumps({'type': 'progress', 'step': 'merging', 'message': 'Merging results & saving to case diary...', 'pct': 97})}\n\n"
+
+            # Merge: AI analysis + regex-extracted entities + jurisdiction
+            merged = {
+                "status": "success",
+                "ai_analysis": ai_result,
+                "entities": regex_context.get("entities", {}),
+                "case_type_regex": regex_context.get("case_type", {}),
+                "jurisdiction_regex": regex_context.get("jurisdiction", {}),
+                "jurisdiction_verified": regex_context.get("jurisdiction_data", {}),
+                "statutes_regex": regex_context.get("statutes", []),
+                "precedents_kanoon": regex_context.get("precedents", []),
+                "timeline": regex_context.get("timeline", []),
+                "nlp_enrichment": regex_context.get("nlp_enrichment", {}),
+            }
+
+            # Save to case diary (same logic as non-streaming endpoint)
+            brief_id = None
+            case_id = data.get("case_id")
+            if supabase.client:
+                try:
+                    if not case_id:
+                        case_title = text[:100].replace("\n", " ").strip()
+                        ai_summary = ai_result.get("case_summary", "")
+                        if ai_summary and isinstance(ai_summary, str):
+                            clean = ai_summary.strip().lstrip("`").lstrip("json").strip()
+                            if not clean.startswith("{"):
+                                case_title = clean[:120]
+                        case_row = supabase.client.table("cases").insert({
+                            "user_id": user_id,
+                            "title": case_title,
+                            "status": "active",
+                        }).execute()
+                        case_id = case_row.data[0]["id"] if case_row.data else None
+
+                    brief_row = supabase.client.table("briefs").insert({
+                        "user_id": user_id,
+                        "case_id": case_id,
+                        "title": text[:100].replace("\n", " ").strip(),
+                        "content": text,
+                    }).execute()
+                    brief_id = brief_row.data[0]["id"] if brief_row.data else None
+
+                    if brief_id:
+                        supabase.client.table("analysis_results").insert({
+                            "user_id": user_id,
+                            "brief_id": brief_id,
+                            "analysis": merged,
+                        }).execute()
+
+                    snippet = text[:200].replace("\n", " ")
+                    supabase.client.table("activity_log").insert({
+                        "user_id": user_id,
+                        "case_id": case_id,
+                        "action": "ai_brief_analyzed",
+                        "title": "AI Brief Analysis",
+                        "detail": snippet,
+                        "metadata": {"brief_id": brief_id, "case_id": case_id},
+                    }).execute()
+                except Exception as log_err:
+                    logger.warning("Activity log write failed: %s", log_err)
+
+            merged["case_id"] = case_id
+
+            # Final result event
+            yield f"data: {json.dumps({'type': 'result', 'data': merged}, default=str)}\n\n"
+
+        except Exception as e:
+            logger.error("AI analysis stream error: %s", e)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
 
 
 @app.route("/api/ai/chat", methods=["POST"])
@@ -1234,6 +1465,7 @@ def admin_me():
 
     # Also check profiles table for role
     role = "user"
+    profile = None
     try:
         profile = supabase.client.table("profiles").select("role, full_name").eq("user_id", user_id).single().execute()
         if profile.data:
@@ -1246,11 +1478,8 @@ def admin_me():
 
     # Get full_name from profile if available
     profile_full_name = None
-    try:
-        if profile.data:
-            profile_full_name = profile.data.get("full_name")
-    except Exception:
-        pass
+    if profile and profile.data:
+        profile_full_name = profile.data.get("full_name")
 
     return jsonify({
         "user_id": user_id,

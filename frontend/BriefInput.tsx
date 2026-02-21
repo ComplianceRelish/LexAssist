@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { analyzeBrief, aiAnalyzeBrief, SpeechTranscriptionResult, DocumentScanResult } from './utils/api';
+import { analyzeBrief, aiAnalyzeBrief, SpeechTranscriptionResult, DocumentScanResult, AnalysisProgress } from './utils/api';
 import SpeechInput from './SpeechInput';
 import DocumentScanner from './DocumentScanner';
 import ResponseTabs from './ResponseTabs';
@@ -37,6 +37,7 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [loading, setLoading] = useState(false);
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('ai');
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
   const [aiResult, setAiResult] = useState<any>(null);
@@ -47,6 +48,10 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
   const [showDocScanner, setShowDocScanner] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recognitionRef = useRef<any>(null);
+  const isRecordingRef = useRef(false);
+
+  // Keep isRecordingRef in sync with isRecording state
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
 
   // Check Web Speech API support
   useEffect(() => {
@@ -74,14 +79,17 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
     setError(null);
     setResult(null);
     setAiResult(null);
+    setAnalysisProgress(null);
     if (!isLoggedIn) { setShowLoginPrompt(true); return; }
     if (!brief.trim()) { setError('Please enter or dictate your case brief'); return; }
 
     setLoading(true);
     try {
       if (analysisMode === 'ai') {
-        // AI-enhanced analysis (Claude + regex + Indian Kanoon)
-        const res = await aiAnalyzeBrief(brief);
+        // AI-enhanced analysis (Claude + regex + Indian Kanoon) — with live progress
+        const res = await aiAnalyzeBrief(brief, (progress) => {
+          setAnalysisProgress(progress);
+        });
         setAiResult(res);
         // Also extract the regex part for backward compat
         setResult({
@@ -110,6 +118,7 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
       setError((err as Error).message || 'Failed to analyze brief');
     } finally {
       setLoading(false);
+      setAnalysisProgress(null);
     }
   };
 
@@ -164,14 +173,14 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
     };
 
     recognition.onend = () => {
-      if (recognitionRef.current && isRecording) {
+      if (recognitionRef.current && isRecordingRef.current) {
         try { recognition.start(); } catch {}
       }
     };
 
     recognitionRef.current = recognition;
     recognition.start();
-  }, [isLoggedIn, isRecording]);
+  }, [isLoggedIn]);
 
   const stopRecording = useCallback(() => {
     setIsRecording(false);
@@ -225,7 +234,7 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
   };
 
   // Transform analysis result into ResponseTabs format
-  const transformedResult = result && result.status === 'success' ? {
+  const transformedResult = useMemo(() => result && result.status === 'success' ? {
     lawSections: (result.statutes || []).map((s: any, i: number) => ({
       title: s.full_name || s.short_name,
       sectionNumber: (s.sections || []).join(', ') || 'N/A',
@@ -253,7 +262,7 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
     nextSteps: result.analysis?.next_steps || [],
     entities: result.entities,
     nlpEnrichment: result.nlp_enrichment,
-  } : null;
+  } : null, [result, aiResult]);
   
   return (
     <div>
@@ -319,15 +328,28 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
             <div className="lex-alert lex-alert-info mb-4">
               <div className="flex items-center gap-3">
                 <div className="lex-spinner-sm"></div>
-                <div>
+                <div className="flex-1">
                   <div className="font-semibold">
-                    {analysisMode === 'ai' ? 'AI is analyzing your brief...' : 'Analyzing your brief...'}
+                    {analysisMode === 'ai'
+                      ? (analysisProgress?.message || 'AI is analyzing your brief...')
+                      : 'Analyzing your brief...'}
                   </div>
                   <div className="text-xs mt-1 opacity-75">
                     {analysisMode === 'ai'
-                      ? 'LexAssist AI is performing deep legal analysis — extracting entities, identifying precedents, mapping statutes, assessing risk'
+                      ? (analysisProgress
+                          ? `Step: ${analysisProgress.step.replace(/_/g, ' ')}`
+                          : 'LexAssist AI is performing deep legal analysis — extracting entities, identifying precedents, mapping statutes, assessing risk')
                       : 'Extracting entities, searching precedents, mapping statutes'}
                   </div>
+                  {/* Progress bar for AI analysis */}
+                  {analysisMode === 'ai' && analysisProgress && analysisProgress.pct > 0 && (
+                    <div className="mt-2 w-full bg-blue-100 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-1.5 rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${Math.min(analysisProgress.pct, 100)}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
