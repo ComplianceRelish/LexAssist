@@ -189,12 +189,13 @@ class ClaudeClient:
     Anthropic Claude API client for legal AI features.
     
     Supports:
-    - Structured brief analysis (JSON output)
-    - Streaming chat conversations
-    - Document drafting
+    - Structured brief analysis (JSON output)  — uses Opus 4.6 for maximum depth
+    - Streaming chat conversations              — uses Sonnet 4.6 for speed
+    - Document drafting                         — uses Sonnet 4.6 for speed
     """
 
-    MODEL = "claude-sonnet-4-20250514"
+    MODEL = "claude-sonnet-4-6"            # Default workhorse — fast, capable
+    MODEL_DEEP = "claude-opus-4-6"         # Deep analysis — maximum intelligence
     MAX_TOKENS = 16384
 
     def __init__(self):
@@ -216,7 +217,7 @@ class ClaudeClient:
                 timeout=240.0,  # 4-minute timeout for deep legal analysis
             )
             self._available = True
-            logger.info("Claude client initialized (model: %s)", self.MODEL)
+            logger.info("Claude client initialized (chat: %s, analysis: %s)", self.MODEL, self.MODEL_DEEP)
         except Exception as e:
             logger.error("Claude client init failed: %s", e)
 
@@ -341,7 +342,7 @@ class ClaudeClient:
             # Collect chunks incrementally instead of buffering the entire response.
             chunks: List[str] = []
             with self.client.messages.stream(
-                model=self.MODEL,
+                model=self.MODEL_DEEP,
                 max_tokens=self.MAX_TOKENS,
                 system=BRIEF_ANALYSIS_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
@@ -357,17 +358,17 @@ class ClaudeClient:
 
             result = json.loads(json_text)
             result["status"] = "success"
-            result["ai_model"] = self.MODEL
+            result["ai_model"] = self.MODEL_DEEP
             return result
 
         except json.JSONDecodeError as e:
             # Attempt to repair truncated JSON before giving up
-            logger.warning("Initial JSON parse failed (%s), attempting repair…", e)
+            logger.warning("Initial JSON parse failed (%s), attempting repair\u2026", e)
             try:
                 repaired = self._repair_truncated_json(json_text)
                 result = json.loads(repaired)
                 result["status"] = "success"
-                result["ai_model"] = self.MODEL
+                result["ai_model"] = self.MODEL_DEEP
                 logger.info("JSON repair succeeded")
                 return result
             except Exception:
@@ -383,7 +384,7 @@ class ClaudeClient:
                 summary = clean[:2000]
             return {
                 "status": "success",
-                "ai_model": self.MODEL,
+                "ai_model": self.MODEL_DEEP,
                 "raw_analysis": raw,
                 "case_summary": summary,
             }
