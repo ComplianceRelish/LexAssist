@@ -472,11 +472,14 @@ class LegalBriefAnalyzer:
                             "citation": doc.get("citation", ""),
                             "doc_id": doc.get("tid", ""),
                             "headline": doc.get("headline", ""),
+                            "docsource": doc.get("docsource", ""),
+                            "publishdate": doc.get("publishdate", ""),
                             "source": "Indian Kanoon"
                         })
             except Exception as e:
                 logger.warning("Precedent search failed for query '%s': %s", q, e)
 
+        logger.info("Indian Kanoon returned %d precedents for %d queries", len(precedents), len(queries))
         return precedents
 
     def _strategic_analysis(self, text: str, entities: dict,

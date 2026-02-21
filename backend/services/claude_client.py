@@ -432,26 +432,86 @@ Brief:
         finally:
             gc.collect()
 
-    def _verify_citations(self, analysis: Dict) -> Dict:
+    def _verify_citations(self, analysis: Dict,
+                          kanoon_precedents: Optional[List[Dict]] = None) -> Dict:
         """
-        Pass 3 — Citation verification.
-        Sends generated citations back for confidence scoring.
+        Pass 3 — Citation verification with Indian Kanoon ground-truth.
+
+        Two-layer verification:
+          Layer 1 (database): Cross-reference AI citations against Indian Kanoon
+                              search results. A match = confidence 5 (database-verified).
+          Layer 2 (AI):       For citations NOT found in Indian Kanoon results,
+                              fall back to AI self-verification with confidence scoring.
+
         Citations scoring <= 3/5 are flagged with ⚠️.
         """
         precedents = analysis.get("relevant_precedents", [])
         if not precedents:
             return analysis
 
-        citations_text = "\n".join([
-            f"{i+1}. {p.get('case_name', 'Unknown')} — {p.get('citation', 'No citation')} ({p.get('court', 'Unknown court')})"
-            for i, p in enumerate(precedents)
-        ])
+        # ── Layer 1: Indian Kanoon ground-truth matching ─────────
+        kanoon_titles_lower: Dict[str, Dict] = {}
+        if kanoon_precedents:
+            for kp in kanoon_precedents:
+                title = (kp.get("title") or "").strip().lower()
+                if title:
+                    kanoon_titles_lower[title] = kp
+            logger.info("Ground-truth pool: %d Indian Kanoon cases for cross-referencing", len(kanoon_titles_lower))
 
-        try:
-            response = self.client.messages.create(
-                model=self.MODEL,
-                max_tokens=2048,
-                messages=[{"role": "user", "content": f"""You are a citation verification assistant for Indian law. For each case citation below, rate your confidence (1-5) that this is a REAL Indian case with a CORRECT citation:
+        db_verified_count = 0
+        unverified_indices: List[int] = []  # indices needing AI verification
+
+        for i, p in enumerate(precedents):
+            case_name = (p.get("case_name") or "").strip().lower()
+            # Remove any existing ⚠️ prefix for matching
+            clean_name = re.sub(r'^⚠️\s*', '', case_name)
+
+            matched = False
+            # Exact match
+            if clean_name in kanoon_titles_lower:
+                matched = True
+                match_data = kanoon_titles_lower[clean_name]
+            else:
+                # Fuzzy match: check if any Kanoon title is a substantial substring
+                # or vice versa (handles "X v. Y" vs "X vs Y" etc.)
+                for kt, kd in kanoon_titles_lower.items():
+                    # Normalize "v." / "vs" / "vs." / "versus" for comparison
+                    norm_name = re.sub(r'\bv\.?\s*s?\.?\b|\bversus\b', 'v', clean_name)
+                    norm_kt = re.sub(r'\bv\.?\s*s?\.?\b|\bversus\b', 'v', kt)
+                    if (norm_name and norm_kt and
+                            (norm_name in norm_kt or norm_kt in norm_name) and
+                            len(min(norm_name, norm_kt, key=len)) > 10):
+                        matched = True
+                        match_data = kd
+                        break
+
+            if matched:
+                precedents[i]["citation_confidence"] = 5
+                precedents[i]["verification_source"] = "Indian Kanoon (database-verified)"
+                if match_data.get("doc_id"):
+                    precedents[i]["indian_kanoon_doc_id"] = match_data["doc_id"]
+                if match_data.get("citation") and not p.get("citation"):
+                    precedents[i]["citation"] = match_data["citation"]
+                db_verified_count += 1
+            else:
+                unverified_indices.append(i)
+
+        logger.info("Ground-truth match: %d/%d citations verified via Indian Kanoon",
+                     db_verified_count, len(precedents))
+
+        # ── Layer 2: AI self-verification for remaining citations ─
+        ai_verified_count = 0
+        ai_flagged_count = 0
+
+        if unverified_indices:
+            citations_for_ai = "\n".join([
+                f"{j+1}. {precedents[idx].get('case_name', 'Unknown')} — "
+                f"{precedents[idx].get('citation', 'No citation')} "
+                f"({precedents[idx].get('court', 'Unknown court')})"
+                for j, idx in enumerate(unverified_indices)
+            ])
+
+            verify_prompt = f"""You are a citation verification assistant for Indian law. For each case citation below, rate your confidence (1-5) that this is a REAL Indian case with a CORRECT citation:
 
 5 = Certain — landmark case, well-known citation
 4 = Very likely real — recognized case, citation format correct
@@ -461,95 +521,92 @@ Brief:
 
 Be BRUTALLY honest. A fabricated citation filed in an Indian court can result in costs, contempt proceedings, and professional misconduct charges. It is FAR better to flag a real case as uncertain than to let a fake citation through.
 
-Citations to verify:
-{citations_text}
-
-Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or corrections"}}]"""}],
-                temperature=0.0,
-            )
-        except Exception as api_err:
-            # Single retry after 2s for transient errors (529 overloaded, 500, network)
-            logger.warning("Citation verification API call failed (%s), retrying in 2s…", api_err)
-            time.sleep(2)
-            try:
-                response = self.client.messages.create(
-                    model=self.MODEL,
-                    max_tokens=2048,
-                    messages=[{"role": "user", "content": f"""You are a citation verification assistant for Indian law. For each case citation below, rate your confidence (1-5) that this is a REAL Indian case with a CORRECT citation:
-
-5 = Certain — landmark case, well-known citation
-4 = Very likely real — recognized case, citation format correct
-3 = Plausible — could be real but not fully certain of details
-2 = Uncertain — might be fabricated or confused with a different case
-1 = Almost certainly wrong — citation format implausible or case doesn't exist
-
-Be BRUTALLY honest.
+These citations were NOT found in the Indian Kanoon database search results, which increases the chance they may be AI-generated. Apply extra scrutiny.
 
 Citations to verify:
-{citations_text}
+{citations_for_ai}
 
-Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or corrections"}}]"""}],
-                    temperature=0.0,
-                )
-            except Exception as retry_err:
-                logger.warning("Citation verification retry also failed: %s", retry_err)
-                for p in precedents:
-                    if "citation_confidence" not in p:
-                        p["verification_note"] = "Auto-verification unavailable — verify all citations before filing"
-                analysis["citation_verification"] = {
-                    "verified": 0, "flagged": 0, "total": len(precedents),
-                    "note": "Verification service unavailable after retry — manually verify all citations"
-                }
-                return analysis
+Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or corrections"}}]"""
 
-        try:
-            text = response.content[0].text
-            json_text = self._extract_json(text)
-            verifications = json.loads(json_text)
+            response = None
+            for attempt in range(2):
+                try:
+                    response = self.client.messages.create(
+                        model=self.MODEL,
+                        max_tokens=2048,
+                        messages=[{"role": "user", "content": verify_prompt}],
+                        temperature=0.0,
+                    )
+                    break
+                except Exception as api_err:
+                    if attempt == 0:
+                        logger.warning("Citation verification API call failed (%s), retrying in 2s…", api_err)
+                        time.sleep(2)
+                    else:
+                        logger.warning("Citation verification retry also failed: %s", api_err)
 
-            verified_count = 0
-            flagged_count = 0
+            if response:
+                try:
+                    text = response.content[0].text
+                    json_text = self._extract_json(text)
+                    verifications = json.loads(json_text)
 
-            if isinstance(verifications, list):
-                for v in verifications:
-                    idx = v.get("index", 0) - 1
-                    if 0 <= idx < len(precedents):
-                        confidence = v.get("confidence", 5)
-                        precedents[idx]["citation_confidence"] = confidence
-                        if confidence <= 3:
-                            name = precedents[idx].get("case_name", "")
-                            if not name.startswith("⚠️"):
-                                precedents[idx]["case_name"] = f"⚠️ {name}"
-                            precedents[idx]["verification_note"] = v.get(
-                                "note", "Citation confidence low — verify before filing")
-                            flagged_count += 1
-                        else:
-                            verified_count += 1
+                    if isinstance(verifications, list):
+                        for v in verifications:
+                            j = v.get("index", 0) - 1  # 1-based index in the AI prompt
+                            if 0 <= j < len(unverified_indices):
+                                real_idx = unverified_indices[j]
+                                confidence = v.get("confidence", 3)
+                                precedents[real_idx]["citation_confidence"] = confidence
+                                precedents[real_idx]["verification_source"] = "AI self-verification"
+                                if confidence <= 3:
+                                    name = precedents[real_idx].get("case_name", "")
+                                    if not name.startswith("⚠️"):
+                                        precedents[real_idx]["case_name"] = f"⚠️ {name}"
+                                    precedents[real_idx]["verification_note"] = v.get(
+                                        "note", "Not found in Indian Kanoon — verify before filing")
+                                    ai_flagged_count += 1
+                                else:
+                                    ai_verified_count += 1
+                except Exception as e:
+                    logger.warning("AI verification response parsing failed: %s", e)
+            else:
+                # Both API attempts failed — mark all unverified citations
+                for idx in unverified_indices:
+                    if "citation_confidence" not in precedents[idx]:
+                        precedents[idx]["verification_note"] = (
+                            "Not found in Indian Kanoon and AI verification unavailable — verify before filing"
+                        )
+                        precedents[idx]["verification_source"] = "unverified"
 
-            analysis["relevant_precedents"] = precedents
-            analysis["citation_verification"] = {
-                "verified": verified_count,
-                "flagged": flagged_count,
-                "total": len(precedents),
-                "methodology": "AI self-verification (same model family) — independent database verification recommended for high-stakes filings",
-                "note": "Citations with ⚠️ should be independently verified before filing in court"
-            }
-            logger.info("Pass 3 verified %d citations: %d confirmed, %d flagged",
-                        len(precedents), verified_count, flagged_count)
-            return analysis
+        # Mark any remaining unverified citations from the AI batch
+        for idx in unverified_indices:
+            if "citation_confidence" not in precedents[idx]:
+                precedents[idx]["citation_confidence"] = 2
+                precedents[idx]["verification_source"] = "unverified"
+                name = precedents[idx].get("case_name", "")
+                if not name.startswith("⚠️"):
+                    precedents[idx]["case_name"] = f"⚠️ {name}"
+                precedents[idx]["verification_note"] = "Not found in Indian Kanoon — verify independently before filing"
+                ai_flagged_count += 1
 
-        except Exception as e:
-            logger.warning("Pass 3 (citation verification) failed: %s", e)
-            for p in precedents:
-                if "citation_confidence" not in p:
-                    p["verification_note"] = "Auto-verification unavailable — verify all citations before filing"
-            analysis["citation_verification"] = {
-                "verified": 0, "flagged": 0, "total": len(precedents),
-                "note": "Verification service unavailable — manually verify all citations"
-            }
-            return analysis
-        finally:
-            gc.collect()
+        analysis["relevant_precedents"] = precedents
+        analysis["citation_verification"] = {
+            "database_verified": db_verified_count,
+            "ai_verified": ai_verified_count,
+            "flagged": ai_flagged_count,
+            "total": len(precedents),
+            "methodology": (
+                f"Two-layer verification: {db_verified_count} citations matched against Indian Kanoon database "
+                f"(ground-truth), {len(unverified_indices)} checked via AI self-verification"
+            ),
+            "note": "Citations with ⚠️ were NOT found in Indian Kanoon search results — verify independently before filing in court"
+        }
+        logger.info(
+            "Pass 3 complete: %d total, %d DB-verified, %d AI-verified, %d flagged",
+            len(precedents), db_verified_count, ai_verified_count, ai_flagged_count
+        )
+        return analysis
 
     # ── Structured Brief Analysis (Multi-Pass Pipeline) ──────────
 
@@ -607,6 +664,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             prompt += json.dumps(issues_context, indent=2, default=str)[:6000]
 
         # Enrich with regex context
+        kanoon_precedents: List[Dict] = []
         if context:
             enrichment_parts = []
             if context.get("jurisdiction_prompt"):
@@ -622,14 +680,39 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             if enrichment_parts:
                 prompt += "\n\nRegex extraction (verify and expand):\n" + "\n".join(enrichment_parts)
 
+            # ── Indian Kanoon ground-truth precedents ─────────────
+            kanoon_precedents = context.get("precedents", [])
+            if kanoon_precedents:
+                prompt += "\n\n**VERIFIED PRECEDENTS FROM INDIAN KANOON DATABASE (ground-truth — these are REAL cases):**\n"
+                prompt += "Use these as your PRIMARY citation source. You may cite additional cases from your knowledge, "
+                prompt += "but PRIORITIZE these verified cases where relevant. For each, the title and citation are confirmed real.\n\n"
+                for i, p in enumerate(kanoon_precedents[:15], 1):
+                    line = f"{i}. **{p.get('title', 'Unknown')}**"
+                    if p.get("citation"):
+                        line += f" — {p['citation']}"
+                    if p.get("docsource"):
+                        line += f" ({p['docsource']})"
+                    if p.get("publishdate"):
+                        line += f" [{p['publishdate']}]"
+                    if p.get("headline"):
+                        # Strip HTML tags from headline
+                        clean_headline = re.sub(r'<[^>]+>', '', p['headline'])[:200]
+                        line += f"\n   Summary: {clean_headline}"
+                    prompt += line + "\n"
+                logger.info("Injected %d Indian Kanoon precedents into Pass 2 prompt", len(kanoon_precedents[:15]))
+            else:
+                pipeline_notes.append("No Indian Kanoon precedents available — all citations are AI-generated (verify independently)")
+
         prompt += """\n\nProvide your complete structured JSON analysis. Be EXHAUSTIVE and SPECIFIC:
 - For EACH legal issue from Pass 1, provide deep analysis with at least 2 relevant case citations
+- PRIORITIZE citing the verified Indian Kanoon cases above — mark them as source: "Indian Kanoon (verified)" in your relevant_precedents
 - Every section/article number must be exact — cite the specific sub-section where applicable
 - Every case citation must include: full case name, (year) volume reporter page, and court
 - Arguments must be detailed enough to include in a court filing — not bullet-point summaries
 - Map ALL applicable old code sections to new code (IPC→BNS, CrPC→BNSS, Evidence Act→BSA)
 - Strategic recommendations must specify: what to file, under which section, in which court, within what deadline
 - If you are NOT confident about a case citation, mark it with ⚠️ — NEVER fabricate
+- For any case NOT from the Indian Kanoon verified list above, add source: "AI knowledge (verify independently)"
 - PRIORITY if running low on space: legal_issues, relevant_precedents, arguments, strategic_recommendations. Court fees and interim reliefs can be abbreviated."""
 
         try:
@@ -660,11 +743,11 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
 
             gc.collect()
 
-            # ── Pass 3: Citation Verification (Sonnet — fast) ────
+            # ── Pass 3: Citation Verification with Ground-Truth (Sonnet — fast) ──
             logger.info("▶ Analysis Pass 3/3: Citation verification (Sonnet 4.6)")
             pass3_start = time.time()
             if result.get("relevant_precedents"):
-                result = self._verify_citations(result)
+                result = self._verify_citations(result, kanoon_precedents=kanoon_precedents)
             else:
                 result["citation_verification"] = {
                     "note": "No precedents found in analysis — request re-analysis if needed"
@@ -696,7 +779,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 result["ai_model"] = self.MODEL_DEEP
                 # Only verify citations if precedents survived the truncation repair
                 if result.get("relevant_precedents"):
-                    result = self._verify_citations(result)
+                    result = self._verify_citations(result, kanoon_precedents=kanoon_precedents)
                 else:
                     result["citation_verification"] = {
                         "note": "No precedents found after JSON repair (possible truncation) — request re-analysis if needed"
