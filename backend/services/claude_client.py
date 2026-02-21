@@ -12,6 +12,7 @@ Features:
 """
 
 import gc
+import hashlib
 import json
 import re
 import time
@@ -231,6 +232,7 @@ class ClaudeClient:
         self.client = None
         self.api_key = Config.CLAUDE_API_KEY
         self._available = False
+        self._context_cache: Dict[str, str] = {}  # Cache for smart context summaries
 
         if not _ANTHROPIC_AVAILABLE:
             logger.warning("Anthropic SDK not available — install with: pip install anthropic")
@@ -329,12 +331,20 @@ class ClaudeClient:
         Intelligently extract and prioritize key parts of a legal brief.
         For short texts, returns as-is. For long texts, creates a structured
         summary using a fast model, preserving legally critical details.
+        Results are cached by content hash to avoid repeated API calls
+        for the same brief across multiple chat turns.
         """
         if not text or len(text) <= max_chars:
             return text or ""
 
         if not self.is_available:
             return text[:max_chars]
+
+        # Check cache — same brief across multiple chat turns shouldn't re-summarize
+        cache_key = hashlib.md5(text[:2000].encode("utf-8", errors="ignore")).hexdigest()
+        if cache_key in self._context_cache:
+            logger.debug("Smart context cache hit")
+            return self._context_cache[cache_key]
 
         try:
             response = self.client.messages.create(
@@ -357,6 +367,10 @@ Brief:
             )
             summary = response.content[0].text
             logger.info("Smart context: compressed %d chars → %d chars", len(text), len(summary))
+            # Cache the result (limit cache size to 20 entries to bound memory)
+            if len(self._context_cache) >= 20:
+                self._context_cache.pop(next(iter(self._context_cache)))
+            self._context_cache[cache_key] = summary
             return summary
         except Exception as e:
             logger.warning("Smart context extraction failed, truncating: %s", e)
@@ -453,6 +467,42 @@ Citations to verify:
 Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or corrections"}}]"""}],
                 temperature=0.0,
             )
+        except Exception as api_err:
+            # Single retry after 2s for transient errors (529 overloaded, 500, network)
+            logger.warning("Citation verification API call failed (%s), retrying in 2s…", api_err)
+            time.sleep(2)
+            try:
+                response = self.client.messages.create(
+                    model=self.MODEL,
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": f"""You are a citation verification assistant for Indian law. For each case citation below, rate your confidence (1-5) that this is a REAL Indian case with a CORRECT citation:
+
+5 = Certain — landmark case, well-known citation
+4 = Very likely real — recognized case, citation format correct
+3 = Plausible — could be real but not fully certain of details
+2 = Uncertain — might be fabricated or confused with a different case
+1 = Almost certainly wrong — citation format implausible or case doesn't exist
+
+Be BRUTALLY honest.
+
+Citations to verify:
+{citations_text}
+
+Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or corrections"}}]"""}],
+                    temperature=0.0,
+                )
+            except Exception as retry_err:
+                logger.warning("Citation verification retry also failed: %s", retry_err)
+                for p in precedents:
+                    if "citation_confidence" not in p:
+                        p["verification_note"] = "Auto-verification unavailable — verify all citations before filing"
+                analysis["citation_verification"] = {
+                    "verified": 0, "flagged": 0, "total": len(precedents),
+                    "note": "Verification service unavailable after retry — manually verify all citations"
+                }
+                return analysis
+
+        try:
             text = response.content[0].text
             json_text = self._extract_json(text)
             verifications = json.loads(json_text)
@@ -579,10 +629,13 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
 - Arguments must be detailed enough to include in a court filing — not bullet-point summaries
 - Map ALL applicable old code sections to new code (IPC→BNS, CrPC→BNSS, Evidence Act→BSA)
 - Strategic recommendations must specify: what to file, under which section, in which court, within what deadline
-- If you are NOT confident about a case citation, mark it with ⚠️ — NEVER fabricate"""
+- If you are NOT confident about a case citation, mark it with ⚠️ — NEVER fabricate
+- PRIORITY if running low on space: legal_issues, relevant_precedents, arguments, strategic_recommendations. Court fees and interim reliefs can be abbreviated."""
 
         try:
             # Stream the response to avoid memory spikes and gunicorn worker kills.
+            text = ""
+            json_text = ""
             pass2_start = time.time()
             chunks: List[str] = []
             with self.client.messages.stream(
@@ -840,6 +893,8 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
         prompt += """\n\nProvide your complete structured JSON analysis. Be specific and cite exact section numbers and case law."""
 
         try:
+            text = ""
+            json_text = ""
             chunks: List[str] = []
             with self.client.messages.stream(
                 model=self.MODEL,
@@ -948,8 +1003,11 @@ Return ONLY the corrected text, nothing else."""}],
             r'\bi p c\b': 'IPC', r'\bc r p c\b': 'CrPC', r'\bc p c\b': 'CPC',
             r'\bb n s\b': 'BNS', r'\bb n s s\b': 'BNSS', r'\bb s a\b': 'BSA',
             r'\bfir\b': 'FIR', r'\bn c l t\b': 'NCLT', r'\bn c d r c\b': 'NCDRC',
+            r'\brera\b': 'RERA', r'\bpocso\b': 'POCSO', r'\bndps\b': 'NDPS',
             r'\bsection (\d)': r'Section \1',
             r'\barticle (\d)': r'Article \1',
+            r'\border (\d)': r'Order \1',
+            r'\brule (\d)': r'Rule \1',
         }
         result = text
         for pattern, replacement in replacements.items():
