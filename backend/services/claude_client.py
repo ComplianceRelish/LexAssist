@@ -176,7 +176,7 @@ class ClaudeClient:
     """
 
     MODEL = "claude-sonnet-4-6"
-    MAX_TOKENS = 8192
+    MAX_TOKENS = 4096
 
     def __init__(self):
         self.client = None
@@ -237,6 +237,7 @@ class ClaudeClient:
     def analyze_brief(self, brief_text: str, context: Optional[Dict] = None) -> Dict[str, Any]:
         """
         Deep AI analysis of a legal brief. Returns structured JSON.
+        Uses streaming internally to avoid memory spikes and worker timeouts.
         
         Args:
             brief_text: The raw legal brief text
@@ -272,15 +273,20 @@ class ClaudeClient:
         prompt += "\n\nProvide your complete structured JSON analysis."
 
         try:
-            response = self.client.messages.create(
+            # Stream the response to avoid memory spikes and gunicorn worker kills.
+            # Collect chunks incrementally instead of buffering the entire response.
+            chunks: List[str] = []
+            with self.client.messages.stream(
                 model=self.MODEL,
                 max_tokens=self.MAX_TOKENS,
                 system=BRIEF_ANALYSIS_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
-            )
+            ) as stream:
+                for chunk in stream.text_stream:
+                    chunks.append(chunk)
 
-            text = response.content[0].text.strip()
+            text = "".join(chunks).strip()
 
             # Extract JSON from response — handle markdown code blocks, preamble text, etc.
             json_text = self._extract_json(text)
