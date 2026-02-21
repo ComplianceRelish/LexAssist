@@ -413,6 +413,17 @@ export async function addCaseEntry(caseId: string, text: string, analyze: boolea
   return data;
 }
 
+export async function deleteCase(caseId: string) {
+  const response = await fetch(`${BASE_URL}/api/cases/${caseId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to delete case');
+  return data;
+}
+
 // ── Speech-to-Text API ────────────────────────────────────────────
 
 export interface SpeechTranscriptionResult {

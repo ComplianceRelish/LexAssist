@@ -662,6 +662,49 @@ def update_case(case_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/cases/<case_id>", methods=["DELETE"])
+def delete_case(case_id):
+    """Delete a case and all its related briefs, analyses, and activity log entries."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        # Verify ownership
+        existing = (
+            supabase.client.table("cases")
+            .select("id")
+            .eq("id", case_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        if not existing.data:
+            return jsonify({"error": "Case not found"}), 404
+
+        # Delete related records (order matters for FK constraints)
+        # 1. Delete analysis results linked to briefs in this case
+        briefs = supabase.client.table("briefs").select("id").eq("case_id", case_id).execute()
+        brief_ids = [b["id"] for b in (briefs.data or [])]
+        if brief_ids:
+            for bid in brief_ids:
+                supabase.client.table("analysis_results").delete().eq("brief_id", bid).execute()
+
+        # 2. Delete briefs
+        supabase.client.table("briefs").delete().eq("case_id", case_id).execute()
+
+        # 3. Delete activity log entries for this case
+        supabase.client.table("activity_log").delete().eq("case_id", case_id).execute()
+
+        # 4. Delete the case itself
+        supabase.client.table("cases").delete().eq("id", case_id).eq("user_id", user_id).execute()
+
+        logger.info("Case %s deleted by user %s", case_id, user_id)
+        return jsonify({"status": "deleted", "case_id": case_id}), 200
+    except Exception as e:
+        logger.error("Delete case error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/cases/<case_id>/entry", methods=["POST"])
 def add_case_entry(case_id):
     """Add a new brief/note entry to an existing case, optionally with AI analysis."""

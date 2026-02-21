@@ -5,6 +5,7 @@ import {
   createCase,
   updateCase,
   addCaseEntry,
+  deleteCase,
 } from './utils/api';
 import './MyCases.css';
 
@@ -146,6 +147,10 @@ const MyCases: React.FC = () => {
   // ── Error state ──
   const [error, setError] = useState<string | null>(null);
 
+  // ── Delete confirmation state ──
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // ── Load cases ──
   const loadCases = useCallback(async () => {
     setCasesLoading(true);
@@ -250,6 +255,25 @@ const MyCases: React.FC = () => {
     }
   };
 
+  // ── Delete case ──
+  const handleDeleteCase = async (caseId: string) => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteCase(caseId);
+      setDeleteConfirm(null);
+      // If we're in the detail view, go back to list
+      if (diary) {
+        setDiary(null);
+      }
+      loadCases();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // ═══════════════════════════════════════════════════════════════
   // RENDER: Case Diary Detail View
   // ═══════════════════════════════════════════════════════════════
@@ -293,7 +317,36 @@ const MyCases: React.FC = () => {
               <option value="closed">Closed</option>
               <option value="archived">Archived</option>
             </select>
+            <button
+              className="diary-btn diary-btn-danger"
+              onClick={() => setDeleteConfirm(c.id)}
+            >
+              🗑️ Delete Case
+            </button>
           </div>
+
+          {/* Delete Confirmation */}
+          {deleteConfirm === c.id && (
+            <div className="diary-delete-confirm">
+              <p>⚠️ <strong>Are you sure?</strong> This will permanently delete this case, all its briefs, analyses, and activity logs. This cannot be undone.</p>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  className="diary-btn diary-btn-danger"
+                  onClick={() => handleDeleteCase(c.id)}
+                  disabled={deleting}
+                >
+                  {deleting ? 'Deleting...' : 'Yes, Delete Permanently'}
+                </button>
+                <button
+                  className="diary-btn diary-btn-secondary"
+                  onClick={() => setDeleteConfirm(null)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Add Entry Form */}
           {showAddEntry && (
@@ -475,8 +528,37 @@ const MyCases: React.FC = () => {
                 {c.notes && <p className="case-card-notes">{c.notes.slice(0, 120)}{c.notes.length > 120 ? '...' : ''}</p>}
                 <div className="case-card-footer">
                   <span>Created {relativeDate(c.created_at)}</span>
-                  <span className="case-card-arrow">→</span>
+                  <button
+                    className="case-card-delete"
+                    title="Delete case"
+                    onClick={e => { e.stopPropagation(); setDeleteConfirm(c.id); }}
+                  >
+                    🗑️
+                  </button>
                 </div>
+                {deleteConfirm === c.id && (
+                  <div className="case-card-delete-confirm" onClick={e => e.stopPropagation()}>
+                    <p>Delete this case and all its data?</p>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        className="diary-btn diary-btn-danger"
+                        onClick={() => handleDeleteCase(c.id)}
+                        disabled={deleting}
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                      >
+                        {deleting ? 'Deleting...' : 'Delete'}
+                      </button>
+                      <button
+                        className="diary-btn diary-btn-secondary"
+                        onClick={() => setDeleteConfirm(null)}
+                        disabled={deleting}
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
