@@ -797,7 +797,13 @@ def ai_analyze():
                     # Use AI-generated summary as title if available
                     ai_summary = ai_result.get("case_summary", "")
                     if ai_summary and isinstance(ai_summary, str):
-                        case_title = ai_summary[:120]
+                        # Strip any JSON/markdown artifacts from the summary
+                        clean = ai_summary.strip().lstrip("`").lstrip("json").strip()
+                        if clean.startswith("{"):
+                            # It's raw JSON, not a clean summary — use brief text instead
+                            case_title = text[:100].replace("\n", " ").strip()
+                        else:
+                            case_title = clean[:120]
                     case_row = supabase.client.table("cases").insert({
                         "user_id": user_id,
                         "title": case_title,

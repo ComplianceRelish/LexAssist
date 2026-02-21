@@ -176,7 +176,7 @@ class ClaudeClient:
     """
 
     MODEL = "claude-sonnet-4-6"
-    MAX_TOKENS = 4096
+    MAX_TOKENS = 8192
 
     def __init__(self):
         self.client = None
@@ -212,6 +212,7 @@ class ClaudeClient:
         """
         Robustly extract JSON from Claude's response.
         Handles: raw JSON, ```json blocks, ``` blocks, or JSON buried in prose.
+        Also handles truncated JSON by attempting to close open braces.
         """
         stripped = text.strip()
 
@@ -224,13 +225,53 @@ class ClaudeClient:
         if code_block:
             return code_block.group(1).strip()
 
+        # 2b. Unclosed markdown code block (truncated output): ```json ... EOF
+        unclosed = re.search(r"```(?:json)?\s*\n?(.*)", stripped, re.DOTALL)
+        if unclosed:
+            candidate = unclosed.group(1).strip()
+            if candidate.startswith("{"):
+                return candidate
+
         # 3. Find the first { ... last } (greedy brace matching)
         brace_match = re.search(r"\{.*\}", stripped, re.DOTALL)
         if brace_match:
             return brace_match.group(0)
 
+        # 3b. Unclosed JSON object — find first { to end of string
+        brace_start = re.search(r"\{.*", stripped, re.DOTALL)
+        if brace_start:
+            return brace_start.group(0)
+
         # 4. Give up — return original text (will trigger JSONDecodeError)
         return stripped
+
+    @staticmethod
+    def _repair_truncated_json(text: str) -> str:
+        """
+        Attempt to repair truncated JSON by closing open braces/brackets
+        and removing trailing incomplete values.
+        """
+        # Count open vs close braces/brackets
+        open_braces = text.count("{") - text.count("}")
+        open_brackets = text.count("[") - text.count("]")
+
+        if open_braces <= 0 and open_brackets <= 0:
+            return text  # Not truncated
+
+        # Remove trailing incomplete value (partial string, number, etc.)
+        repaired = re.sub(r',\s*"[^"]*$', '', text)  # trailing incomplete key
+        repaired = re.sub(r',\s*$', '', repaired)      # trailing comma
+        repaired = re.sub(r':\s*"[^"]*$', ': ""', repaired)  # incomplete string value
+
+        # Re-count after cleanup
+        open_braces = repaired.count("{") - repaired.count("}")
+        open_brackets = repaired.count("[") - repaired.count("]")
+
+        # Close open brackets first, then braces
+        repaired += "]" * max(0, open_brackets)
+        repaired += "}" * max(0, open_braces)
+
+        return repaired
 
     # ── Structured Brief Analysis ────────────────────────────────
 
@@ -297,13 +338,31 @@ class ClaudeClient:
             return result
 
         except json.JSONDecodeError as e:
-            logger.warning("Claude returned non-JSON, wrapping as text: %s", e)
+            # Attempt to repair truncated JSON before giving up
+            logger.warning("Initial JSON parse failed (%s), attempting repair…", e)
+            try:
+                repaired = self._repair_truncated_json(json_text)
+                result = json.loads(repaired)
+                result["status"] = "success"
+                result["ai_model"] = self.MODEL
+                logger.info("JSON repair succeeded")
+                return result
+            except Exception:
+                pass
+
+            logger.warning("Claude returned non-JSON even after repair, wrapping as text")
             raw = text if text else "Analysis generated"
+            # Strip markdown / JSON wrapping so downstream never sees raw JSON as a title
+            clean = raw.lstrip("`").lstrip("json").strip()
+            if clean.startswith("{"):
+                summary = "AI analysis completed (structured parsing failed)"
+            else:
+                summary = clean[:2000]
             return {
                 "status": "success",
                 "ai_model": self.MODEL,
                 "raw_analysis": raw,
-                "case_summary": raw[:2000],
+                "case_summary": summary,
             }
         except anthropic.APIError as e:
             logger.error("Claude API error: %s", e)
