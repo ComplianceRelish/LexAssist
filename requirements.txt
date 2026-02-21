@@ -14,8 +14,8 @@ PyJWT>=2.8,<3.0
 # HTTP
 requests>=2.31,<3.0
 
-# AI — Claude (Anthropic)
-anthropic>=0.39,<1.0
+# AI — Claude (Anthropic) — >=0.45 needed for Sonnet 4.5
+anthropic>=0.45,<1.0
 
 # AI — OpenAI (Whisper STT + Vision OCR)
 openai>=1.12,<2.0
