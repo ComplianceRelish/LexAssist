@@ -99,7 +99,7 @@ class SpeechService:
     """
 
     WHISPER_MODEL = "whisper-1"
-    CORRECTION_MODEL = "claude-sonnet-4-6"
+    CORRECTION_MODEL = "claude-sonnet-4-20250514"
     MAX_AUDIO_SIZE_MB = 25  # Whisper limit
     SUPPORTED_FORMATS = {"wav", "flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "webm"}
 

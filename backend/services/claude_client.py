@@ -11,6 +11,7 @@ Features:
   - Maintains conversation history per session
 """
 
+import gc
 import json
 import re
 from typing import Any, Dict, Generator, List, Optional
@@ -175,7 +176,7 @@ class ClaudeClient:
     - Document drafting
     """
 
-    MODEL = "claude-sonnet-4-6"
+    MODEL = "claude-sonnet-4-20250514"
     MAX_TOKENS = 8192
 
     def __init__(self):
@@ -198,6 +199,16 @@ class ClaudeClient:
             )
             self._available = True
             logger.info("Claude client initialized (model: %s)", self.MODEL)
+            # Quick model validation — tiny completion to confirm key + model work
+            try:
+                self.client.messages.create(
+                    model=self.MODEL,
+                    max_tokens=5,
+                    messages=[{"role": "user", "content": "Hi"}],
+                )
+                logger.info("Model %s validated successfully", self.MODEL)
+            except Exception as ve:
+                logger.warning("Model validation failed: %s — AI may not work", ve)
         except Exception as e:
             logger.error("Claude client init failed: %s", e)
 
@@ -366,10 +377,15 @@ class ClaudeClient:
             }
         except anthropic.APIError as e:
             logger.error("Claude API error: %s", e)
+            gc.collect()
             return {"error": f"AI analysis failed: {str(e)}", "status": "error"}
         except Exception as e:
             logger.error("Unexpected error in brief analysis: %s", e)
+            gc.collect()
             return {"error": str(e), "status": "error"}
+        finally:
+            # Aggressive cleanup — essential on Render free tier (512MB)
+            gc.collect()
 
     # ── Streaming Chat ───────────────────────────────────────────
 
