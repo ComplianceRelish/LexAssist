@@ -192,7 +192,10 @@ class ClaudeClient:
             return
 
         try:
-            self.client = anthropic.Anthropic(api_key=self.api_key)
+            self.client = anthropic.Anthropic(
+                api_key=self.api_key,
+                timeout=240.0,  # 4-minute timeout for deep legal analysis
+            )
             self._available = True
             logger.info("Claude client initialized (model: %s)", self.MODEL)
         except Exception as e:
