@@ -57,23 +57,27 @@ interface UserProfile {
 
 const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);  // Start true to avoid flash
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const loadProfile = () => {
+    setLoading(true);
+    setFetchError(null);
+    fetchUserProfile()
+      .then(result => {
+        setProfile(result.profile);
+        setFetchError(result.error || null);
+      })
+      .catch(() => {
+        setProfile(null);
+        setFetchError('Could not connect to server');
+      })
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     if (isOpen) {
-      setLoading(true);
-      setFetchError(null);
-      fetchUserProfile()
-        .then(result => {
-          setProfile(result.profile);
-          setFetchError(result.error || null);
-        })
-        .catch(() => {
-          setProfile(null);
-          setFetchError('Could not connect to server');
-        })
-        .finally(() => setLoading(false));
+      loadProfile();
     }
   }, [isOpen]);
 
@@ -106,7 +110,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
       await updateUserProfile(editProfile);
       setEditSuccess(true);
       setEditMode(false);
-      setProfile(editProfile);
+      // Re-fetch from backend to verify data actually persisted
+      loadProfile();
     } catch (e: any) {
       setEditError(e.message || 'Failed to update profile');
     } finally {
@@ -145,9 +150,21 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
         )}
-        {!profile && !loading && (
-          <div className="error-message">
-            {fetchError || 'No profile data yet. Click Edit to set up your profile.'}
+        {!profile && !loading && !editMode && (
+          <div className="profile-details">
+            <div className="error-message" style={{marginBottom:'1rem'}}>
+              {fetchError || 'No profile data yet. Click Edit below to set up your profile.'}
+            </div>
+            {!fetchError && (
+              <button className="register-button" onClick={() => {
+                const emptyProfile: UserProfile = { fullName: '', email: '', phone: '', address: '', age: '' };
+                setProfile(emptyProfile);
+                setEditProfile(emptyProfile);
+                setEditMode(true);
+                setEditError(null);
+                setEditSuccess(false);
+              }}>Edit</button>
+            )}
           </div>
         )}
       </div>

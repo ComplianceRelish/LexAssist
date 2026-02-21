@@ -325,22 +325,35 @@ def update_profile():
         return jsonify({"error": "Not authenticated"}), 401
     try:
         data = request.json
-        update_fields = {}
+        update_fields = {"user_id": user_id}  # Always include for upsert
         if data.get("fullName") is not None:
             update_fields["full_name"] = data["fullName"]
         if data.get("address") is not None:
             update_fields["address"] = data["address"]
-        if data.get("age") is not None:
-            update_fields["age"] = data["age"]
         if data.get("email") is not None:
             update_fields["email"] = data["email"]
         if data.get("phone") is not None:
             update_fields["phone"] = data["phone"]
 
-        if not update_fields:
+        # Handle age: convert empty string to None for integer column
+        age_val = data.get("age")
+        if age_val is not None:
+            if isinstance(age_val, str) and age_val.strip() == "":
+                update_fields["age"] = None
+            else:
+                try:
+                    update_fields["age"] = int(age_val)
+                except (ValueError, TypeError):
+                    update_fields["age"] = None
+
+        if len(update_fields) <= 1:  # Only user_id, no actual fields
             return jsonify({"error": "No fields to update"}), 400
 
-        supabase.client.table("profiles").update(update_fields).eq("user_id", user_id).execute()
+        # Use upsert to create profile if it doesn't exist
+        result = supabase.client.table("profiles").upsert(
+            update_fields, on_conflict="user_id"
+        ).execute()
+        logger.info("Profile upsert for %s: %d row(s)", user_id, len(result.data) if result.data else 0)
 
         # If phone changed, also update Supabase Auth password (phone = password)
         if data.get("phone"):
@@ -354,6 +367,7 @@ def update_profile():
 
         return jsonify({"message": "Profile updated"}), 200
     except Exception as e:
+        logger.error("Profile update error for %s: %s", user_id, e)
         return jsonify({"error": str(e)}), 500
 
 
