@@ -10,3 +10,4 @@ class Config:
     SUPABASE_ANON_PUBLIC_KEY = os.environ.get('SUPABASE_ANON_PUBLIC_KEY')
     SUPABASE_SERVICE_ROLE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
     CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY')
+    OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')

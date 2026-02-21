@@ -10,6 +10,8 @@ from backend.services.indian_kanoon import IndianKanoonAPI
 from backend.services.supabase_client import SupabaseClient
 from backend.services.claude_client import ClaudeClient
 from backend.services.jurisdiction_resolver import JurisdictionResolver
+from backend.services.speech_service import SpeechService
+from backend.services.document_service import DocumentService
 from backend.utils.logger import setup_logger
 
 # ---------------------------------------------------------------------------
@@ -46,6 +48,8 @@ supabase = SupabaseClient()
 analyzer = LegalBriefAnalyzer(indian_kanoon=indian_kanoon, inlegalbert=inlegalbert)
 jurisdiction_resolver = JurisdictionResolver()
 claude = ClaudeClient()
+speech = SpeechService()
+document_service = DocumentService()
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -90,6 +94,9 @@ def health():
             "inlegalbert": "loaded" if inlegalbert._initialized else "fallback_mode",
             "claude_ai": "ready" if claude.is_available else "unavailable",
             "jurisdiction_resolver": "active",
+            "speech_stt": "ready" if speech.is_available else "unavailable",
+            "speech_correction": "ready" if speech.has_correction else "unavailable",
+            "document_scanner": "ready" if document_service.is_available else "unavailable",
         }
     }), 200
 
@@ -1185,6 +1192,218 @@ def admin_me():
         "name": admin_info["name"] if admin_info else None,
         "full_name": profile_full_name,
     }), 200
+
+
+# ---------------------------------------------------------------------------
+# Speech-to-Text — Enterprise legal dictation
+# ---------------------------------------------------------------------------
+
+@app.route("/api/speech/transcribe", methods=["POST"])
+def speech_transcribe():
+    """Transcribe audio using Whisper + legal vocabulary boosting + Claude correction.
+    
+    Accepts multipart/form-data with:
+      - audio: audio file (WAV, FLAC, MP3, WebM, etc.)
+      - language: language code (default: en)
+      - role: speaker role for context priming (advocate, paralegal, student, etc.)
+      - mode: 'dictation' or 'conversational'
+    """
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if "audio" not in request.files:
+        return jsonify({"error": "No audio file provided. Send as multipart form with field name 'audio'."}), 400
+
+    audio_file = request.files["audio"]
+    if not audio_file.filename:
+        return jsonify({"error": "Empty audio file"}), 400
+
+    language = request.form.get("language", "en")
+    user_role = request.form.get("role", None)
+    mode = request.form.get("mode", "dictation")
+
+    try:
+        audio_data = audio_file.read()
+        if len(audio_data) == 0:
+            return jsonify({"error": "Audio file is empty"}), 400
+
+        result = speech.transcribe(
+            audio_data=audio_data,
+            filename=audio_file.filename,
+            language=language,
+            user_role=user_role,
+            mode=mode,
+        )
+
+        # Log activity
+        if user_id and supabase.client and result.get("metadata", {}).get("status") == "success":
+            try:
+                snippet = (result.get("corrected_transcript") or result.get("raw_transcript", ""))[:200]
+                supabase.client.table("activity_log").insert({
+                    "user_id": user_id,
+                    "action": "speech_transcribed",
+                    "title": "Voice Dictation",
+                    "detail": snippet,
+                    "metadata": {
+                        "word_count": result.get("metadata", {}).get("word_count", 0),
+                        "corrections_count": result.get("metadata", {}).get("corrections_count", 0),
+                        "mode": mode,
+                        "role": user_role,
+                    },
+                }).execute()
+            except Exception as log_err:
+                logger.warning("Speech activity log failed: %s", log_err)
+
+        if "error" in result:
+            return jsonify(result), 400 if result.get("status") in ("invalid_format", "file_too_large") else 500
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error("Speech transcription error: %s", e)
+        return jsonify({"error": "Transcription failed", "details": str(e)}), 500
+
+
+@app.route("/api/speech/status", methods=["GET"])
+def speech_status():
+    """Return speech service health and capabilities."""
+    return jsonify(speech.get_status()), 200
+
+
+@app.route("/api/speech/correct", methods=["POST"])
+def speech_correct():
+    """Run LLM correction on an existing transcript (text-only, no audio).
+    
+    Body: { "text": "...", "role": "advocate" }
+    """
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.json or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
+
+    user_role = data.get("role")
+
+    # Apply rule-based fixes first
+    rule_fixed = speech._apply_rule_corrections(text)
+
+    # Then LLM correction
+    if speech.has_correction:
+        correction = speech._llm_correct(rule_fixed, user_role=user_role)
+        if correction:
+            return jsonify({
+                "original": text,
+                "corrected_text": correction.get("corrected_text", rule_fixed),
+                "corrections": correction.get("corrections", []),
+                "low_confidence_words": correction.get("low_confidence_words", []),
+            })
+
+    return jsonify({
+        "original": text,
+        "corrected_text": rule_fixed,
+        "corrections": [],
+        "low_confidence_words": [],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Document Scanner & OCR
+# ---------------------------------------------------------------------------
+
+@app.route("/api/documents/scan", methods=["POST"])
+def document_scan():
+    """Process a document: OCR + classification + text extraction.
+    
+    Accepts multipart/form-data with:
+      - file: document file (PDF, JPG, PNG, TIFF, DOCX, etc.)
+      - case_id: optional case to link to
+    
+    Returns extracted text, classification, and metadata.
+    """
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided. Send as multipart form with field name 'file'."}), 400
+
+    uploaded_file = request.files["file"]
+    if not uploaded_file.filename:
+        return jsonify({"error": "No filename"}), 400
+
+    case_id = request.form.get("case_id", None)
+
+    try:
+        file_data = uploaded_file.read()
+        if len(file_data) == 0:
+            return jsonify({"error": "File is empty"}), 400
+
+        result = document_service.process_document(
+            file_data=file_data,
+            filename=uploaded_file.filename,
+            user_id=user_id,
+            case_id=case_id,
+        )
+
+        # Log activity
+        if user_id and supabase.client and result.get("metadata", {}).get("status") == "success":
+            try:
+                doc_type = result.get("classification", {}).get("document_type", "unknown")
+                doc_title = result.get("classification", {}).get("document_title", uploaded_file.filename)
+                snippet = (result.get("text") or "")[:200]
+
+                supabase.client.table("activity_log").insert({
+                    "user_id": user_id,
+                    "case_id": case_id,
+                    "action": "document_scanned",
+                    "title": f"Document Scan: {doc_title}",
+                    "detail": snippet,
+                    "metadata": {
+                        "filename": uploaded_file.filename,
+                        "document_type": doc_type,
+                        "word_count": result.get("metadata", {}).get("word_count", 0),
+                        "pages": result.get("pages", 0),
+                        "ocr_used": result.get("metadata", {}).get("ocr_used", False),
+                    },
+                }).execute()
+            except Exception as log_err:
+                logger.warning("Document scan activity log failed: %s", log_err)
+
+        if "error" in result:
+            status_code = 400 if result.get("status") in ("unsupported_format", "file_too_large", "empty_file") else 500
+            return jsonify(result), status_code
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error("Document scan error: %s", e)
+        return jsonify({"error": "Document processing failed", "details": str(e)}), 500
+
+
+@app.route("/api/documents/status", methods=["GET"])
+def document_status():
+    """Return document service health and capabilities."""
+    return jsonify(document_service.get_status()), 200
+
+
+@app.route("/api/documents/classify", methods=["POST"])
+def document_classify():
+    """Classify an already-extracted text. Body: { "text": "..." }"""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.json or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"error": "No text to classify"}), 400
+
+    classification = document_service._classify_document(text)
+    return jsonify(classification)
 
 
 if __name__ == "__main__":

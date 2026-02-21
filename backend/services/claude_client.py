@@ -175,7 +175,7 @@ class ClaudeClient:
     - Document drafting
     """
 
-    MODEL = "claude-sonnet-4-20250514"
+    MODEL = "claude-sonnet-4-20250514-v2"
     MAX_TOKENS = 8192
 
     def __init__(self):

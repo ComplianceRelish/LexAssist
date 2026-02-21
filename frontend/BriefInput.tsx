@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { analyzeBrief, aiAnalyzeBrief } from './utils/api';
+import { analyzeBrief, aiAnalyzeBrief, SpeechTranscriptionResult, DocumentScanResult } from './utils/api';
+import SpeechInput from './SpeechInput';
+import DocumentScanner from './DocumentScanner';
 import ResponseTabs from './ResponseTabs';
 
-// Web Speech API types
+// Web Speech API types (kept as fallback)
 interface SpeechRecognitionEvent {
   resultIndex: number;
   results: SpeechRecognitionResultList;
@@ -38,6 +40,9 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
   const [aiResult, setAiResult] = useState<any>(null);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
+  const [lastSpeechMeta, setLastSpeechMeta] = useState<SpeechTranscriptionResult | null>(null);
+  const [lastScanResult, setLastScanResult] = useState<DocumentScanResult | null>(null);
+  const [showDocScanner, setShowDocScanner] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recognitionRef = useRef<any>(null);
 
@@ -184,6 +189,25 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
     else startRecording();
   };
 
+  // Handler for the new Whisper-powered SpeechInput component
+  const handleSpeechTranscript = useCallback((text: string) => {
+    setBrief(prev => (prev ? prev + ' ' : '') + text.trim());
+  }, []);
+
+  const handleSpeechMeta = useCallback((meta: SpeechTranscriptionResult) => {
+    setLastSpeechMeta(meta);
+  }, []);
+
+  // Handler for the Document Scanner component
+  const handleDocumentText = useCallback((text: string) => {
+    setBrief(prev => (prev ? prev + '\n\n--- Scanned Document ---\n' : '') + text.trim());
+    setShowDocScanner(false);
+  }, []);
+
+  const handleDocScanResult = useCallback((result: DocumentScanResult) => {
+    setLastScanResult(result);
+  }, []);
+
   const handleClear = () => {
     setBrief('');
     setResult(null);
@@ -309,19 +333,22 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
 
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2 w-full">
-              {/* Voice Input */}
+              {/* Enterprise Voice Input (Whisper AI + Legal Correction) */}
+              <SpeechInput
+                onTranscript={handleSpeechTranscript}
+                onMetadata={handleSpeechMeta}
+                isLoggedIn={isLoggedIn}
+                disabled={loading}
+              />
+
+              {/* Document Scanner Toggle */}
               <button
                 type="button"
-                onClick={handleVoiceInput}
-                disabled={loading || (!speechSupported && !isRecording)}
-                title={speechSupported ? (isRecording ? 'Stop recording' : 'Start voice dictation') : 'Speech not supported'}
-                className={`lex-btn-voice ${isRecording ? 'lex-btn-voice-active' : ''}`}
+                onClick={() => setShowDocScanner(!showDocScanner)}
+                className={`lex-btn-ghost ${showDocScanner ? 'lex-btn-active' : ''}`}
+                disabled={loading}
               >
-                {isRecording ? (
-                  <>⏹ Stop ({formatTime(recordingTime)})</>
-                ) : (
-                  <>🎙 Voice Input</>
-                )}
+                📄 {showDocScanner ? 'Hide Scanner' : 'Scan Document'}
               </button>
 
               {brief.trim() && (
@@ -341,6 +368,42 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
                 <span className="text-red-600 text-sm">Please log in to use this feature</span>
               )}
             </div>
+
+            {/* Document Scanner Panel */}
+            {showDocScanner && (
+              <div className="mt-2">
+                <DocumentScanner
+                  onTextExtracted={handleDocumentText}
+                  onScanResult={handleDocScanResult}
+                  isLoggedIn={isLoggedIn}
+                  disabled={loading}
+                />
+              </div>
+            )}
+
+            {/* Last scan metadata */}
+            {lastScanResult && lastScanResult.classification && (
+              <div className="text-xs text-gray-400 flex items-center gap-3 flex-wrap">
+                <span>📄 Last scan: {lastScanResult.classification.document_type?.replace(/_/g, ' ')}</span>
+                {lastScanResult.metadata?.word_count && (
+                  <span>{lastScanResult.metadata.word_count} words extracted</span>
+                )}
+                {lastScanResult.metadata?.ocr_used && (
+                  <span className="text-blue-600">OCR applied</span>
+                )}
+              </div>
+            )}
+
+            {/* Speech metadata summary */}
+            {lastSpeechMeta && lastSpeechMeta.metadata?.status === 'success' && (
+              <div className="text-xs text-gray-400 flex items-center gap-3">
+                <span>🎙️ Last dictation: {lastSpeechMeta.metadata.word_count} words</span>
+                {lastSpeechMeta.metadata.correction_applied && (
+                  <span className="text-green-600">✓ {lastSpeechMeta.metadata.corrections_count} legal corrections applied</span>
+                )}
+                <span>{lastSpeechMeta.metadata.duration_ms}ms</span>
+              </div>
+            )}
 
             <button
               type="submit"

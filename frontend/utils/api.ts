@@ -413,6 +413,262 @@ export async function addCaseEntry(caseId: string, text: string, analyze: boolea
   return data;
 }
 
+// ── Speech-to-Text API ────────────────────────────────────────────
+
+export interface SpeechTranscriptionResult {
+  raw_transcript: string;
+  corrected_transcript: string;
+  corrections: Array<{
+    original: string;
+    corrected: string;
+    confidence: number;
+    reason: string;
+  }>;
+  low_confidence_words: Array<{
+    word: string;
+    position: number;
+    suggestions: string[];
+    confidence: number;
+  }>;
+  segments: Array<{
+    text: string;
+    start: number;
+    end: number;
+    avg_logprob: number;
+    no_speech_prob: number;
+  }>;
+  words: Array<{
+    word: string;
+    start: number;
+    end: number;
+  }>;
+  segment_confidences: Array<{
+    text: string;
+    start: number;
+    end: number;
+    confidence: number;
+    level: 'high' | 'medium' | 'low';
+  }>;
+  metadata: {
+    duration_ms: number;
+    whisper_ms: number;
+    model: string;
+    correction_model: string | null;
+    language: string;
+    correction_applied: boolean;
+    corrections_count: number;
+    low_confidence_count: number;
+    word_count: number;
+    user_role: string | null;
+    mode: string;
+    status: string;
+  };
+  error?: string;
+  status?: string;
+}
+
+export interface SpeechServiceStatus {
+  whisper_stt: string;
+  correction_layer: string;
+  whisper_model: string;
+  correction_model: string | null;
+  supported_formats: string[];
+  max_file_size_mb: number;
+}
+
+/**
+ * Transcribe audio via Whisper + legal vocabulary boosting + Claude correction.
+ * Sends audio as multipart form data.
+ */
+export async function transcribeSpeech(
+  audioBlob: Blob,
+  options?: {
+    language?: string;
+    role?: string;
+    mode?: 'dictation' | 'conversational';
+    filename?: string;
+  }
+): Promise<SpeechTranscriptionResult> {
+  const formData = new FormData();
+  const filename = options?.filename || 'recording.wav';
+  formData.append('audio', audioBlob, filename);
+  if (options?.language) formData.append('language', options.language);
+  if (options?.role) formData.append('role', options.role);
+  if (options?.mode) formData.append('mode', options.mode);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+
+  try {
+    const headers: Record<string, string> = {};
+    const token = getAccessToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${BASE_URL}/api/speech/transcribe`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Transcription failed');
+    return data;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Transcription timed out — please try with a shorter recording.');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Get speech service health & capabilities.
+ */
+export async function getSpeechStatus(): Promise<SpeechServiceStatus> {
+  const response = await fetch(`${BASE_URL}/api/speech/status`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to get speech status');
+  return data;
+}
+
+/**
+ * Run LLM correction on existing text (no audio).
+ */
+export async function correctTranscript(
+  text: string,
+  role?: string,
+): Promise<{ original: string; corrected_text: string; corrections: any[]; low_confidence_words: any[] }> {
+  const response = await fetch(`${BASE_URL}/api/speech/correct`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    credentials: 'include',
+    body: JSON.stringify({ text, role }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Correction failed');
+  return data;
+}
+
+// ── Document Scanner & OCR API ────────────────────────────────────
+
+export interface DocumentScanResult {
+  text: string;
+  classification: {
+    document_type: string;
+    document_title: string;
+    parties: {
+      petitioner: string | null;
+      respondent: string | null;
+      judge: string | null;
+    };
+    court: string | null;
+    case_number: string | null;
+    date: string | null;
+    key_sections: string[];
+    summary: string;
+    language: string;
+    confidence: number;
+  };
+  pages: number;
+  metadata: {
+    filename: string;
+    file_size_bytes: number;
+    file_type: string;
+    ocr_used: boolean;
+    processing_ms: number;
+    word_count: number;
+    char_count: number;
+    status: string;
+  };
+  error?: string;
+  status?: string;
+}
+
+export interface DocumentServiceStatus {
+  ocr_engine: string;
+  image_enhancement: string;
+  pdf_processing: string;
+  supported_formats: string[];
+  max_file_size_mb: number;
+  max_ocr_pages: number;
+}
+
+/**
+ * Upload and process a document (OCR + classification + text extraction).
+ * Accepts PDF, images, DOCX.
+ */
+export async function scanDocument(
+  file: File,
+  caseId?: string,
+): Promise<DocumentScanResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (caseId) formData.append('case_id', caseId);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3min for large docs
+
+  try {
+    const headers: Record<string, string> = {};
+    const token = getAccessToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${BASE_URL}/api/documents/scan`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Document processing failed');
+    return data;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Document processing timed out — please try with a smaller file.');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Get document service health & capabilities.
+ */
+export async function getDocumentStatus(): Promise<DocumentServiceStatus> {
+  const response = await fetch(`${BASE_URL}/api/documents/status`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to get document status');
+  return data;
+}
+
+/**
+ * Classify already-extracted text.
+ */
+export async function classifyDocument(text: string): Promise<DocumentScanResult['classification']> {
+  const response = await fetch(`${BASE_URL}/api/documents/classify`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    credentials: 'include',
+    body: JSON.stringify({ text }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Classification failed');
+  return data;
+}
+
 // ── Auth: Name + Phone Login ──────────────────────────────────────
 
 export async function loginWithNamePhone(name: string, phone: string) {

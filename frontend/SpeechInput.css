@@ -1,0 +1,608 @@
+/* ═══════════════════════════════════════════════════════════════════
+   LexAssist — SpeechInput Component Styles
+   Enterprise voice dictation with confidence scoring & review UI
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Container ─────────────────────────────────────────────────── */
+
+.speech-input {
+  position: relative;
+}
+
+.speech-input-compact .speech-controls {
+  gap: 4px;
+}
+
+/* ── Controls Row ──────────────────────────────────────────────── */
+
+.speech-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Record Button ─────────────────────────────────────────────── */
+
+.speech-record-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 2px solid #0a2e5c;
+  border-radius: 8px;
+  background: white;
+  color: #0a2e5c;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.speech-record-btn:hover:not(:disabled) {
+  background: #f0f4f8;
+  border-color: #083a6b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(10, 46, 92, 0.15);
+}
+
+.speech-record-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Active (recording) state */
+.speech-record-active {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: white;
+  animation: speech-glow 1.5s ease-in-out infinite;
+}
+
+.speech-record-active:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+@keyframes speech-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+}
+
+/* Processing state */
+.speech-processing {
+  background: #f0f4f8;
+  border-color: #94a3b8;
+  color: #64748b;
+  cursor: wait;
+}
+
+/* Pulse dot animation */
+.speech-pulse {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  animation: speech-pulse-anim 1s ease-in-out infinite;
+}
+
+@keyframes speech-pulse-anim {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.speech-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+
+/* Spinner */
+.speech-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #0a2e5c;
+  border-radius: 50%;
+  animation: speech-spin 0.7s linear infinite;
+}
+
+@keyframes speech-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Audio Level Indicator ─────────────────────────────────────── */
+
+.speech-level-container {
+  flex: 1;
+  max-width: 120px;
+}
+
+.speech-level-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.speech-level-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+  transition: width 0.1s ease;
+}
+
+/* ── Settings Button ───────────────────────────────────────────── */
+
+.speech-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: white;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.speech-settings-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0a2e5c;
+}
+
+/* ── Settings Panel ────────────────────────────────────────────── */
+
+.speech-settings-panel {
+  margin-top: 8px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.speech-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.speech-setting-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.speech-setting-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Mode Toggle */
+.speech-mode-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.speech-mode-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: white;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.speech-mode-btn.active {
+  background: #0a2e5c;
+  border-color: #0a2e5c;
+  color: white;
+}
+
+.speech-mode-btn:hover:not(.active) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* Role Select */
+.speech-role-select {
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: white;
+  color: #334155;
+  font-size: 13px;
+  outline: none;
+}
+
+.speech-role-select:focus {
+  border-color: #0a2e5c;
+  box-shadow: 0 0 0 2px rgba(10, 46, 92, 0.1);
+}
+
+/* ── Error ──────────────────────────────────────────────────────── */
+
+.speech-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.speech-error-dismiss {
+  background: none;
+  border: none;
+  color: #dc2626;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+/* ── Review Panel ──────────────────────────────────────────────── */
+
+.speech-review-panel {
+  margin-top: 12px;
+  padding: 16px;
+  background: white;
+  border: 2px solid #dbeafe;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(10, 46, 92, 0.08);
+}
+
+.speech-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.speech-review-header h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0a2e5c;
+}
+
+.speech-review-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Badges */
+.speech-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.speech-badge-correction {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.speech-badge-warning {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.speech-badge-info {
+  background: #f0f4f8;
+  color: #64748b;
+}
+
+/* Editable Textarea */
+.speech-review-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1e293b;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.speech-review-textarea:focus {
+  border-color: #0a2e5c;
+  box-shadow: 0 0 0 2px rgba(10, 46, 92, 0.1);
+}
+
+/* ── Corrections ───────────────────────────────────────────────── */
+
+.speech-corrections,
+.speech-low-confidence {
+  margin-top: 12px;
+}
+
+.speech-corrections h5,
+.speech-low-confidence h5,
+.speech-confidence-bar-container h5 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.speech-correction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.speech-correction-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.speech-correction-original {
+  text-decoration: line-through;
+  color: #dc2626;
+  font-style: italic;
+}
+
+.speech-correction-arrow {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.speech-correction-fixed {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.speech-correction-confidence {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.speech-correction-reason {
+  color: #64748b;
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* Confidence colors */
+.confidence-high {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.confidence-medium {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.confidence-low {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ── Low Confidence Suggestions ────────────────────────────────── */
+
+.speech-suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.speech-suggestion-item {
+  padding: 8px 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+}
+
+.speech-suggestion-word {
+  font-weight: 600;
+  color: #92400e;
+  margin-right: 8px;
+}
+
+.speech-suggestion-confidence {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.speech-suggestion-options {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.speech-suggestion-label {
+  font-size: 12px;
+  color: #92400e;
+}
+
+.speech-suggestion-btn {
+  padding: 3px 10px;
+  border: 1px solid #d97706;
+  border-radius: 6px;
+  background: white;
+  color: #d97706;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.speech-suggestion-btn:hover {
+  background: #d97706;
+  color: white;
+}
+
+/* ── Segment Confidence Bar ────────────────────────────────────── */
+
+.speech-confidence-bar-container {
+  margin-top: 12px;
+}
+
+.speech-confidence-segments {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.speech-confidence-segment {
+  border-radius: 2px;
+  transition: opacity 0.2s;
+  cursor: pointer;
+}
+
+.speech-confidence-segment:hover {
+  opacity: 0.8;
+}
+
+.speech-confidence-segment.high {
+  background: #22c55e;
+}
+
+.speech-confidence-segment.medium {
+  background: #eab308;
+}
+
+.speech-confidence-segment.low {
+  background: #ef4444;
+}
+
+.speech-confidence-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-dot.high { background: #22c55e; }
+.legend-dot.medium { background: #eab308; }
+.legend-dot.low { background: #ef4444; }
+
+/* ── Accept / Reject Actions ───────────────────────────────────── */
+
+.speech-review-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.speech-accept-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #0a2e5c;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.speech-accept-btn:hover {
+  background: #083a6b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(10, 46, 92, 0.2);
+}
+
+.speech-reject-btn {
+  padding: 10px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.speech-reject-btn:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+/* ── Responsive ────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .speech-record-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .speech-review-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .speech-review-actions {
+    flex-direction: column;
+  }
+
+  .speech-correction-item {
+    font-size: 12px;
+  }
+
+  .speech-settings-panel {
+    padding: 10px 12px;
+  }
+}
