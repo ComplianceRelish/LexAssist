@@ -199,16 +199,6 @@ class ClaudeClient:
             )
             self._available = True
             logger.info("Claude client initialized (model: %s)", self.MODEL)
-            # Quick model validation — tiny completion to confirm key + model work
-            try:
-                self.client.messages.create(
-                    model=self.MODEL,
-                    max_tokens=5,
-                    messages=[{"role": "user", "content": "Hi"}],
-                )
-                logger.info("Model %s validated successfully", self.MODEL)
-            except Exception as ve:
-                logger.warning("Model validation failed: %s — AI may not work", ve)
         except Exception as e:
             logger.error("Claude client init failed: %s", e)
 

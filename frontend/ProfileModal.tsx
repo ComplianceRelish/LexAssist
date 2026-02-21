@@ -6,21 +6,23 @@ import {
 import './ProfileModal.css';
 
 // Fetch profile via backend API (uses cookie auth + service-role key, bypasses RLS)
-async function fetchUserProfile(): Promise<UserProfile | null> {
+async function fetchUserProfile(): Promise<{ profile: UserProfile | null; error?: string }> {
   try {
     const data = await apiFetchProfile();
-    if (!data) return null;
+    if (!data) return { profile: { fullName: '', email: '', phone: '', address: '', age: '' } };
     // Map snake_case DB columns to camelCase UI fields
     return {
-      fullName: data.full_name || '',
-      email: data.email || '',
-      phone: data.phone || '',
-      address: data.address || '',
-      age: data.age != null ? String(data.age) : '',
+      profile: {
+        fullName: data.full_name || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        address: data.address || '',
+        age: data.age != null ? String(data.age) : '',
+      },
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching user profile:', error);
-    return null;
+    return { profile: null, error: error?.message || 'Could not connect to server' };
   }
 }
 
@@ -56,13 +58,21 @@ interface UserProfile {
 const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
+      setFetchError(null);
       fetchUserProfile()
-        .then(profile => setProfile(profile || null))
-        .catch(() => setProfile(null))
+        .then(result => {
+          setProfile(result.profile);
+          setFetchError(result.error || null);
+        })
+        .catch(() => {
+          setProfile(null);
+          setFetchError('Could not connect to server');
+        })
         .finally(() => setLoading(false));
     }
   }, [isOpen]);
@@ -135,7 +145,11 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
         )}
-        {!profile && !loading && <div className="error-message">Profile not found.</div>}
+        {!profile && !loading && (
+          <div className="error-message">
+            {fetchError || 'No profile data yet. Click Edit to set up your profile.'}
+          </div>
+        )}
       </div>
     </div>
   );
