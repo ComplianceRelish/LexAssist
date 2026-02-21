@@ -4,6 +4,7 @@
 flask>=2.3,<4.0
 flask-cors>=4.0,<5.0
 gunicorn>=21.2,<23.0
+gevent>=24.2,<25.0
 
 # Supabase
 supabase>=2.0,<3.0

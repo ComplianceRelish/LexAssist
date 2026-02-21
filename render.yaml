@@ -3,7 +3,7 @@ services:
     name: lexassist-backend
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 300 --graceful-timeout 300 --keep-alive 5 --max-requests 100 --max-requests-jitter 20 --preload --log-file -
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --worker-class gevent --workers 2 --timeout 600 --graceful-timeout 600 --keep-alive 5 --max-requests 500 --max-requests-jitter 50 --log-file -
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.7
