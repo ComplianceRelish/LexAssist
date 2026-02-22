@@ -988,18 +988,6 @@ def ai_analyze_stream():
     if not claude.is_available:
         return jsonify({"error": "AI service unavailable — Claude API key not configured"}), 503
 
-    # We need a mutable container to pass progress events from the callback
-    # into the SSE generator running in the same thread.
-    import queue
-    import threading
-    progress_queue = queue.Queue()
-    cancel_event = threading.Event()
-
-    def progress_cb(step: str, message: str, pct: int = 0):
-        if cancel_event.is_set():
-            raise RuntimeError("Client disconnected — analysis cancelled")
-        progress_queue.put({"step": step, "message": message, "pct": pct})
-
     def generate():
         try:
             # Emit initial progress
@@ -1019,51 +1007,14 @@ def ai_analyze_stream():
             except Exception as jr_err:
                 logger.warning("Jurisdiction resolution failed: %s — continuing without", jr_err)
 
-            # Step 2: Deep AI analysis with progress callback
-            # The callback will put events into progress_queue, but since analyze_brief
-            # is synchronous and runs in the same thread, we run it in a background thread
-            # and drain the queue from here.
+            # Step 2: AI analysis — runs inline (no background thread).
+            # This is compatible with both sync and gevent gunicorn workers.
+            # The tradeoff: no granular mid-pass progress events, but no
+            # threading/queue that can be killed by the arbiter's SIGABRT.
+            yield f"data: {json.dumps({'type': 'progress', 'step': 'analyzing', 'message': 'AI analysis in progress — this may take 30-90 seconds...', 'pct': 15})}\n\n"
 
-            result_container = [None]
-            error_container = [None]
+            ai_result = claude.analyze_brief(text, context=regex_context, deep=deep)
 
-            def run_analysis():
-                try:
-                    result_container[0] = claude.analyze_brief(
-                        text, context=regex_context, deep=deep,
-                        progress_callback=progress_cb,
-                    )
-                except Exception as e:
-                    error_container[0] = e
-                finally:
-                    progress_queue.put(None)  # Sentinel to signal completion
-
-            thread = threading.Thread(target=run_analysis, daemon=True)
-            thread.start()
-
-            # Drain progress events while analysis runs
-            while True:
-                try:
-                    event = progress_queue.get(timeout=1.0)
-                    if event is None:
-                        break  # Analysis thread finished
-                    yield f"data: {json.dumps({'type': 'progress', **event})}\n\n"
-                except queue.Empty:
-                    # Heartbeat to keep connection alive
-                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
-                except GeneratorExit:
-                    # Client disconnected — signal the analysis thread to stop
-                    logger.info("SSE client disconnected — cancelling analysis")
-                    cancel_event.set()
-                    thread.join(timeout=10.0)
-                    return
-
-            thread.join(timeout=5.0)
-
-            if error_container[0]:
-                raise error_container[0]
-
-            ai_result = result_container[0]
             if not ai_result:
                 raise RuntimeError("Analysis returned no result")
 
