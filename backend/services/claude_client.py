@@ -234,7 +234,7 @@ class ClaudeClient:
     MODEL_DEEP = "claude-opus-4-6"         # Deep analysis — maximum intelligence
     MODEL_FAST = "claude-haiku-4-5-20251001"  # Fast preprocessing — context summarization
     MAX_TOKENS = 8192
-    MAX_TOKENS_DEEP = 12288                   # Slightly larger for deep analysis only
+    MAX_TOKENS_DEEP = 16384                   # Larger budget for deep analysis (Pass 2) to avoid truncated JSON
 
     def __init__(self):
         self.client = None
@@ -310,6 +310,7 @@ class ClaudeClient:
         """
         Attempt to repair truncated JSON by closing open braces/brackets
         and removing trailing incomplete values.
+        Handles unterminated strings, trailing commas, and partial key-value pairs.
         """
         # Count open vs close braces/brackets
         open_braces = text.count("{") - text.count("}")
@@ -318,10 +319,29 @@ class ClaudeClient:
         if open_braces <= 0 and open_brackets <= 0:
             return text  # Not truncated
 
+        repaired = text
+
+        # Fix unterminated strings — find if we're inside an open string at the end
+        # Count unescaped quotes; odd means we're inside a string
+        quote_count = 0
+        i = 0
+        while i < len(repaired):
+            if repaired[i] == '\\' and i + 1 < len(repaired):
+                i += 2  # skip escaped character
+                continue
+            if repaired[i] == '"':
+                quote_count += 1
+            i += 1
+        if quote_count % 2 == 1:
+            # We're inside an unterminated string — close it
+            repaired += '"'
+
         # Remove trailing incomplete value (partial string, number, etc.)
-        repaired = re.sub(r',\s*"[^"]*$', '', text)  # trailing incomplete key
+        repaired = re.sub(r',\s*"[^"]*$', '', repaired)  # trailing incomplete key
         repaired = re.sub(r',\s*$', '', repaired)      # trailing comma
         repaired = re.sub(r':\s*"[^"]*$', ': ""', repaired)  # incomplete string value
+        # Remove trailing partial array element
+        repaired = re.sub(r',\s*\{[^}]*$', '', repaired)  # trailing incomplete object in array
 
         # Re-count after cleanup
         open_braces = repaired.count("{") - repaired.count("}")

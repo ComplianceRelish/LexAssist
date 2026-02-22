@@ -49,6 +49,10 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
   const ai = aiAnalysis?.ai_analysis || aiAnalysis;
   const hasAI = !!ai && ai.status === 'success';
 
+  // Detect fallback mode: AI returned raw text instead of structured JSON
+  const isFallback = hasAI && !ai.legal_issues && !ai.applicable_statutes && !ai.relevant_precedents;
+  const rawText = ai?.raw_analysis || ai?.case_summary || '';
+
   // Helper: Relevance bar
   const RelevanceBar = ({ score, max = 10 }: { score: number; max?: number }) => (
     <div className="flex items-center gap-2">
@@ -136,6 +140,13 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               <Card>
                 <SectionHeading icon="📋" title="Case Summary" />
                 <p className="text-gray-700 leading-relaxed whitespace-pre-line">{ai.case_summary}</p>
+              </Card>
+            )}
+
+            {isFallback && rawText && (
+              <Card>
+                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Full analysis (structured parsing unavailable)" />
+                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
               </Card>
             )}
 
@@ -275,7 +286,14 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </>
             )}
 
-            {!hasAI && lawSections.length === 0 && (
+            {isFallback && rawText && !ai.applicable_statutes?.length && lawSections.length === 0 && (
+              <Card>
+                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Statutes details within full analysis" />
+                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
+              </Card>
+            )}
+
+            {!hasAI && !isFallback && lawSections.length === 0 && (
               <div className="text-center py-12 text-gray-400">
                 <div className="text-4xl mb-2">📜</div>
                 <p>No statutes identified yet. Try providing more details in your brief.</p>
@@ -339,7 +357,14 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </>
             )}
 
-            {!hasAI && caseHistories.length === 0 && (
+            {isFallback && rawText && !ai.relevant_precedents?.length && caseHistories.length === 0 && (
+              <Card>
+                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Precedent details within full analysis" />
+                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
+              </Card>
+            )}
+
+            {!hasAI && !isFallback && caseHistories.length === 0 && (
               <div className="text-center py-12 text-gray-400">
                 <div className="text-4xl mb-2">⚖️</div>
                 <p>No precedents found. Try including specific legal aspects in your brief.</p>
@@ -402,6 +427,13 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                     </li>
                   ))}
                 </ul>
+              </Card>
+            )}
+
+            {isFallback && rawText && !ai.arguments_for_petitioner?.length && !ai.arguments_for_respondent?.length && analysis.arguments?.length === 0 && (
+              <Card>
+                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Full analysis including legal arguments" />
+                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
               </Card>
             )}
           </div>
@@ -467,6 +499,13 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                     </li>
                   ))}
                 </ul>
+              </Card>
+            )}
+
+            {isFallback && rawText && !ai.strategic_recommendations?.length && !ai.procedural_requirements?.length && !ai.evidence_checklist?.length && (
+              <Card>
+                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Strategy details within full analysis" />
+                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
               </Card>
             )}
           </div>
@@ -542,6 +581,11 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                   </Card>
                 )}
               </>
+            ) : isFallback && rawText ? (
+              <Card>
+                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Risk details within full analysis" />
+                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
+              </Card>
             ) : (
               <Card>
                 <div className="text-center py-8 text-gray-400">
