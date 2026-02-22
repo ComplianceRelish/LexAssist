@@ -31,6 +31,13 @@ except ImportError:
     _ANTHROPIC_AVAILABLE = False
     logger.warning("Anthropic SDK not installed — AI features disabled")
 
+# httpx for granular timeout control on API calls
+try:
+    import httpx
+    _HTTPX_AVAILABLE = True
+except ImportError:
+    _HTTPX_AVAILABLE = False
+
 
 # ──────────────────────────────────────────────────────────────────────
 # System prompts
@@ -218,7 +225,7 @@ class ClaudeClient:
     Anthropic Claude API client for legal AI features.
     
     Supports:
-    - Structured brief analysis (JSON output)  — uses Opus 4.6 for maximum depth
+    - Structured brief analysis (JSON output)  — uses Sonnet 4.6 (3-pass pipeline)
     - Streaming chat conversations              — uses Sonnet 4.6 for speed
     - Document drafting                         — uses Sonnet 4.6 for speed
     """
@@ -393,40 +400,39 @@ Brief:
         Pass 1 — Fast issue identification and case classification.
         Uses Sonnet for speed. Feeds results into Pass 2 for deeper analysis.
         """
-        prompt = f"""You are a senior Indian legal analyst. Quickly analyze this brief and extract:
-
-1. **Case Type**: Criminal / Civil / Constitutional / Family / Labour / Consumer / Commercial / Property
-2. **Core Legal Issues**: Each distinct legal question with the most relevant statute + section
-3. **Key Statutes**: All applicable Acts with specific section numbers
-4. **Parties**: Who is involved, in what capacity (petitioner/respondent/complainant/accused)
-5. **Critical Dates**: Any dates affecting limitation, accrual, or procedural deadlines
-6. **Jurisdiction**: Which court/tribunal should hear this and why
-7. **Urgency Indicators**: Bail needed, injunction required, limitation about to expire?
-
-Brief:
----
-{brief_text[:8000]}
----"""
+        # Build a compact prompt — brevity reduces latency significantly
+        brief_snippet = brief_text[:6000]
+        prompt = f"""Classify this Indian legal brief. Return JSON with:
+{{"case_type":"Criminal|Civil|Constitutional|Family|Labour|Consumer|Commercial|Property",
+"core_legal_issues":[{{"issue":"...","statute":"...","section":"..."}}],
+"key_statutes":["Act — Section X"],
+"parties":[{{"name":"...","capacity":"petitioner|respondent|accused"}}],
+"critical_dates":[{{"date":"...","significance":"..."}}],
+"jurisdiction":"which court and why",
+"urgency":"bail/injunction/limitation concerns or none"}}"""
 
         if context:
             extras = []
             if context.get("entities", {}).get("sections"):
-                extras.append(f"Sections detected: {', '.join(context['entities']['sections'])}")
+                extras.append(f"Sections: {', '.join(context['entities']['sections'][:10])}")
             if context.get("case_type", {}).get("primary"):
-                extras.append(f"Auto-classification: {context['case_type']['primary']}")
-            if context.get("entities", {}).get("courts"):
-                extras.append(f"Courts detected: {', '.join(context['entities']['courts'])}")
+                extras.append(f"Auto-class: {context['case_type']['primary']}")
             if extras:
-                prompt += "\n\nRegex pre-extraction:\n" + "\n".join(extras)
+                prompt += "\n" + " | ".join(extras)
 
-        prompt += "\n\nRespond in JSON format."
+        prompt += f"\n\nBrief:\n{brief_snippet}"
+
+        # Granular timeout: fast connect, generous read for slow API responses
+        pass1_timeout = httpx.Timeout(connect=10.0, read=90.0, write=15.0, pool=5.0) \
+            if _HTTPX_AVAILABLE else 90.0
 
         try:
             response = self.client.messages.create(
                 model=self.MODEL,
-                max_tokens=4096,
+                max_tokens=1500,           # Classification needs minimal tokens
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
+                timeout=pass1_timeout,
             )
             text = response.content[0].text
             json_text = self._extract_json(text)
@@ -626,7 +632,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
 
         Pipeline (deep=True, default):
           Pass 1 (Sonnet 4.6 — fast):   Issue identification & classification
-          Pass 2 (Opus 4.6 — deep):     Full structured analysis enriched by Pass 1
+          Pass 2 (Sonnet 4.6):           Full structured analysis enriched by Pass 1
           Pass 3 (Sonnet 4.6 — fast):   Citation verification & flagging
 
         Quick mode (deep=False):
@@ -661,22 +667,30 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             return self._quick_analyze(brief_text, context, pipeline_start)
 
         # ── Pass 1: Issue Identification (Sonnet — fast) ─────────
-        _progress("pass1", "Pass 1/3 — Identifying legal issues & classifying case type...", 10)
-        logger.info("▶ Analysis Pass 1/3: Issue identification (Sonnet 4.6)")
-        pass1_start = time.time()
-        issues_context = self._identify_issues(brief_text, context)
-        pass1_time = round(time.time() - pass1_start, 1)
-        logger.info("Pass 1 completed in %.1fs", pass1_time)
-        _progress("pass1_done", f"Pass 1 complete ({pass1_time}s) — issues identified", 25)
+        # Skip Pass 1 for short briefs — regex context already covers classification
+        # and the API call overhead isn't justified for < 3000 chars
+        if len(brief_text) < 3000:
+            issues_context = {}
+            pass1_time = 0.0
+            logger.info("Pass 1 skipped — brief under 3000 chars, proceeding directly to deep analysis")
+            _progress("pass1_done", "Brief is short — proceeding directly to deep analysis...", 25)
+        else:
+            _progress("pass1", "Pass 1/3 — Identifying legal issues & classifying case type...", 10)
+            logger.info("▶ Analysis Pass 1/3: Issue identification (Sonnet 4.6)")
+            pass1_start = time.time()
+            issues_context = self._identify_issues(brief_text, context)
+            pass1_time = round(time.time() - pass1_start, 1)
+            logger.info("Pass 1 completed in %.1fs", pass1_time)
+            _progress("pass1_done", f"Pass 1 complete ({pass1_time}s) — issues identified", 25)
 
         if not issues_context:
             pipeline_notes.append(
                 "Pass 1 (issue identification) failed — analysis may lack depth on some issues"
             )
 
-        # ── Pass 2: Deep Structured Analysis (Opus — maximum depth) ──
-        _progress("pass2", "Pass 2/3 — Deep legal analysis in progress (this is the longest step)...", 30)
-        logger.info("▶ Analysis Pass 2/3: Deep structured analysis (Opus 4.6)")
+        # ── Pass 2: Structured Analysis (Sonnet 4.6) ─────────────
+        _progress("pass2", "Pass 2/3 — Deep legal analysis in progress...", 30)
+        logger.info("▶ Analysis Pass 2/3: Structured analysis (Sonnet 4.6)")
 
         prompt = f"Analyze the following Indian legal brief thoroughly:\n\n---\n{brief_text}\n---"
 
@@ -742,35 +756,18 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             text = ""
             json_text = ""
             pass2_start = time.time()
-            pass2_model = self.MODEL_DEEP  # Will fallback to MODEL (Sonnet) if Opus fails
+            pass2_model = self.MODEL
 
-            # Try Opus first, fallback to Sonnet if it fails
             chunks: List[str] = []
-            try:
-                with self.client.messages.stream(
-                    model=self.MODEL_DEEP,
-                    max_tokens=self.MAX_TOKENS_DEEP,
-                    system=BRIEF_ANALYSIS_SYSTEM,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.05,
-                ) as stream:
-                    for chunk in stream.text_stream:
-                        chunks.append(chunk)
-            except Exception as opus_err:
-                logger.warning("Pass 2 Opus failed (%s), falling back to Sonnet", opus_err)
-                pipeline_notes.append(f"Opus model unavailable ({type(opus_err).__name__}), used Sonnet fallback")
-                pass2_model = self.MODEL
-                chunks = []
-                gc.collect()
-                with self.client.messages.stream(
-                    model=self.MODEL,
-                    max_tokens=self.MAX_TOKENS,
-                    system=BRIEF_ANALYSIS_SYSTEM,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.05,
-                ) as stream:
-                    for chunk in stream.text_stream:
-                        chunks.append(chunk)
+            with self.client.messages.stream(
+                model=self.MODEL,
+                max_tokens=self.MAX_TOKENS,
+                system=BRIEF_ANALYSIS_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.05,
+            ) as stream:
+                for chunk in stream.text_stream:
+                    chunks.append(chunk)
 
             pass2_time = round(time.time() - pass2_start, 1)
             logger.info("Pass 2 completed in %.1fs (model: %s)", pass2_time, pass2_model)
