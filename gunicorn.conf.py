@@ -3,9 +3,9 @@ Gunicorn configuration file — auto-detected by gunicorn when placed
 in the project root (where the start command runs).
 
 This file ensures correct timeout, worker class, and connection
-limits regardless of what the Render dashboard Start Command says.
+limits regardless of what the platform Start Command says.
 Command-line flags like --timeout 30 will OVERRIDE these, but if the
-dashboard command omits them, these defaults take effect.
+start command omits them, these defaults take effect.
 
 See: https://docs.gunicorn.org/en/stable/settings.html
 """
@@ -58,7 +58,7 @@ max_requests = 200
 max_requests_jitter = 20
 
 # ---------------------------------------------------------------------------
-# Binding — Render sets $PORT
+# Binding — Railway / platform sets $PORT
 # ---------------------------------------------------------------------------
 bind = f"0.0.0.0:{os.getenv('PORT', '10000')}"
 

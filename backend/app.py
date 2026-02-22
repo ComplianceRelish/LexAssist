@@ -1361,7 +1361,7 @@ def ai_draft():
 def _run_deep_dive(user_id: str, brief_id: str, case_id: str, text: str):
     """Background task: run thorough multi-pass Sonnet analysis and update the case diary.
 
-    Runs in a daemon thread (gevent greenlet on Render).
+    Runs in a daemon thread (gevent greenlet on Railway).
     Reads the brief text, performs deep=True analysis, and UPDATEs the existing
     analysis_results row so the frontend sees the enriched result on next poll.
     """
