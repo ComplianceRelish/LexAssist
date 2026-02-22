@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabase';
 import { setAuthTokens } from './utils/api';
@@ -13,6 +13,12 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // Wake up the Render backend as soon as the login page mounts
+  // so the cold-start penalty is absorbed while the user types credentials
+  useEffect(() => {
+    fetch(`${BACKEND}/api/health`, { method: 'GET' }).catch(() => {});
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,17 +51,17 @@ const Login: React.FC = () => {
         setAuthTokens(data.access_token, data.refresh_token || '');
       }
 
-      // Also sign in on the frontend Supabase client to sync session
-      // Backend already set cookies; now get the user's email from response and sign in client-side
-      if (data.user?.email) {
-        await supabase.auth.signInWithPassword({
-          email: data.user.email,
-          password: phone.trim(),
+      // Sync frontend Supabase client session using tokens from backend
+      // (avoids a redundant network round-trip vs signInWithPassword)
+      if (data.access_token) {
+        await supabase.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token || '',
         });
       }
 
       setSuccess(true);
-      setTimeout(() => navigate('/dashboard'), 600);
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

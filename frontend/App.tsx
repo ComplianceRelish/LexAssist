@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { User, Session } from '@supabase/supabase-js';
 import { authService, supabase } from './supabase';
@@ -6,12 +6,14 @@ import { fetchAdminMe, clearAuthTokens } from './utils/api';
 import Login from './Login';
 import Header from './Header';
 import BriefInput from './BriefInput';
-import UserProfile from './UserProfile';
-import ProfileModal from './ProfileModal';
 import ChatPanel from './ChatPanel';
-import AdminPanel from './AdminPanel';
-import MyCases from './MyCases';
 import './App.css';
+
+// Lazy-load heavy route components to reduce initial bundle
+const UserProfile = lazy(() => import('./UserProfile'));
+const ProfileModal = lazy(() => import('./ProfileModal'));
+const AdminPanel = lazy(() => import('./AdminPanel'));
+const MyCases = lazy(() => import('./MyCases'));
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean; error: any}> {
@@ -50,9 +52,24 @@ function App() {
   const [briefContext, setBriefContext] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('user');
   const [userFullName, setUserFullName] = useState<string>('');
+  const fetchedMeRef = useRef(false);
 
   // Check auth state on mount
   useEffect(() => {
+    let mounted = true;
+
+    const loadUserMeta = async () => {
+      if (fetchedMeRef.current) return;
+      fetchedMeRef.current = true;
+      try {
+        const me = await fetchAdminMe();
+        if (mounted) {
+          setUserRole(me.role || 'user');
+          setUserFullName(me.full_name || '');
+        }
+      } catch { /* ignore */ }
+    };
+
     const checkAuth = async () => {
       const result = await authService.getSession();
       if ('error' in result) {
@@ -62,17 +79,12 @@ function App() {
         const session = result.data?.session;
         if (session?.user) {
           setUser(session.user);
-          // Fetch user role & full name
-          try {
-            const me = await fetchAdminMe();
-            setUserRole(me.role || 'user');
-            setUserFullName(me.full_name || '');
-          } catch { /* ignore */ }
+          await loadUserMeta();
         } else {
           setUser(null);
         }
       }
-      setLoading(false);
+      if (mounted) setLoading(false);
     };
 
     checkAuth();
@@ -80,21 +92,23 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event: string, session: Session | null) => {
         const newUser = session?.user || null;
-        setUser(newUser);
+        if (mounted) setUser(newUser);
         if (session && newUser) {
-          try {
-            const me = await fetchAdminMe();
-            setUserRole(me.role || 'user');
-            setUserFullName(me.full_name || '');
-          } catch { /* ignore */ }
+          await loadUserMeta();
         } else {
-          setUserRole('user');
-          setUserFullName('');
+          fetchedMeRef.current = false;
+          if (mounted) {
+            setUserRole('user');
+            setUserFullName('');
+          }
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -175,18 +189,22 @@ function App() {
             } />
 
             <Route path="/cases" element={
-              user ? <MyCases /> : <Navigate to="/" />
+              user ? <Suspense fallback={<div className="lex-loading-spinner"><div className="lex-spinner"></div></div>}><MyCases /></Suspense> : <Navigate to="/" />
             } />
 
             <Route path="/profile" element={
               user ? (
-                <UserProfile user={{ id: user.id, email: user.email || '' }} />
+                <Suspense fallback={<div className="lex-loading-spinner"><div className="lex-spinner"></div></div>}>
+                  <UserProfile user={{ id: user.id, email: user.email || '' }} />
+                </Suspense>
               ) : <Navigate to="/" />
             } />
 
             <Route path="/admin" element={
               user && (userRole === 'super_admin' || userRole === 'admin') ? (
-                <AdminPanel currentUserId={user.id} />
+                <Suspense fallback={<div className="lex-loading-spinner"><div className="lex-spinner"></div></div>}>
+                  <AdminPanel currentUserId={user.id} />
+                </Suspense>
               ) : <Navigate to="/" />
             } />
 
@@ -216,10 +234,12 @@ function App() {
         )}
 
         {/* Profile Modal */}
-        <ProfileModal
-          isOpen={showProfileModal}
-          onClose={() => setShowProfileModal(false)}
-        />
+        <Suspense fallback={null}>
+          <ProfileModal
+            isOpen={showProfileModal}
+            onClose={() => setShowProfileModal(false)}
+          />
+        </Suspense>
       </div>
     </Router>
   );
