@@ -11,8 +11,17 @@ class SupabaseClient:
         # Auth is validated separately via JWT cookies in app.py.
         self.key = key or Config.SUPABASE_SERVICE_ROLE_KEY or Config.SUPABASE_ANON_PUBLIC_KEY
         self.client = None
+        # Separate auth client uses anon key for sign_in_with_password.
+        # GoTrue rejects user-level sign-in when called with the service-role key.
+        self.auth_client = None
         if self.url and self.key:
             try:
                 self.client = create_client(self.url, self.key)
             except Exception as e:
                 self.logger.error(f"Supabase client init error: {e}")
+        anon_key = Config.SUPABASE_ANON_PUBLIC_KEY
+        if self.url and anon_key:
+            try:
+                self.auth_client = create_client(self.url, anon_key)
+            except Exception as e:
+                self.logger.error(f"Supabase auth client init error: {e}")

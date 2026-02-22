@@ -250,7 +250,9 @@ def login():
             return jsonify({"error": "Account has no email configured. Contact administrator."}), 401
 
         # Sign in via Supabase Auth using email + phone (phone is the password)
-        result = supabase.client.auth.sign_in_with_password(
+        # Use auth_client (anon key) for user sign-in; service-role key is rejected by GoTrue
+        auth = supabase.auth_client or supabase.client
+        result = auth.auth.sign_in_with_password(
             {"email": user_email, "password": phone}
         )
         session = getattr(result, "session", None)
@@ -278,7 +280,7 @@ def login():
                         httponly=True, samesite="None", secure=True)
         return resp
     except Exception as e:
-        logger.error("Login error: %s", e)
+        logger.error("Login error: %s  |  type=%s", e, type(e).__name__)
         msg = str(e)
         if "Invalid login" in msg or "invalid" in msg.lower():
             return jsonify({"error": "Invalid credentials. Contact your administrator."}), 401
