@@ -251,6 +251,47 @@ async function _aiAnalyzeStream(
   }
 }
 
+// ── Deep-Dive Analysis (Background) ──────────────────────────────
+
+/**
+ * Trigger a background deep-dive analysis for an already-analyzed brief.
+ * Returns immediately with status 202; the backend runs multi-pass
+ * analysis in the background and updates the case diary when done.
+ */
+export async function triggerDeepDive(
+  briefId: string,
+  caseId: string,
+): Promise<{ status: string; brief_id?: string }> {
+  const response = await fetch(`${BASE_URL}/api/ai/deep-dive`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ brief_id: briefId, case_id: caseId }),
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Deep dive request failed' }));
+    throw new Error(err.error || 'Deep dive request failed');
+  }
+  return response.json();
+}
+
+/**
+ * Poll for deep-dive completion. Returns the analysis when complete.
+ */
+export async function getDeepDiveStatus(
+  briefId: string,
+): Promise<{ status: string; analysis?: any }> {
+  const response = await fetch(`${BASE_URL}/api/ai/deep-dive-status/${briefId}`, {
+    method: 'GET',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to check deep dive status');
+  }
+  return response.json();
+}
+
 // ── AI Chat (Streaming SSE) ──────────────────────────────────────
 
 export interface ChatMessage {

@@ -225,13 +225,17 @@ class ClaudeClient:
     Anthropic Claude API client for legal AI features.
     
     Supports:
-    - Structured brief analysis (JSON output)  — uses Sonnet 4.6 (3-pass pipeline)
-    - Streaming chat conversations              — uses Sonnet 4.6 for speed
-    - Document drafting                         — uses Sonnet 4.6 for speed
+    - Structured brief analysis (JSON output)  — Sonnet 4.6 (single-pass quick or multi-pass deep)
+    - Streaming chat conversations              — Sonnet 4.6
+    - Document drafting                         — Sonnet 4.6
+
+    All analysis uses Claude Sonnet 4.6 exclusively.
+    Quick mode: single-pass (immediate results, 8K tokens).
+    Deep mode: multi-pass with issue identification + citation verification (16K tokens, background).
     """
 
-    MODEL = "claude-sonnet-4-6"            # Workhorse — chat, drafting, verification
-    MODEL_DEEP = "claude-opus-4-6"         # Deep analysis — maximum intelligence
+    MODEL = "claude-sonnet-4-6"            # All features — chat, drafting, analysis
+    MODEL_DEEP = "claude-sonnet-4-6"        # Deep analysis — thorough multi-pass (same model, higher tokens)
     MODEL_FAST = "claude-haiku-4-5-20251001"  # Fast preprocessing — context summarization
     MAX_TOKENS = 8192
     MAX_TOKENS_DEEP = 16384                   # Larger budget for deep analysis (Pass 2) to avoid truncated JSON
@@ -648,15 +652,15 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                        deep: bool = True,
                        progress_callback: Optional[callable] = None) -> Dict[str, Any]:
         """
-        Multi-pass AI analysis of a legal brief. Returns structured JSON.
+        AI analysis of a legal brief. Returns structured JSON.
 
-        Pipeline (deep=True, default):
+        Pipeline (deep=True — background deep dive):
           Pass 1 (Sonnet 4.6 — fast):   Issue identification & classification
-          Pass 2 (Sonnet 4.6):           Full structured analysis enriched by Pass 1
+          Pass 2 (Sonnet 4.6 — 16K):    Full structured analysis enriched by Pass 1
           Pass 3 (Sonnet 4.6 — fast):   Citation verification & flagging
 
-        Quick mode (deep=False):
-          Single-pass Sonnet analysis — faster, cheaper, suitable for initial review.
+        Quick mode (deep=False — immediate results):
+          Single-pass Sonnet analysis (8K tokens) — fast, suitable for preliminary review.
 
         Args:
             brief_text: The raw legal brief text
@@ -781,7 +785,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             chunks: List[str] = []
             with self.client.messages.stream(
                 model=self.MODEL,
-                max_tokens=self.MAX_TOKENS,
+                max_tokens=self.MAX_TOKENS_DEEP,
                 system=BRIEF_ANALYSIS_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.05,

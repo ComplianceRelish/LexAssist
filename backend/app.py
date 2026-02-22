@@ -23,6 +23,7 @@ ADMIN_USERS = {
 }
 
 import os
+import threading
 
 # ---------------------------------------------------------------------------
 # App bootstrap
@@ -95,6 +96,9 @@ jurisdiction_resolver = JurisdictionResolver()
 claude = ClaudeClient()
 speech = SpeechService()
 document_service = DocumentService()
+
+# In-memory tracker for background deep-dive tasks  {brief_id: "running"|"complete"|"error"}
+_deep_dive_tasks: dict = {}
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -859,7 +863,7 @@ def ai_analyze():
     if not data:
         return jsonify({"error": "Request body required"}), 400
     text = data.get("text", "")
-    deep = data.get("deep", True)  # deep=True (default) for full 3-pass, False for quick
+    deep = data.get("deep", False)  # deep=False (default) for quick single-pass; True for background deep dive
     if not text.strip():
         return jsonify({"error": "Brief text cannot be empty"}), 400
 
@@ -954,8 +958,9 @@ def ai_analyze():
             except Exception as log_err:
                 logger.warning("Activity log write failed: %s", log_err)
 
-        # Include case_id in response so frontend can navigate to the case diary
+        # Include case_id and brief_id in response so frontend can navigate and trigger deep dive
         merged["case_id"] = case_id
+        merged["brief_id"] = brief_id
         return jsonify(merged)
 
     except Exception as e:
@@ -981,7 +986,7 @@ def ai_analyze_stream():
     if not data:
         return jsonify({"error": "Request body required"}), 400
     text = data.get("text", "")
-    deep = data.get("deep", True)
+    deep = data.get("deep", False)
     if not text.strip():
         return jsonify({"error": "Brief text cannot be empty"}), 400
 
@@ -1086,6 +1091,7 @@ def ai_analyze_stream():
                     logger.warning("Activity log write failed: %s", log_err)
 
             merged["case_id"] = case_id
+            merged["brief_id"] = brief_id
 
             # Final result event
             yield f"data: {json.dumps({'type': 'result', 'data': merged}, default=str)}\n\n"
@@ -1210,6 +1216,223 @@ def ai_draft():
             "Connection": "keep-alive",
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# AI – Background Deep-Dive Analysis
+# ---------------------------------------------------------------------------
+
+def _run_deep_dive(user_id: str, brief_id: str, case_id: str, text: str):
+    """Background task: run thorough multi-pass Sonnet analysis and update the case diary.
+
+    Runs in a daemon thread (gevent greenlet on Render).
+    Reads the brief text, performs deep=True analysis, and UPDATEs the existing
+    analysis_results row so the frontend sees the enriched result on next poll.
+    """
+    with app.app_context():
+        try:
+            _deep_dive_tasks[brief_id] = "running"
+            logger.info("Deep dive started for brief %s (user %s)", brief_id, user_id)
+
+            # Step 1: Regex extraction + jurisdiction enrichment
+            try:
+                regex_context = analyzer.analyze(text)
+            except Exception as regex_err:
+                logger.warning("Deep dive regex failed: %s — continuing", regex_err)
+                regex_context = {"entities": {}, "case_type": {}, "jurisdiction": {},
+                                 "statutes": [], "precedents": [], "timeline": [],
+                                 "nlp_enrichment": {}}
+            try:
+                jurisdiction_resolver.enrich_context(regex_context, text)
+            except Exception:
+                pass
+
+            # Step 2: Multi-pass AI analysis with citation verification (deep=True)
+            ai_result = claude.analyze_brief(text, context=regex_context, deep=True)
+
+            if ai_result.get("status") == "error":
+                logger.error("Deep dive AI error for brief %s: %s", brief_id, ai_result.get("error"))
+                _deep_dive_tasks[brief_id] = "error"
+                return
+
+            # Step 3: Merge results (same structure as immediate analysis)
+            merged = {
+                "status": "success",
+                "ai_analysis": ai_result,
+                "entities": regex_context.get("entities", {}),
+                "case_type_regex": regex_context.get("case_type", {}),
+                "jurisdiction_regex": regex_context.get("jurisdiction", {}),
+                "jurisdiction_verified": regex_context.get("jurisdiction_data", {}),
+                "statutes_regex": regex_context.get("statutes", []),
+                "precedents_kanoon": regex_context.get("precedents", []),
+                "timeline": regex_context.get("timeline", []),
+                "nlp_enrichment": regex_context.get("nlp_enrichment", {}),
+                "case_id": case_id,
+                "brief_id": brief_id,
+                "deep_dive": True,
+            }
+
+            # Step 4: UPDATE the existing analysis_results row
+            if supabase.client:
+                try:
+                    supabase.client.table("analysis_results") \
+                        .update({"analysis": merged}) \
+                        .eq("brief_id", brief_id) \
+                        .eq("user_id", user_id) \
+                        .execute()
+                except Exception as db_err:
+                    logger.warning("Deep dive DB update failed, trying insert: %s", db_err)
+                    try:
+                        supabase.client.table("analysis_results").insert({
+                            "user_id": user_id,
+                            "brief_id": brief_id,
+                            "analysis": merged,
+                        }).execute()
+                    except Exception:
+                        pass
+
+                # Log activity
+                try:
+                    supabase.client.table("activity_log").insert({
+                        "user_id": user_id,
+                        "case_id": case_id,
+                        "action": "deep_dive_completed",
+                        "title": "Deep Analysis Complete",
+                        "detail": "Multi-pass AI analysis with citation verification completed.",
+                        "metadata": {"brief_id": brief_id, "case_id": case_id},
+                    }).execute()
+                except Exception:
+                    pass
+
+            _deep_dive_tasks[brief_id] = "complete"
+            logger.info("Deep dive completed for brief %s (pipeline: %s, time: %ss)",
+                        brief_id,
+                        ai_result.get("analysis_pipeline", "unknown"),
+                        ai_result.get("timing", {}).get("total_sec", "?"))
+
+        except Exception as e:
+            logger.error("Deep dive background error for brief %s: %s", brief_id, e)
+            _deep_dive_tasks[brief_id] = "error"
+
+
+@app.route("/api/ai/deep-dive", methods=["POST"])
+def ai_deep_dive():
+    """Trigger a background deep-dive analysis for an existing brief.
+
+    Returns 202 immediately. The analysis runs in a background thread and
+    updates the analysis_results row when complete. Frontend polls the
+    status endpoint to detect completion.
+
+    Body: { "brief_id": "...", "case_id": "..." }
+    """
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    data = request.json or {}
+    brief_id = data.get("brief_id")
+    case_id = data.get("case_id")
+
+    if not brief_id:
+        return jsonify({"error": "brief_id is required"}), 400
+
+    if not claude.is_available:
+        return jsonify({"error": "AI service unavailable"}), 503
+
+    # Prevent duplicate runs
+    if _deep_dive_tasks.get(brief_id) == "running":
+        return jsonify({"status": "already_running", "brief_id": brief_id}), 200
+
+    # Fetch brief text from DB (already saved by the quick analysis)
+    try:
+        brief_row = (
+            supabase.client.table("briefs")
+            .select("content")
+            .eq("id", brief_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        if not brief_row.data:
+            return jsonify({"error": "Brief not found"}), 404
+        text = brief_row.data["content"]
+    except Exception as e:
+        logger.error("Deep dive brief fetch error: %s", e)
+        return jsonify({"error": f"Failed to fetch brief: {e}"}), 500
+
+    # Launch background deep analysis
+    _deep_dive_tasks[brief_id] = "running"
+    t = threading.Thread(
+        target=_run_deep_dive,
+        args=(user_id, brief_id, case_id, text),
+        daemon=True,
+    )
+    t.start()
+
+    return jsonify({"status": "started", "brief_id": brief_id}), 202
+
+
+@app.route("/api/ai/deep-dive-status/<brief_id>", methods=["GET"])
+def deep_dive_status(brief_id):
+    """Check the status of a background deep-dive analysis.
+
+    Returns:
+      {"status": "running"}                           — still in progress
+      {"status": "complete", "analysis": {...}}        — done, includes full result
+      {"status": "error"}                              — failed
+      {"status": "not_started"}                        — no deep dive was triggered
+    """
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    status = _deep_dive_tasks.get(brief_id, "unknown")
+
+    if status == "complete":
+        # Fetch the updated analysis from DB
+        try:
+            result = (
+                supabase.client.table("analysis_results")
+                .select("analysis")
+                .eq("brief_id", brief_id)
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            analysis = result.data[0]["analysis"] if result.data else None
+        except Exception:
+            analysis = None
+
+        # Clean up the in-memory tracker
+        _deep_dive_tasks.pop(brief_id, None)
+        return jsonify({"status": "complete", "analysis": analysis}), 200
+
+    elif status == "running":
+        return jsonify({"status": "running"}), 200
+
+    elif status == "error":
+        _deep_dive_tasks.pop(brief_id, None)
+        return jsonify({"status": "error"}), 200
+
+    else:
+        # Check DB — maybe server restarted and task completed previously
+        try:
+            result = (
+                supabase.client.table("analysis_results")
+                .select("analysis")
+                .eq("brief_id", brief_id)
+                .eq("user_id", user_id)
+                .execute()
+            )
+            if result.data:
+                analysis = result.data[0]["analysis"]
+                if analysis and analysis.get("deep_dive"):
+                    return jsonify({"status": "complete", "analysis": analysis}), 200
+        except Exception:
+            pass
+
+        return jsonify({"status": "not_started"}), 200
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { analyzeBrief, aiAnalyzeBrief, SpeechTranscriptionResult, DocumentScanResult, AnalysisProgress } from './utils/api';
+import { analyzeBrief, aiAnalyzeBrief, triggerDeepDive, getDeepDiveStatus, SpeechTranscriptionResult, DocumentScanResult, AnalysisProgress } from './utils/api';
 import SpeechInput from './SpeechInput';
 import DocumentScanner from './DocumentScanner';
 import ResponseTabs from './ResponseTabs';
@@ -46,7 +46,9 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
   const [lastSpeechMeta, setLastSpeechMeta] = useState<SpeechTranscriptionResult | null>(null);
   const [lastScanResult, setLastScanResult] = useState<DocumentScanResult | null>(null);
   const [showDocScanner, setShowDocScanner] = useState(false);
+  const [deepDiveStatus, setDeepDiveStatus] = useState<'idle' | 'running' | 'complete' | 'error'>('idle');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const deepDivePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recognitionRef = useRef<any>(null);
   const isRecordingRef = useRef(false);
 
@@ -68,6 +70,7 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (deepDivePollRef.current) clearInterval(deepDivePollRef.current);
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch {}
       }
@@ -80,6 +83,8 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
     setResult(null);
     setAiResult(null);
     setAnalysisProgress(null);
+    setDeepDiveStatus('idle');
+    if (deepDivePollRef.current) { clearInterval(deepDivePollRef.current); deepDivePollRef.current = null; }
     if (!isLoggedIn) { setShowLoginPrompt(true); return; }
     if (!brief.trim()) { setError('Please enter or dictate your case brief'); return; }
 
@@ -119,6 +124,48 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
     } finally {
       setLoading(false);
       setAnalysisProgress(null);
+    }
+  };
+
+  // ── Deep Dive: trigger background multi-pass analysis ──────────
+  const startDeepDive = async () => {
+    if (!aiResult?.brief_id) return;
+    try {
+      setDeepDiveStatus('running');
+      await triggerDeepDive(aiResult.brief_id, aiResult.case_id);
+
+      // Poll for completion every 8 seconds
+      deepDivePollRef.current = setInterval(async () => {
+        try {
+          const res = await getDeepDiveStatus(aiResult.brief_id);
+          if (res.status === 'complete' && res.analysis) {
+            if (deepDivePollRef.current) { clearInterval(deepDivePollRef.current); deepDivePollRef.current = null; }
+            setDeepDiveStatus('complete');
+            // Swap in the deep analysis results
+            setAiResult(res.analysis);
+            // Update the basic result for backward compat
+            const deepAI = res.analysis?.ai_analysis;
+            if (deepAI) {
+              setResult((prev: any) => prev ? ({
+                ...prev,
+                analysis: {
+                  summary: deepAI.case_summary || prev.analysis?.summary || '',
+                  arguments: deepAI.arguments_for_petitioner || prev.analysis?.arguments || [],
+                  challenges: deepAI.arguments_for_respondent || prev.analysis?.challenges || [],
+                  recommendations: deepAI.strategic_recommendations || prev.analysis?.recommendations || [],
+                },
+              }) : prev);
+            }
+          } else if (res.status === 'error') {
+            if (deepDivePollRef.current) { clearInterval(deepDivePollRef.current); deepDivePollRef.current = null; }
+            setDeepDiveStatus('error');
+          }
+        } catch {
+          // Transient poll error — keep polling
+        }
+      }, 8000);
+    } catch {
+      setDeepDiveStatus('error');
     }
   };
 
@@ -495,6 +542,62 @@ const BriefInput: React.FC<BriefInputProps> = ({ isLoggedIn, onBriefChange, onOp
               </div>
             </div>
           </div>
+
+          {/* Deep Dive Option */}
+          {aiResult && aiResult.brief_id && (
+            <div className="mb-4">
+              {deepDiveStatus === 'idle' && (
+                <button
+                  onClick={startDeepDive}
+                  className="w-full flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl hover:from-indigo-100 hover:to-blue-100 hover:border-indigo-300 transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">🔬</span>
+                    <div className="text-left">
+                      <div className="font-semibold text-[#0a2e5c] text-sm">Deep Dive Analysis</div>
+                      <div className="text-xs text-gray-500">Multi-pass analysis with citation verification &bull; Runs in background</div>
+                    </div>
+                  </div>
+                  <svg className="w-5 h-5 text-indigo-400 group-hover:text-indigo-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </button>
+              )}
+              {deepDiveStatus === 'running' && (
+                <div className="flex items-center gap-3 px-5 py-3.5 bg-amber-50 border border-amber-200 rounded-xl">
+                  <svg className="animate-spin h-5 w-5 text-amber-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  <div>
+                    <div className="font-medium text-amber-800 text-sm">Deep analysis running in background...</div>
+                    <div className="text-xs text-amber-600">This takes 30–90 seconds. You can continue working — results update automatically.</div>
+                  </div>
+                </div>
+              )}
+              {deepDiveStatus === 'complete' && (
+                <div className="flex items-center gap-3 px-5 py-3.5 bg-green-50 border border-green-200 rounded-xl">
+                  <span className="text-green-600 text-xl flex-shrink-0">✓</span>
+                  <div>
+                    <div className="font-medium text-green-800 text-sm">Deep analysis complete</div>
+                    <div className="text-xs text-green-600">Results updated with thorough analysis &amp; verified citations below.</div>
+                  </div>
+                </div>
+              )}
+              {deepDiveStatus === 'error' && (
+                <div className="flex items-center justify-between px-5 py-3.5 bg-red-50 border border-red-200 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="text-red-500 text-xl flex-shrink-0">⚠</span>
+                    <div>
+                      <div className="font-medium text-red-800 text-sm">Deep analysis encountered an error</div>
+                      <div className="text-xs text-red-600">The preliminary results below are still valid.</div>
+                    </div>
+                  </div>
+                  <button onClick={() => setDeepDiveStatus('idle')} className="text-xs text-red-600 hover:text-red-800 underline ml-3 flex-shrink-0">Retry</button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Main tabbed results */}
           <ResponseTabs
