@@ -10,6 +10,20 @@ dashboard command omits them, these defaults take effect.
 See: https://docs.gunicorn.org/en/stable/settings.html
 """
 
+# ---------------------------------------------------------------------------
+# Gevent monkey-patch — MUST be the very first thing that runs.
+# gunicorn.conf.py is loaded before the application, so patching here
+# ensures ssl, socket, threading, etc. are replaced BEFORE any library
+# (jwt, urllib3, httpx, supabase) imports the originals.
+# This prevents the "super(type, obj): obj must be an instance or
+# subtype of type" crash when Supabase Auth makes SSL calls.
+# ---------------------------------------------------------------------------
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except ImportError:
+    pass  # gevent not installed (local dev) — sync workers still work
+
 import multiprocessing
 import os
 

@@ -6,14 +6,14 @@ regardless of how the start command is written.
   gunicorn backend.app:app   # also works (with PYTHONPATH=.)
 """
 # ---------------------------------------------------------------------------
-# Gevent monkey-patch — MUST happen before any other imports so that
-# stdlib socket/threading/queue/ssl are replaced with cooperative
-# green-thread equivalents.  This lets gunicorn's gevent worker handle
-# long-lived SSE connections without triggering worker timeouts.
+# Gevent monkey-patch — safety net for non-gunicorn usage (e.g. flask run).
+# When running via gunicorn, the patch already happened in gunicorn.conf.py
+# (which loads first), so this call is a harmless no-op.
 # ---------------------------------------------------------------------------
 try:
     from gevent import monkey
-    monkey.patch_all()          # patches socket, ssl, threading, queue, etc.
+    if not monkey.is_module_patched("ssl"):
+        monkey.patch_all()
 except ImportError:
     pass  # gevent not installed (local dev) — sync workers still work
 import sys, os
