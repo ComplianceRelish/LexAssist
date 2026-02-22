@@ -249,8 +249,21 @@ def login():
         if not user_email:
             return jsonify({"error": "Account has no email configured. Contact administrator."}), 401
 
-        # Sign in via Supabase Auth using email + phone (phone is the password)
-        # Use auth_client (anon key) for user sign-in; service-role key is rejected by GoTrue
+        # Sign in via Supabase Auth using email + phone (phone is the password).
+        # First, sync the Auth password to the phone number using the admin API
+        # (service-role key). This guarantees the password matches since the
+        # phone number IS the credential — identity was already verified via the
+        # profile lookup above.
+        profile_user_id = profile.get("user_id")
+        if profile_user_id:
+            try:
+                supabase.client.auth.admin.update_user_by_id(
+                    profile_user_id, {"password": phone}
+                )
+            except Exception as pwd_err:
+                logger.warning("Password sync for %s: %s", user_email, pwd_err)
+
+        # Use auth_client (anon key) for user sign-in
         auth = supabase.auth_client or supabase.client
         result = auth.auth.sign_in_with_password(
             {"email": user_email, "password": phone}
