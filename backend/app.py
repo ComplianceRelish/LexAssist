@@ -556,6 +556,127 @@ def user_history():
 # Case Diary – CRUD for persistent cases
 # ---------------------------------------------------------------------------
 
+# ═══════════════════════════════════════════════════════════════════
+# CASE FOLDERS — CRUD
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route("/api/folders", methods=["GET"])
+def list_folders():
+    """List all case folders for the authenticated user."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        rows = (
+            supabase.client.table("case_folders")
+            .select("id, name, color, sort_order, created_at")
+            .eq("user_id", user_id)
+            .order("sort_order", desc=False)
+            .execute()
+        )
+        return jsonify({"folders": rows.data or []}), 200
+    except Exception as e:
+        logger.error("List folders error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/folders", methods=["POST"])
+def create_folder():
+    """Create a new case folder."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    data = request.json or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "Folder name is required"}), 400
+    try:
+        row = supabase.client.table("case_folders").insert({
+            "user_id": user_id,
+            "name": name,
+            "color": data.get("color", "#3b82f6"),
+            "sort_order": data.get("sort_order", 0),
+        }).execute()
+        return jsonify({"folder": row.data[0] if row.data else None}), 201
+    except Exception as e:
+        logger.error("Create folder error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/folders/<folder_id>", methods=["PATCH"])
+def update_folder(folder_id):
+    """Update folder name, color, or sort order."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    data = request.json or {}
+    try:
+        existing = (
+            supabase.client.table("case_folders")
+            .select("id")
+            .eq("id", folder_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        if not existing.data:
+            return jsonify({"error": "Folder not found"}), 404
+
+        updates = {}
+        if "name" in data:
+            updates["name"] = data["name"].strip()
+        if "color" in data:
+            updates["color"] = data["color"]
+        if "sort_order" in data:
+            updates["sort_order"] = data["sort_order"]
+        if not updates:
+            return jsonify({"error": "No fields to update"}), 400
+
+        row = (
+            supabase.client.table("case_folders")
+            .update(updates)
+            .eq("id", folder_id)
+            .execute()
+        )
+        return jsonify({"folder": row.data[0] if row.data else None}), 200
+    except Exception as e:
+        logger.error("Update folder error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/folders/<folder_id>", methods=["DELETE"])
+def delete_folder(folder_id):
+    """Delete a folder. Cases inside are un-filed (folder_id set to NULL)."""
+    user_id, _ = _get_current_user()
+    if not user_id:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        existing = (
+            supabase.client.table("case_folders")
+            .select("id")
+            .eq("id", folder_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        if not existing.data:
+            return jsonify({"error": "Folder not found"}), 404
+
+        # Un-file all cases in this folder
+        supabase.client.table("cases").update({"folder_id": None}).eq("folder_id", folder_id).execute()
+
+        # Delete the folder
+        supabase.client.table("case_folders").delete().eq("id", folder_id).execute()
+        return jsonify({"status": "deleted", "folder_id": folder_id}), 200
+    except Exception as e:
+        logger.error("Delete folder error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CASES
+# ═══════════════════════════════════════════════════════════════════
+
 @app.route("/api/cases", methods=["GET"])
 def list_cases():
     """List all cases for the authenticated user."""
@@ -564,14 +685,20 @@ def list_cases():
         return jsonify({"error": "Not authenticated"}), 401
     try:
         status_filter = request.args.get("status")  # optional: active, closed, archived
+        folder_filter = request.args.get("folder_id")  # optional: folder UUID
+        type_filter = request.args.get("case_type")    # optional: civil, criminal, etc.
         query = (
             supabase.client.table("cases")
-            .select("id, title, status, notes, created_at, updated_at")
+            .select("id, title, status, notes, folder_id, case_type, created_at, updated_at")
             .eq("user_id", user_id)
             .order("updated_at", desc=True)
         )
         if status_filter:
             query = query.eq("status", status_filter)
+        if folder_filter:
+            query = query.eq("folder_id", folder_filter)
+        if type_filter:
+            query = query.eq("case_type", type_filter)
 
         rows = query.execute()
         return jsonify({"cases": rows.data or []}), 200
@@ -591,12 +718,17 @@ def create_case():
     if not title:
         return jsonify({"error": "Case title is required"}), 400
     try:
-        row = supabase.client.table("cases").insert({
+        insert_data = {
             "user_id": user_id,
             "title": title,
             "notes": data.get("notes", ""),
             "status": "active",
-        }).execute()
+        }
+        if data.get("folder_id"):
+            insert_data["folder_id"] = data["folder_id"]
+        if data.get("case_type"):
+            insert_data["case_type"] = data["case_type"]
+        row = supabase.client.table("cases").insert(insert_data).execute()
         return jsonify({"case": row.data[0] if row.data else None}), 201
     except Exception as e:
         logger.error("Create case error: %s", e)
@@ -613,7 +745,7 @@ def get_case(case_id):
         # 1. Case metadata
         case_row = (
             supabase.client.table("cases")
-            .select("id, title, status, notes, created_at, updated_at")
+            .select("id, title, status, notes, folder_id, case_type, created_at, updated_at")
             .eq("id", case_id)
             .eq("user_id", user_id)
             .single()
@@ -710,6 +842,10 @@ def update_case(case_id):
             updates["notes"] = data["notes"]
         if "status" in data and data["status"] in ("active", "closed", "archived"):
             updates["status"] = data["status"]
+        if "folder_id" in data:
+            updates["folder_id"] = data["folder_id"] or None  # allow un-filing
+        if "case_type" in data:
+            updates["case_type"] = data["case_type"]
 
         if not updates:
             return jsonify({"error": "No fields to update"}), 400

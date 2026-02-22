@@ -1,12 +1,257 @@
 /* ═══════════════════════════════════════════════════════════════════
-   MyCases — Case Diary Styles
+   MyCases — Case Diary Styles (with Sidebar, Search, Folders, D&D)
    ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Layout: Sidebar + Main ── */
+.mycases-layout {
+  display: flex;
+  min-height: calc(100vh - 64px);
+  position: relative;
+}
 
 .mycases-container {
   max-width: 960px;
   margin: 0 auto;
   padding: 24px 20px 48px;
   min-height: 70vh;
+}
+
+.mycases-detail {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Sidebar
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mycases-sidebar {
+  width: 240px;
+  min-width: 240px;
+  background: #f8fafc;
+  border-right: 1px solid #e5e7eb;
+  padding: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  height: calc(100vh - 64px);
+  position: sticky;
+  top: 64px;
+}
+
+.sidebar-header {
+  padding: 0.5rem 1rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 0.5rem;
+}
+.sidebar-header h3 {
+  font-size: 1rem;
+  color: #0a2e5c;
+  margin: 0;
+}
+
+/* Sidebar items */
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: #374151;
+  transition: background 0.15s, border-left 0.15s;
+  border-left: 3px solid transparent;
+  user-select: none;
+}
+.sidebar-item:hover {
+  background: #eef2f7;
+}
+.sidebar-item.active {
+  background: #dbeafe;
+  border-left-color: #3b82f6;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+.sidebar-item.drop-target {
+  background: #d1fae5;
+  border-left-color: #10b981;
+}
+
+.sidebar-item-icon { font-size: 1rem; }
+.sidebar-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-item-count {
+  font-size: 0.72rem;
+  background: #e5e7eb;
+  color: #6b7280;
+  padding: 0.1rem 0.45rem;
+  border-radius: 10px;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+.sidebar-item.active .sidebar-item-count {
+  background: #93c5fd;
+  color: #1e40af;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 0.5rem 0.75rem;
+}
+
+/* Folder dot (color indicator) */
+.folder-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Folder edit / new folder */
+.sidebar-folder-edit,
+.sidebar-new-folder {
+  padding: 0.5rem 0.75rem;
+  animation: slideDown 0.2s ease;
+}
+.sidebar-edit-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 2px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  outline: none;
+  box-sizing: border-box;
+}
+.sidebar-edit-input:focus { border-color: #3b82f6; }
+
+.sidebar-edit-colors {
+  display: flex;
+  gap: 4px;
+  margin: 0.4rem 0;
+  flex-wrap: wrap;
+}
+.color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+  padding: 0;
+}
+.color-dot:hover { transform: scale(1.2); }
+.color-dot.selected { border-color: #0a2e5c; transform: scale(1.15); }
+
+.sidebar-edit-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+.sidebar-edit-save,
+.sidebar-edit-cancel,
+.sidebar-edit-delete {
+  border: none;
+  border-radius: 5px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+.sidebar-edit-save { background: #10b981; color: #fff; }
+.sidebar-edit-save:hover { background: #059669; }
+.sidebar-edit-cancel { background: #e5e7eb; color: #374151; }
+.sidebar-edit-cancel:hover { background: #d1d5db; }
+.sidebar-edit-delete { background: #fee2e2; color: #dc2626; }
+.sidebar-edit-delete:hover { background: #fecaca; }
+
+.sidebar-add-folder {
+  display: block;
+  width: calc(100% - 1.5rem);
+  margin: 0.4rem 0.75rem;
+  padding: 0.4rem;
+  background: none;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: #6b7280;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+.sidebar-add-folder:hover {
+  background: #eff6ff;
+  color: #3b82f6;
+  border-color: #93c5fd;
+}
+
+.sidebar-hint {
+  margin-top: auto;
+  padding: 0.75rem 1rem;
+  color: #9ca3af;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+/* Mobile sidebar */
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  top: 72px;
+  left: 8px;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.sidebar-overlay {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .sidebar-toggle { display: block; }
+  .mycases-sidebar {
+    position: fixed;
+    top: 64px;
+    left: -260px;
+    z-index: 200;
+    width: 250px;
+    min-width: 250px;
+    height: calc(100vh - 64px);
+    transition: left 0.25s ease;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+  }
+  .mycases-sidebar.open { left: 0; }
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 199;
+  }
+  .mycases-main { padding-top: 3rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Main Content Area
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mycases-main {
+  flex: 1;
+  max-width: 960px;
+  padding: 24px 24px 48px;
+  overflow-y: auto;
 }
 
 /* ── Header ── */
@@ -29,6 +274,46 @@
   margin-bottom: 1.5rem;
   flex-wrap: wrap;
 }
+
+/* Search */
+.mycases-search-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+}
+.search-icon {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+.mycases-search {
+  width: 100%;
+  padding: 0.5rem 2rem 0.5rem 2rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  outline: none;
+  color: #374151;
+  box-sizing: border-box;
+}
+.mycases-search:focus { border-color: #3b82f6; }
+.search-clear {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 0.15rem 0.3rem;
+}
+.search-clear:hover { color: #374151; }
+
 .mycases-filter {
   padding: 0.5rem 0.75rem;
   border: 2px solid #e5e7eb;
@@ -36,9 +321,21 @@
   font-size: 0.9rem;
   outline: none;
   color: #374151;
-  min-width: 140px;
+  min-width: 130px;
+  background: #fff;
 }
 .mycases-filter:focus { border-color: #3b82f6; }
+
+/* Results count */
+.mycases-results-count {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-bottom: 1rem;
+  padding: 0.4rem 0.75rem;
+  background: #f0f9ff;
+  border-radius: 6px;
+  display: inline-block;
+}
 
 /* ── New case form ── */
 .mycases-new-form {
@@ -61,30 +358,76 @@
 }
 .mycases-new-form input:focus { border-color: #3b82f6; }
 
-/* ── Cases Grid ── */
+/* ═══════════════════════════════════════════════════════════════════
+   Cases Grid & Cards
+   ═══════════════════════════════════════════════════════════════════ */
+
 .mycases-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
   gap: 1rem;
 }
+
+/* Grouped layout */
+.mycases-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.mycases-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+.mycases-group-header h3 {
+  font-size: 1rem;
+  color: #0a2e5c;
+  margin: 0;
+}
+.mycases-group-count {
+  font-size: 0.72rem;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 0.1rem 0.5rem;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* Case card */
 .case-card {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 1.1rem 1.25rem;
   cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s, opacity 0.2s;
+  user-select: none;
 }
 .case-card:hover {
   border-color: #3b82f6;
   box-shadow: 0 4px 20px rgba(59, 130, 246, 0.1);
   transform: translateY(-2px);
 }
+.case-card.dragging {
+  opacity: 0.4;
+  transform: rotate(2deg);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+}
+
 .case-card-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.5rem;
+}
+.case-card-badges {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 .case-card-date {
   font-size: 0.78rem;
@@ -101,6 +444,14 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.case-card-folder {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin-bottom: 0.35rem;
+}
 .case-card-notes {
   font-size: 0.85rem;
   color: #6b7280;
@@ -116,13 +467,8 @@
   padding-top: 0.5rem;
   border-top: 1px solid #f3f4f6;
 }
-.case-card-arrow {
-  color: #3b82f6;
-  font-weight: 700;
-  font-size: 1rem;
-}
 
-/* ── Status badges ── */
+/* ── Status & Type badges ── */
 .status-badge {
   display: inline-block;
   font-size: 0.72rem;
@@ -135,6 +481,18 @@
 .status-active { background: #dbeafe; color: #1d4ed8; }
 .status-closed { background: #d1fae5; color: #047857; }
 .status-archived { background: #f3f4f6; color: #6b7280; }
+
+.case-type-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  background: #fef3c7;
+  color: #92400e;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
 
 /* ── Empty state ── */
 .mycases-empty {
@@ -277,6 +635,11 @@
   margin-top: 0.25rem;
 }
 .diary-meta-sep { margin: 0 0.4rem; }
+.diary-meta-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
 
 /* ── Action bar ── */
 .diary-actions {
@@ -504,7 +867,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 @media (max-width: 640px) {
-  .mycases-container { padding: 16px 12px 32px; }
+  .mycases-main { padding: 16px 12px 32px; }
   .mycases-header h1 { font-size: 1.3rem; }
   .mycases-grid { grid-template-columns: 1fr; }
   .diary-title-row h1 { font-size: 1.2rem; }
@@ -513,4 +876,8 @@
   .timeline-list { padding-left: 20px; }
   .timeline-dot { left: -16px; }
   .mycases-new-form { flex-direction: column; }
+  .mycases-controls { flex-direction: column; align-items: stretch; }
+  .mycases-search-wrapper { min-width: 100%; }
+  .mycases-filter { min-width: 100%; }
+  .mycases-detail { padding: 16px 12px 32px; }
 }

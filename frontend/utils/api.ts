@@ -559,9 +559,61 @@ export async function fetchCaseDetail(activityId: string) {
 
 // ── Case Diary API ────────────────────────────────────────────────
 
-export async function fetchCases(status?: string) {
+// ── Folders ──
+
+export async function fetchFolders() {
+  const response = await fetch(`${BASE_URL}/api/folders`, {
+    method: 'GET',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch folders');
+  return data.folders;
+}
+
+export async function createFolder(name: string, color?: string) {
+  const response = await fetch(`${BASE_URL}/api/folders`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    credentials: 'include',
+    body: JSON.stringify({ name, color: color || '#3b82f6' }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to create folder');
+  return data.folder;
+}
+
+export async function updateFolder(folderId: string, updates: { name?: string; color?: string; sort_order?: number }) {
+  const response = await fetch(`${BASE_URL}/api/folders/${folderId}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    credentials: 'include',
+    body: JSON.stringify(updates),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to update folder');
+  return data.folder;
+}
+
+export async function deleteFolder(folderId: string) {
+  const response = await fetch(`${BASE_URL}/api/folders/${folderId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to delete folder');
+  return data;
+}
+
+// ── Cases ──
+
+export async function fetchCases(status?: string, folderId?: string, caseType?: string) {
   const q = new URLSearchParams();
   if (status) q.set('status', status);
+  if (folderId) q.set('folder_id', folderId);
+  if (caseType) q.set('case_type', caseType);
   const response = await fetch(`${BASE_URL}/api/cases?${q.toString()}`, {
     method: 'GET',
     headers: authHeaders(),
@@ -583,19 +635,22 @@ export async function fetchCaseDiary(caseId: string) {
   return data;
 }
 
-export async function createCase(title: string, notes?: string) {
+export async function createCase(title: string, notes?: string, folderId?: string, caseType?: string) {
+  const body: any = { title, notes: notes || '' };
+  if (folderId) body.folder_id = folderId;
+  if (caseType) body.case_type = caseType;
   const response = await fetch(`${BASE_URL}/api/cases`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     credentials: 'include',
-    body: JSON.stringify({ title, notes: notes || '' }),
+    body: JSON.stringify(body),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to create case');
   return data.case;
 }
 
-export async function updateCase(caseId: string, updates: { title?: string; notes?: string; status?: string }) {
+export async function updateCase(caseId: string, updates: { title?: string; notes?: string; status?: string; folder_id?: string | null; case_type?: string }) {
   const response = await fetch(`${BASE_URL}/api/cases/${caseId}`, {
     method: 'PATCH',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
