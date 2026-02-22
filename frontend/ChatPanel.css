@@ -104,6 +104,68 @@
   color: white;
 }
 
+/* Share / Export Dropdown */
+.chat-share-wrapper {
+  position: relative;
+}
+
+.chat-share-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 260px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(10, 46, 92, 0.18), 0 2px 8px rgba(0,0,0,0.06);
+  z-index: 1100;
+  overflow: hidden;
+  animation: shareMenuIn 0.18s ease;
+}
+
+@keyframes shareMenuIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.chat-share-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.chat-share-option:hover {
+  background: #f3f4f6;
+}
+
+.chat-share-option + .chat-share-option {
+  border-top: 1px solid #f3f4f6;
+}
+
+.chat-share-icon {
+  font-size: 1.35rem;
+  flex-shrink: 0;
+}
+
+.chat-share-title {
+  font-weight: 600;
+  font-size: 0.84rem;
+  color: #1f2937;
+  line-height: 1.3;
+}
+
+.chat-share-desc {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
 /* Messages Area */
 .chat-messages {
   flex: 1;
