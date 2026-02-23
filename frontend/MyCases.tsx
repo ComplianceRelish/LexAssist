@@ -112,20 +112,23 @@ function analysisToHtml(a: any): string {
   const stored = a;
   const parts: string[] = [];
 
+  // The AI's structured output lives under ai_analysis (or analysis as fallback)
+  const ai = stored.ai_analysis || stored.analysis || {};
+
   // Summary
-  const summary = stored.analysis?.summary || stored.brief_summary || '';
+  const summary = ai.summary || stored.brief_summary || '';
   if (summary) {
     parts.push(`<div class="analysis-section"><h4>Summary</h4><p>${mdToHtml(summary)}</p></div>`);
   }
 
   // Arguments
-  const args = stored.analysis?.arguments || [];
+  const args = ai.arguments || [];
   if (args.length) {
     parts.push(`<div class="analysis-section"><h4>Key Arguments</h4><ul>${args.map((a: any) => `<li><strong>${esc(a.point || a.title || '')}</strong>: ${esc(a.detail || a.explanation || '')}</li>`).join('')}</ul></div>`);
   }
 
   // Statutes
-  const statutes = stored.statutes_regex || stored.statutes || [];
+  const statutes = stored.statutes_regex || stored.statutes || ai.statutes || [];
   if (statutes.length) {
     parts.push(`<div class="analysis-section"><h4>Applicable Statutes</h4><ul>${statutes.map((s: any) => {
       const name = s.full_name || s.short_name || s.act || 'Statute';
@@ -135,7 +138,7 @@ function analysisToHtml(a: any): string {
   }
 
   // Precedents
-  const precedents = stored.precedents_kanoon || stored.precedents || [];
+  const precedents = stored.precedents_kanoon || stored.precedents || ai.precedents || [];
   if (precedents.length) {
     parts.push(`<div class="analysis-section"><h4>Case Precedents</h4><ul>${precedents.map((p: any) => {
       const title = p.title || p.citation || 'Case';
@@ -145,15 +148,27 @@ function analysisToHtml(a: any): string {
   }
 
   // Recommendations
-  const recs = stored.analysis?.recommendations || [];
+  const recs = ai.recommendations || [];
   if (recs.length) {
     parts.push(`<div class="analysis-section"><h4>Recommendations</h4><ul>${recs.map((r: any) => `<li>${esc(typeof r === 'string' ? r : r.text || r.recommendation || JSON.stringify(r))}</li>`).join('')}</ul></div>`);
   }
 
   // Challenges
-  const challenges = stored.analysis?.challenges || [];
+  const challenges = ai.challenges || [];
   if (challenges.length) {
     parts.push(`<div class="analysis-section"><h4>Challenges & Risks</h4><ul>${challenges.map((ch: any) => `<li>${esc(typeof ch === 'string' ? ch : ch.text || ch.challenge || JSON.stringify(ch))}</li>`).join('')}</ul></div>`);
+  }
+
+  // If nothing extracted above but there's raw AI text, dump it
+  if (parts.length === 0 && ai && typeof ai === 'object') {
+    // Try to render any string values from ai_analysis
+    for (const [key, val] of Object.entries(ai)) {
+      if (typeof val === 'string' && val.trim()) {
+        parts.push(`<div class="analysis-section"><h4>${esc(key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}</h4><p>${mdToHtml(val)}</p></div>`);
+      } else if (Array.isArray(val) && val.length > 0) {
+        parts.push(`<div class="analysis-section"><h4>${esc(key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}</h4><ul>${val.map((item: any) => `<li>${esc(typeof item === 'string' ? item : JSON.stringify(item))}</li>`).join('')}</ul></div>`);
+      }
+    }
   }
 
   return parts.join('\n');
@@ -184,18 +199,34 @@ async function copyCaseDiary(diary: CaseDiaryData): Promise<boolean> {
     text += `${entry.content}\n`;
 
     entry.analyses.forEach((a: any) => {
-      const analysis = a.analysis || {};
-      const summary = analysis.summary || analysis.brief_summary || '';
+      const stored = a.analysis || {};
+      const ai = stored.ai_analysis || stored.analysis || {};
+      const summary = ai.summary || stored.brief_summary || '';
       if (summary) text += `\n--- AI Analysis ---\n${summary}\n`;
 
-      const statutes = analysis.statutes_regex || analysis.statutes || [];
-      if (statutes.length) {
-        text += `\nStatutes: ${statutes.map((s: any) => (s.full_name || s.act || '') + (s.sections?.length ? ' §' + s.sections.join(', ') : '')).join('; ')}\n`;
+      const args = ai.arguments || [];
+      if (args.length) {
+        text += `\nKey Arguments:\n${args.map((arg: any) => `  • ${arg.point || arg.title || ''}: ${arg.detail || arg.explanation || ''}`).join('\n')}\n`;
       }
 
-      const precedents = analysis.precedents_kanoon || analysis.precedents || [];
+      const statutes = stored.statutes_regex || stored.statutes || ai.statutes || [];
+      if (statutes.length) {
+        text += `\nApplicable Statutes:\n${statutes.map((s: any) => `  • ${s.full_name || s.act || ''}${s.sections?.length ? ' — §' + s.sections.join(', ') : ''}`).join('\n')}\n`;
+      }
+
+      const precedents = stored.precedents_kanoon || stored.precedents || ai.precedents || [];
       if (precedents.length) {
-        text += `\nPrecedents: ${precedents.map((p: any) => p.title || p.citation || '').join('; ')}\n`;
+        text += `\nCase Precedents:\n${precedents.map((p: any) => `  • ${p.title || p.citation || ''}`).join('\n')}\n`;
+      }
+
+      const recs = ai.recommendations || [];
+      if (recs.length) {
+        text += `\nRecommendations:\n${recs.map((r: any) => `  • ${typeof r === 'string' ? r : r.text || r.recommendation || JSON.stringify(r)}`).join('\n')}\n`;
+      }
+
+      const challenges = ai.challenges || [];
+      if (challenges.length) {
+        text += `\nChallenges & Risks:\n${challenges.map((ch: any) => `  • ${typeof ch === 'string' ? ch : ch.text || ch.challenge || JSON.stringify(ch)}`).join('\n')}\n`;
       }
     });
 
