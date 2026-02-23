@@ -507,12 +507,14 @@ const AnalysisDisplay: React.FC<{ analysis: any }> = ({ analysis }) => {
 
 const BriefSection: React.FC<{ content: string }> = ({ content }) => {
   const [expanded, setExpanded] = useState(false);
-  const isLong = content.length > 400;
+  const isLong = content.length > 600;
+  const displayContent = expanded || !isLong ? content : content.slice(0, 600) + '...';
   return (
     <div className="brief-section">
-      <div className={`brief-text ${expanded ? 'expanded' : ''}`}>
-        {expanded || !isLong ? content : content.slice(0, 400) + '...'}
-      </div>
+      <div
+        className={`brief-text ${expanded ? 'expanded' : ''}`}
+        dangerouslySetInnerHTML={{ __html: mdToHtml(displayContent) }}
+      />
       {isLong && (
         <button className="brief-toggle" onClick={() => setExpanded(!expanded)}>
           {expanded ? 'Show less ▲' : 'Read full brief ▼'}

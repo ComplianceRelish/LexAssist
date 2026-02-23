@@ -962,10 +962,14 @@ def add_case_entry(case_id):
             return jsonify({"error": "Case not found"}), 404
 
         # 1. Save brief entry to this case
+        # Strip leading markdown heading chars (e.g. "## Title") for the stored title label
+        import re as _re
+        raw_title = text[:120].replace("\n", " ").strip()
+        brief_title = _re.sub(r'^#+\s*', '', raw_title)[:100].strip()
         brief_row = supabase.client.table("briefs").insert({
             "user_id": user_id,
             "case_id": case_id,
-            "title": text[:100].replace("\n", " ").strip(),
+            "title": brief_title,
             "content": text,
         }).execute()
         brief_id = brief_row.data[0]["id"] if brief_row.data else None
