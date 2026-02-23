@@ -86,6 +86,328 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════
+   Case Diary Export Helpers
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** Escape HTML entities */
+function esc(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Convert markdown-like text to basic HTML */
+function mdToHtml(text: string): string {
+  return esc(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.+?)`/g, '<code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-size:0.85em;font-family:monospace;">$1</code>')
+    .replace(/^### (.+)$/gm, '<h4 style="color:#1e40af;margin:10px 0 4px;">$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3 style="color:#0a2e5c;margin:12px 0 6px;">$1</h3>')
+    .replace(/^[-*] (.+)$/gm, '<li style="margin-left:24px;margin-bottom:3px;">$1</li>')
+    .replace(/^(\d+)\. (.+)$/gm, '<li style="margin-left:24px;margin-bottom:3px;">$2</li>')
+    .replace(/\n/g, '<br/>');
+}
+
+/** Flatten analysis object into readable text sections */
+function analysisToHtml(a: any): string {
+  if (!a) return '';
+  const stored = a;
+  const parts: string[] = [];
+
+  // Summary
+  const summary = stored.analysis?.summary || stored.brief_summary || '';
+  if (summary) {
+    parts.push(`<div class="analysis-section"><h4>Summary</h4><p>${mdToHtml(summary)}</p></div>`);
+  }
+
+  // Arguments
+  const args = stored.analysis?.arguments || [];
+  if (args.length) {
+    parts.push(`<div class="analysis-section"><h4>Key Arguments</h4><ul>${args.map((a: any) => `<li><strong>${esc(a.point || a.title || '')}</strong>: ${esc(a.detail || a.explanation || '')}</li>`).join('')}</ul></div>`);
+  }
+
+  // Statutes
+  const statutes = stored.statutes_regex || stored.statutes || [];
+  if (statutes.length) {
+    parts.push(`<div class="analysis-section"><h4>Applicable Statutes</h4><ul>${statutes.map((s: any) => {
+      const name = s.full_name || s.short_name || s.act || 'Statute';
+      const secs = (s.sections || []).join(', ');
+      return `<li><strong>${esc(name)}</strong>${secs ? ' — Section(s) ' + esc(secs) : ''}</li>`;
+    }).join('')}</ul></div>`);
+  }
+
+  // Precedents
+  const precedents = stored.precedents_kanoon || stored.precedents || [];
+  if (precedents.length) {
+    parts.push(`<div class="analysis-section"><h4>Case Precedents</h4><ul>${precedents.map((p: any) => {
+      const title = p.title || p.citation || 'Case';
+      const headline = p.headline || '';
+      return `<li><strong>${esc(title)}</strong>${headline ? '<br/><em>' + esc(headline) + '</em>' : ''}</li>`;
+    }).join('')}</ul></div>`);
+  }
+
+  // Recommendations
+  const recs = stored.analysis?.recommendations || [];
+  if (recs.length) {
+    parts.push(`<div class="analysis-section"><h4>Recommendations</h4><ul>${recs.map((r: any) => `<li>${esc(typeof r === 'string' ? r : r.text || r.recommendation || JSON.stringify(r))}</li>`).join('')}</ul></div>`);
+  }
+
+  // Challenges
+  const challenges = stored.analysis?.challenges || [];
+  if (challenges.length) {
+    parts.push(`<div class="analysis-section"><h4>Challenges & Risks</h4><ul>${challenges.map((ch: any) => `<li>${esc(typeof ch === 'string' ? ch : ch.text || ch.challenge || JSON.stringify(ch))}</li>`).join('')}</ul></div>`);
+  }
+
+  return parts.join('\n');
+}
+
+/** Copy case diary to clipboard as formatted text */
+async function copyCaseDiary(diary: CaseDiaryData): Promise<boolean> {
+  const c = diary.case;
+  const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+  const cType = CASE_TYPES[c.case_type] || c.case_type || 'Not Set';
+
+  let text = `LEXASSIST — CASE DIARY\n${'═'.repeat(50)}\n\n`;
+  text += `Case Title:  ${c.title}\n`;
+  text += `Status:      ${(STATUS_BADGE[c.status] || STATUS_BADGE.active).label}\n`;
+  text += `Case Type:   ${cType}\n`;
+  text += `Created:     ${new Date(c.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}\n`;
+  text += `Last Updated: ${new Date(c.updated_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}\n`;
+  if (c.notes) text += `Notes:       ${c.notes}\n`;
+  text += `\n${'─'.repeat(50)}\n\n`;
+
+  text += `CASE TIMELINE (${diary.timeline.length} entries)\n${'─'.repeat(50)}\n\n`;
+
+  diary.timeline.forEach((entry, idx) => {
+    const entryDate = new Date(entry.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+    const entryTime = new Date(entry.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    text += `[${idx + 1}] ${entry.analyses.length > 0 ? '🔍 Analysis' : '📄 Brief'}  —  ${entryDate} at ${entryTime}\n`;
+    text += `${'- '.repeat(20)}\n`;
+    text += `${entry.content}\n`;
+
+    entry.analyses.forEach((a: any) => {
+      const analysis = a.analysis || {};
+      const summary = analysis.summary || analysis.brief_summary || '';
+      if (summary) text += `\n--- AI Analysis ---\n${summary}\n`;
+
+      const statutes = analysis.statutes_regex || analysis.statutes || [];
+      if (statutes.length) {
+        text += `\nStatutes: ${statutes.map((s: any) => (s.full_name || s.act || '') + (s.sections?.length ? ' §' + s.sections.join(', ') : '')).join('; ')}\n`;
+      }
+
+      const precedents = analysis.precedents_kanoon || analysis.precedents || [];
+      if (precedents.length) {
+        text += `\nPrecedents: ${precedents.map((p: any) => p.title || p.citation || '').join('; ')}\n`;
+      }
+    });
+
+    text += `\n\n`;
+  });
+
+  text += `${'═'.repeat(50)}\n`;
+  text += `Generated by LexAssist AI • ${dateStr}\n`;
+  text += `https://lex-assist.vercel.app\n`;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Export case diary as a self-contained HTML document */
+function exportCaseDiaryAsDocument(diary: CaseDiaryData) {
+  const c = diary.case;
+  const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+  const timeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const createdStr = new Date(c.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+  const updatedStr = new Date(c.updated_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+  const cType = CASE_TYPES[c.case_type] || c.case_type || 'Not Set';
+  const badge = STATUS_BADGE[c.status] || STATUS_BADGE.active;
+
+  const timelineHtml = diary.timeline.map((entry, idx) => {
+    const entryDate = new Date(entry.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+    const entryTime = new Date(entry.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const isAnalysis = entry.analyses.length > 0;
+
+    const analysesHtml = entry.analyses.map((a: any) => `
+      <div class="analysis-block">
+        <div class="analysis-badge">⚖️ AI Analysis Result</div>
+        ${analysisToHtml(a.analysis)}
+      </div>
+    `).join('');
+
+    return `
+      <div class="timeline-entry">
+        <div class="timeline-dot-line">
+          <div class="dot ${isAnalysis ? 'analysis' : 'brief'}"></div>
+          ${idx < diary.timeline.length - 1 ? '<div class="line"></div>' : ''}
+        </div>
+        <div class="timeline-content">
+          <div class="entry-header">
+            <span class="entry-badge ${isAnalysis ? 'analysis' : 'brief'}">${isAnalysis ? '🔍 Analysis' : '📄 Brief'}</span>
+            <span class="entry-date">${entryDate} at ${entryTime}</span>
+          </div>
+          <div class="entry-body">${mdToHtml(entry.content)}</div>
+          ${analysesHtml}
+        </div>
+      </div>`;
+  }).join('\n');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Case Diary — ${esc(c.title)} (${dateStr})</title>
+<style>
+  @page { margin: 18mm 16mm; size: A4; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Georgia', 'Times New Roman', serif; color: #1a1a1a; line-height: 1.65; background: #fff; }
+  .doc { max-width: 820px; margin: 0 auto; padding: 32px 24px; }
+
+  /* Letterhead */
+  .header { text-align: center; border-bottom: 3px double #0a2e5c; padding-bottom: 18px; margin-bottom: 28px; }
+  .header h1 { font-size: 1.5rem; color: #0a2e5c; letter-spacing: 1px; margin-bottom: 4px; }
+  .header .subtitle { font-size: 0.85rem; color: #6b7280; font-style: italic; }
+
+  /* Case Info Box */
+  .case-info { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px 22px; margin-bottom: 28px; }
+  .case-title { font-size: 1.35rem; color: #0a2e5c; font-weight: 700; margin-bottom: 10px; }
+  .case-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 24px; font-size: 0.85rem; }
+  .case-meta-item { display: flex; gap: 8px; }
+  .case-meta-label { color: #6b7280; font-weight: 600; min-width: 90px; }
+  .case-meta-value { color: #1a1a1a; }
+  .status-pill { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
+  .status-active { background: #dcfce7; color: #166534; }
+  .status-closed { background: #fee2e2; color: #991b1b; }
+  .status-archived { background: #e5e7eb; color: #374151; }
+  .notes-box { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; padding: 10px 14px; margin-top: 12px; font-size: 0.85rem; color: #92400e; }
+
+  /* Timeline */
+  .timeline-title { font-size: 1.1rem; color: #0a2e5c; font-weight: 700; margin-bottom: 20px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
+  .timeline-entry { display: flex; gap: 16px; margin-bottom: 0; page-break-inside: avoid; }
+  .timeline-dot-line { display: flex; flex-direction: column; align-items: center; width: 20px; flex-shrink: 0; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+  .dot.analysis { background: #7c3aed; }
+  .dot.brief { background: #0a2e5c; }
+  .line { width: 2px; flex: 1; background: #d1d5db; margin-top: 4px; }
+  .timeline-content { flex: 1; padding-bottom: 24px; }
+  .entry-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+  .entry-badge { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 3px 10px; border-radius: 12px; letter-spacing: 0.3px; }
+  .entry-badge.analysis { background: #f3e8ff; color: #6d28d9; }
+  .entry-badge.brief { background: #eff6ff; color: #1d4ed8; }
+  .entry-date { font-size: 0.78rem; color: #9ca3af; }
+  .entry-body { padding: 14px 18px; background: #fafafa; border-left: 3px solid #d1d5db; border-radius: 6px; font-size: 0.88rem; margin-bottom: 10px; }
+
+  /* Analysis blocks */
+  .analysis-block { background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 14px 18px; margin-top: 10px; }
+  .analysis-badge { font-size: 0.75rem; font-weight: 700; color: #7c3aed; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.3px; }
+  .analysis-section { margin-bottom: 12px; }
+  .analysis-section h4 { color: #4c1d95; font-size: 0.88rem; margin-bottom: 4px; }
+  .analysis-section ul { padding-left: 24px; font-size: 0.84rem; }
+  .analysis-section li { margin-bottom: 4px; }
+  .analysis-section p { font-size: 0.84rem; }
+
+  /* Footer */
+  .footer { border-top: 2px solid #e5e7eb; margin-top: 32px; padding-top: 14px; text-align: center; font-size: 0.72rem; color: #9ca3af; }
+  .footer .brand { font-weight: 700; color: #0a2e5c; }
+
+  /* Print adjustments */
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .doc { padding: 0; }
+    .no-print { display: none !important; }
+  }
+
+  /* Action bar */
+  .actions { display: flex; gap: 10px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap; }
+  .actions button { padding: 10px 22px; border: none; border-radius: 8px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn-print { background: #0a2e5c; color: #fff; }
+  .btn-print:hover { background: #143d7a; }
+  .btn-copy { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+  .btn-copy:hover { background: #e5e7eb; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="actions no-print">
+    <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+    <button class="btn-copy" onclick="copyAll()">📋 Copy Text</button>
+  </div>
+
+  <div class="header">
+    <h1>⚖️ LexAssist AI</h1>
+    <div class="subtitle">Case Diary — AI-Powered Legal Research & Case Drafting</div>
+  </div>
+
+  <div class="case-info">
+    <div class="case-title">${esc(c.title)}</div>
+    <div class="case-meta-grid">
+      <div class="case-meta-item">
+        <span class="case-meta-label">Status</span>
+        <span class="case-meta-value"><span class="status-pill status-${c.status}">${badge.label}</span></span>
+      </div>
+      <div class="case-meta-item">
+        <span class="case-meta-label">Case Type</span>
+        <span class="case-meta-value">${esc(cType)}</span>
+      </div>
+      <div class="case-meta-item">
+        <span class="case-meta-label">Created</span>
+        <span class="case-meta-value">${createdStr}</span>
+      </div>
+      <div class="case-meta-item">
+        <span class="case-meta-label">Last Updated</span>
+        <span class="case-meta-value">${updatedStr}</span>
+      </div>
+      <div class="case-meta-item">
+        <span class="case-meta-label">Entries</span>
+        <span class="case-meta-value">${diary.timeline.length}</span>
+      </div>
+    </div>
+    ${c.notes ? `<div class="notes-box">📝 <strong>Notes:</strong> ${esc(c.notes)}</div>` : ''}
+  </div>
+
+  <div class="timeline-title">📋 Case Timeline (${diary.timeline.length} entries)</div>
+  ${timelineHtml}
+
+  <div class="footer">
+    <p><span class="brand">LexAssist AI</span> — Case Diary Export</p>
+    <p>Generated on ${dateStr} at ${timeStr}</p>
+    <p>AI outputs are advisory only and do not constitute legal advice.</p>
+    <p>&copy; ${new Date().getFullYear()} LexAssist &bull; <a href="https://lex-assist.vercel.app">lex-assist.vercel.app</a></p>
+  </div>
+</div>
+<script>
+function copyAll(){
+  const info = document.querySelector('.case-info')?.textContent || '';
+  const entries = document.querySelectorAll('.timeline-content');
+  let text = 'LEXASSIST — CASE DIARY\\n${'═'.repeat(50)}\\n\\n';
+  text += info.trim() + '\\n\\n';
+  entries.forEach((el, i) => {
+    const header = el.querySelector('.entry-header')?.textContent || '';
+    const body = el.querySelector('.entry-body')?.textContent || '';
+    text += '[' + (i+1) + '] ' + header.trim() + '\\n' + body.trim() + '\\n\\n';
+    el.querySelectorAll('.analysis-block').forEach(ab => {
+      text += '--- AI Analysis ---\\n' + ab.textContent?.trim() + '\\n\\n';
+    });
+  });
+  text += '${'═'.repeat(50)}\\nGenerated by LexAssist AI\\nhttps://lex-assist.vercel.app\\n';
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.btn-copy');
+    if(btn){btn.textContent='✅ Copied!';setTimeout(()=>{btn.textContent='📋 Copy Text';},2000);}
+  });
+}
+</script>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -220,6 +542,11 @@ const MyCases: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // ── Share menu state ──
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -415,6 +742,31 @@ const MyCases: React.FC = () => {
     } finally {
       setCreating(false);
     }
+  };
+
+  // ── Share handlers ──
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(e.target as Node)) {
+        setShowShareMenu(false);
+      }
+    };
+    if (showShareMenu) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showShareMenu]);
+
+  const handleExportDiary = () => {
+    if (!diary) return;
+    setShowShareMenu(false);
+    exportCaseDiaryAsDocument(diary);
+  };
+
+  const handleCopyDiary = async () => {
+    if (!diary) return;
+    const ok = await copyCaseDiary(diary);
+    setCopySuccess(ok);
+    setShowShareMenu(false);
+    if (ok) setTimeout(() => setCopySuccess(false), 2500);
   };
 
   const handleOpenCase = async (caseId: string) => {
@@ -643,6 +995,23 @@ const MyCases: React.FC = () => {
                 <option key={f.id} value={f.id}>{f.name}</option>
               ))}
             </select>
+
+            {/* Share / Export */}
+            <div className="diary-share-wrapper" ref={shareMenuRef}>
+              <button
+                className="diary-btn diary-btn-share"
+                onClick={() => setShowShareMenu(!showShareMenu)}
+              >
+                {copySuccess ? '✅ Copied!' : '📤 Share'}
+              </button>
+              {showShareMenu && (
+                <div className="diary-share-menu">
+                  <button onClick={handleExportDiary}>🖨️ Export as Document</button>
+                  <button onClick={handleCopyDiary}>📋 Copy to Clipboard</button>
+                </div>
+              )}
+            </div>
+
             <button className="diary-btn diary-btn-danger" onClick={() => setDeleteConfirm(c.id)}>
               🗑️ Delete Case
             </button>

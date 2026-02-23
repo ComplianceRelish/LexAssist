@@ -532,6 +532,59 @@
 }
 .diary-btn-danger:hover:not(:disabled) { background: #b91c1c; }
 
+/* ── Share button + dropdown ── */
+.diary-share-wrapper {
+  position: relative;
+  display: inline-block;
+}
+.diary-btn-share {
+  background: #0a2e5c;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+.diary-btn-share:hover { background: #143d7a; }
+.diary-share-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  min-width: 200px;
+  z-index: 100;
+  overflow: hidden;
+  animation: shareMenuFadeIn 0.15s ease;
+}
+@keyframes shareMenuFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.diary-share-menu button {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: #1a1a1a;
+  transition: background 0.15s;
+}
+.diary-share-menu button:hover {
+  background: #f0f4f8;
+}
+.diary-share-menu button:not(:last-child) {
+  border-bottom: 1px solid #f0f0f0;
+}
+
 /* ── Delete button on case card ── */
 .case-card-delete {
   background: none;
