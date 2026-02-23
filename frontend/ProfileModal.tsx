@@ -119,6 +119,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
+  // Don't render anything when modal is closed
+  if (!isOpen) return null;
+
   return (
     <div className={`modal-overlay${isOpen ? ' open' : ''}`}>  {/* Brand-consistent modal overlay */}
       <div className={`modal-content${isOpen ? ' slide-in' : ''}`}> {/* Slick transition */}
