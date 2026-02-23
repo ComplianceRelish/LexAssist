@@ -249,28 +249,44 @@ def login():
         if not user_email:
             return jsonify({"error": "Account has no email configured. Contact administrator."}), 401
 
-        # Sign in via Supabase Auth using email + phone (phone is the password).
-        # First, sync the Auth password to the phone number using the admin API
-        # (service-role key). This guarantees the password matches since the
-        # phone number IS the credential — identity was already verified via the
-        # profile lookup above.
+        # Identity verified via profile lookup (name + phone).
+        # Now obtain a Supabase Auth session.
+        # Strategy: update Auth password to phone, then sign in.
         profile_user_id = profile.get("user_id")
+        session = None
+
+        # Step 1 — sync password to phone via admin API
         if profile_user_id:
             try:
                 supabase.client.auth.admin.update_user_by_id(
                     profile_user_id, {"password": phone}
                 )
+                logger.info("Password synced for %s (uid=%s)", user_email, profile_user_id)
             except Exception as pwd_err:
-                logger.warning("Password sync for %s: %s", user_email, pwd_err)
+                logger.error("Password sync FAILED for %s: %s | %s", user_email, pwd_err, type(pwd_err).__name__)
 
-        # Use auth_client (anon key) for user sign-in
-        auth = supabase.auth_client or supabase.client
-        result = auth.auth.sign_in_with_password(
-            {"email": user_email, "password": phone}
-        )
-        session = getattr(result, "session", None)
+        # Step 2 — sign in with the synced password
+        try:
+            auth = supabase.auth_client or supabase.client
+            result = auth.auth.sign_in_with_password(
+                {"email": user_email, "password": phone}
+            )
+            session = getattr(result, "session", None)
+            logger.info("sign_in_with_password for %s: session=%s", user_email, "OK" if session else "NONE")
+        except Exception as sign_err:
+            logger.error("sign_in_with_password FAILED for %s: %s | %s", user_email, sign_err, type(sign_err).__name__)
+            # Fallback: try with service-role client directly
+            try:
+                result = supabase.client.auth.sign_in_with_password(
+                    {"email": user_email, "password": phone}
+                )
+                session = getattr(result, "session", None)
+                logger.info("sign_in_with_password (service) for %s: session=%s", user_email, "OK" if session else "NONE")
+            except Exception as sign_err2:
+                logger.error("sign_in_with_password (service) ALSO FAILED: %s", sign_err2)
+
         if not session:
-            return jsonify({"error": "Authentication failed"}), 401
+            return jsonify({"error": "Authentication failed. Check Railway deploy logs for details."}), 401
 
         user_data = getattr(result, "user", None)
         admin_info = _is_admin(user_email)
@@ -298,6 +314,91 @@ def login():
         if "Invalid login" in msg or "invalid" in msg.lower():
             return jsonify({"error": "Invalid credentials. Contact your administrator."}), 401
         return jsonify({"error": "Login failed. Please try again."}), 500
+
+
+@app.route("/api/auth/debug-login", methods=["POST"])
+def debug_login():
+    """Temporary diagnostic endpoint to trace login failures step-by-step."""
+    data = request.json or {}
+    name = data.get("name", "").strip()
+    phone = data.get("phone", "").strip()
+    steps = []
+
+    # Step 1: Profile lookup
+    try:
+        profiles = (
+            supabase.client.table("profiles")
+            .select("user_id, email, full_name, role, phone")
+            .ilike("full_name", name)
+            .eq("phone", phone)
+            .execute()
+        )
+        steps.append({"step": "profile_lookup", "ok": bool(profiles.data), "count": len(profiles.data or []),
+                       "data": profiles.data[0] if profiles.data else None})
+    except Exception as e:
+        steps.append({"step": "profile_lookup", "ok": False, "error": str(e)})
+        return jsonify({"steps": steps}), 200
+
+    if not profiles.data:
+        return jsonify({"steps": steps}), 200
+
+    profile = profiles.data[0]
+    user_email = profile.get("email", "").lower()
+    user_id = profile.get("user_id")
+
+    # Step 2: Check if auth user exists
+    try:
+        auth_user = supabase.client.auth.admin.get_user_by_id(user_id)
+        u = getattr(auth_user, "user", auth_user)
+        steps.append({"step": "auth_user_lookup", "ok": True,
+                       "email": getattr(u, "email", None),
+                       "id": str(getattr(u, "id", None)),
+                       "created_at": str(getattr(u, "created_at", None))})
+    except Exception as e:
+        steps.append({"step": "auth_user_lookup", "ok": False, "error": str(e), "type": type(e).__name__})
+
+    # Step 3: Update password
+    try:
+        supabase.client.auth.admin.update_user_by_id(
+            user_id, {"password": phone}
+        )
+        steps.append({"step": "password_update", "ok": True})
+    except Exception as e:
+        steps.append({"step": "password_update", "ok": False, "error": str(e), "type": type(e).__name__})
+
+    # Step 4: sign_in_with_password with auth_client (anon key)
+    try:
+        auth = supabase.auth_client or supabase.client
+        result = auth.auth.sign_in_with_password(
+            {"email": user_email, "password": phone}
+        )
+        session = getattr(result, "session", None)
+        steps.append({"step": "sign_in_anon", "ok": bool(session),
+                       "has_access_token": bool(getattr(session, "access_token", None)) if session else False})
+    except Exception as e:
+        steps.append({"step": "sign_in_anon", "ok": False, "error": str(e), "type": type(e).__name__})
+
+    # Step 5: sign_in_with_password with service-role client
+    try:
+        result = supabase.client.auth.sign_in_with_password(
+            {"email": user_email, "password": phone}
+        )
+        session = getattr(result, "session", None)
+        steps.append({"step": "sign_in_service", "ok": bool(session),
+                       "has_access_token": bool(getattr(session, "access_token", None)) if session else False})
+    except Exception as e:
+        steps.append({"step": "sign_in_service", "ok": False, "error": str(e), "type": type(e).__name__})
+
+    # Step 6: Check supabase client config
+    steps.append({
+        "step": "config_check",
+        "has_service_key": bool(Config.SUPABASE_SERVICE_ROLE_KEY),
+        "has_anon_key": bool(Config.SUPABASE_ANON_PUBLIC_KEY),
+        "has_auth_client": bool(supabase.auth_client),
+        "supabase_url": Config.SUPABASE_URL[:30] + "..." if Config.SUPABASE_URL else None,
+    })
+
+    return jsonify({"steps": steps}), 200
 
 
 @app.route("/api/auth/setup-admins", methods=["POST"])
