@@ -47,17 +47,17 @@ const LandingDashboard: React.FC<LandingDashboardProps> = ({ userName, onOpenCha
           </div>
         </button>
 
-        {/* Card 2 — Create a New Case Diary */}
+        {/* Card 2 — Analyze a Case Brief */}
         <button
           className="landing-card landing-card--gold"
-          onClick={() => navigate('/cases?new=1')}
-          aria-label="Create a New Case Diary"
+          onClick={() => navigate('/analyze')}
+          aria-label="Analyze a Case Brief with AI"
         >
-          <div className="landing-card-icon">📒</div>
+          <div className="landing-card-icon">🔍</div>
           <div className="landing-card-body">
-            <h2 className="landing-card-title">Create a New Case Diary</h2>
+            <h2 className="landing-card-title">Analyze a Case Brief with AI</h2>
             <p className="landing-card-desc">
-              Start a fresh case file. Organise briefs, notes, AI analyses and documents in one place.
+              Paste your brief — get instant arguments, applicable sections, precedents and a full case diary entry.
             </p>
           </div>
           <div className="landing-card-arrow">
@@ -89,13 +89,13 @@ const LandingDashboard: React.FC<LandingDashboardProps> = ({ userName, onOpenCha
 
       </div>
 
-      {/* Quick secondary link to Brief Analysis */}
+      {/* Quick secondary link to My Cases */}
       <div className="landing-secondary">
-        <button className="landing-secondary-link" onClick={() => navigate('/analyze')}>
+        <button className="landing-secondary-link" onClick={() => navigate('/cases?new=1')}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            <path d="M12 5v14M5 12h14"/>
           </svg>
-          Analyze a Case Brief with AI
+          Create a blank Case Diary manually
         </button>
       </div>
     </div>

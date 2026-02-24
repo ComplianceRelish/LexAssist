@@ -203,7 +203,7 @@
 .sidebar-toggle {
   display: none;
   position: fixed;
-  top: 72px;
+  top: 56px;
   left: 8px;
   z-index: 100;
   background: #fff;
@@ -240,7 +240,7 @@
     background: rgba(0,0,0,0.3);
     z-index: 199;
   }
-  .mycases-main { padding-top: 3rem; }
+  .mycases-main { padding-top: 5rem; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
