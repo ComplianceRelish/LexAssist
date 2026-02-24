@@ -7,6 +7,7 @@ import Login from './Login';
 import Header from './Header';
 import BriefInput from './BriefInput';
 import ChatPanel from './ChatPanel';
+import LandingDashboard from './LandingDashboard';
 import './App.css';
 
 // Lazy-load heavy route components to reduce initial bundle
@@ -157,8 +158,16 @@ function App() {
             {/* Protected routes */}
             <Route path="/dashboard" element={
               user ? (
+                <LandingDashboard
+                  userName={userFullName || user.email?.split('@')[0]}
+                  onOpenChat={() => setShowChat(true)}
+                />
+              ) : <Navigate to="/" />
+            } />
+
+            <Route path="/analyze" element={
+              user ? (
                 <div className="lex-dashboard">
-                  {/* Welcome Banner */}
                   <div className="lex-welcome-banner">
                     <div className="lex-welcome-text">
                       <h1>
@@ -177,8 +186,6 @@ function App() {
                       </button>
                     </div>
                   </div>
-
-                  {/* Main Content */}
                   <BriefInput
                     isLoggedIn={true}
                     onBriefChange={(text: string) => setBriefContext(text)}

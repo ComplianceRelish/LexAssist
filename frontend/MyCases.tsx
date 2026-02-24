@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   fetchCases,
   fetchCaseDiary,
@@ -529,7 +530,7 @@ const BriefSection: React.FC<{ content: string }> = ({ content }) => {
    ═══════════════════════════════════════════════════════════════════ */
 
 const MyCases: React.FC = () => {
-  // ── Folders state ──
+  const [searchParams, setSearchParams] = useSearchParams();
   const [folders, setFolders] = useState<CaseFolder[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string>('all');
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -609,6 +610,14 @@ const MyCases: React.FC = () => {
 
   useEffect(() => { loadFolders(); }, [loadFolders]);
   useEffect(() => { loadCases(); }, [loadCases]);
+
+  // Auto-open new case form when navigated here from landing (?new=1)
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setShowNewCase(true);
+      setSearchParams({}, { replace: true }); // clean URL
+    }
+  }, [searchParams, setSearchParams]);
 
   // ── Filtered & grouped cases ──
   const filteredCases = useMemo(() => {
