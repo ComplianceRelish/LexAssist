@@ -444,9 +444,34 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
           <div className="space-y-4">
             <SectionHeading icon="🎯" title="Strategic Recommendations" subtitle="Actionable next steps for your case" />
 
+            {/* ── LAYMAN SECTION — shown first, most prominent ── */}
+            {hasAI && ai.next_steps_layman?.length > 0 && (
+              <div className="rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 p-5 shadow-sm">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-2xl">🙋</span>
+                  <div>
+                    <h4 className="font-bold text-emerald-800 text-base">What Should I Do?</h4>
+                    <p className="text-xs text-emerald-600">Simple steps — no legal jargon</p>
+                  </div>
+                </div>
+                <ol className="space-y-3">
+                  {ai.next_steps_layman.map((step: string, i: number) => (
+                    <li key={i} className="flex gap-3">
+                      <span className="flex-shrink-0 w-7 h-7 bg-emerald-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-sm">
+                        {i + 1}
+                      </span>
+                      <span className="text-sm text-emerald-900 leading-relaxed pt-0.5">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {/* ── LAWYER / ADVOCATE STRATEGY ── */}
             {hasAI && ai.strategic_recommendations?.length > 0 && (
               <Card>
-                <h4 className="font-bold text-[#0a2e5c] mb-3">Recommended Strategy</h4>
+                <h4 className="font-bold text-[#0a2e5c] mb-1">⚖️ Legal Strategy</h4>
+                <p className="text-xs text-gray-400 mb-3">Detailed recommendations for your advocate</p>
                 <ol className="space-y-3">
                   {ai.strategic_recommendations.map((rec: string, i: number) => (
                     <li key={i} className="flex gap-3 text-sm">
@@ -499,6 +524,16 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                     </li>
                   ))}
                 </ul>
+              </Card>
+            )}
+
+            {hasAI && !ai.next_steps_layman?.length && !ai.strategic_recommendations?.length && !ai.procedural_requirements?.length && !ai.evidence_checklist?.length && !isFallback && (
+              <Card>
+                <div className="text-center py-8 text-gray-400">
+                  <div className="text-4xl mb-2">🎯</div>
+                  <p>Strategy data not available for this analysis.</p>
+                  <p className="text-xs mt-1">Try running a new AI Analysis for complete results.</p>
+                </div>
               </Card>
             )}
 

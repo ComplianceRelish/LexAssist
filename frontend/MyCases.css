@@ -738,6 +738,26 @@
   box-sizing: border-box;
 }
 .diary-add-entry textarea:focus { border-color: #3b82f6; }
+
+/* Context-aware analysis notice */
+.diary-context-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.84rem;
+  color: #065f46;
+  line-height: 1.45;
+}
+.diary-context-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
 .diary-add-entry-footer {
   display: flex;
   justify-content: space-between;

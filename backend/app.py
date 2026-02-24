@@ -949,10 +949,10 @@ def add_case_entry(case_id):
         return jsonify({"error": "Entry text is required"}), 400
 
     try:
-        # Verify case ownership
+        # Verify case ownership — fetch title, type, and notes for AI context
         existing = (
             supabase.client.table("cases")
-            .select("id, title")
+            .select("id, title, case_type, notes")
             .eq("id", case_id)
             .eq("user_id", user_id)
             .single()
@@ -978,9 +978,55 @@ def add_case_entry(case_id):
 
         # 2. Optionally run AI analysis on the new entry
         if run_analysis and claude.is_available and brief_id:
-            regex_context = analyzer.analyze(text)
-            jurisdiction_resolver.enrich_context(regex_context, text)
-            ai_result = claude.analyze_brief(text, context=regex_context)
+            # ── Build case context for Claude ──────────────────────────────
+            # Fetch up to 4 prior brief entries for this case (most recent first)
+            # so Claude understands the full case background, not just the new snippet.
+            prior_briefs_res = (
+                supabase.client.table("briefs")
+                .select("content, created_at")
+                .eq("case_id", case_id)
+                .eq("user_id", user_id)
+                .neq("id", brief_id)          # exclude the entry we just inserted
+                .order("created_at", desc=True)
+                .limit(4)
+                .execute()
+            )
+
+            case_info = existing.data
+            case_title = case_info.get("title", "Untitled Case")
+            case_type  = case_info.get("case_type", "")
+            case_notes = case_info.get("notes", "")
+
+            # Build header block
+            context_lines = ["=== CASE CONTEXT ===", f"Case Title: {case_title}"]
+            if case_type:
+                context_lines.append(f"Case Type: {case_type}")
+            if case_notes:
+                context_lines.append(f"Case Notes: {case_notes}")
+
+            # Append prior entries in chronological order (oldest first)
+            prior_entries = list(reversed(prior_briefs_res.data or []))
+            if prior_entries:
+                context_lines.append("\n=== PRIOR CASE HISTORY (chronological) ===")
+                for idx, entry in enumerate(prior_entries, 1):
+                    entry_date = (entry.get("created_at") or "")[:10]
+                    entry_content = entry.get("content", "")
+                    # Truncate very long entries to avoid hitting token limits
+                    if len(entry_content) > 1800:
+                        entry_content = entry_content[:1800] + "\n[...truncated for brevity]"
+                    context_lines.append(
+                        f"\n[Entry {idx} — {entry_date}]\n{entry_content}"
+                    )
+
+            context_lines.append("\n=== NEW DEVELOPMENT / UPDATE ===")
+            context_lines.append(text)
+
+            analysis_text = "\n".join(context_lines)
+            # ──────────────────────────────────────────────────────────────
+
+            regex_context = analyzer.analyze(analysis_text)
+            jurisdiction_resolver.enrich_context(regex_context, analysis_text)
+            ai_result = claude.analyze_brief(analysis_text, context=regex_context)
             merged = {
                 "status": "success",
                 "ai_analysis": ai_result,

@@ -1078,8 +1078,25 @@ const MyCases: React.FC = () => {
           {showAddEntry && (
             <div className="diary-add-entry">
               <h3>Add New Entry to Case</h3>
+
+              {/* Context-aware notice */}
+              {runAnalysis && diary.timeline.length > 0 && (
+                <div className="diary-context-notice">
+                  <span className="diary-context-icon">🧠</span>
+                  <span>
+                    <strong>Context-aware analysis:</strong> The AI will read the full case history
+                    ({diary.timeline.length} prior {diary.timeline.length === 1 ? 'entry' : 'entries'}) before
+                    analysing your new update. Just describe what happened — no need to repeat background facts.
+                  </span>
+                </div>
+              )}
+
               <textarea
-                placeholder="Enter new case developments, updated brief, new facts, or additional instructions..."
+                placeholder={
+                  diary.timeline.length > 0
+                    ? `Describe what has happened since the last entry — a new hearing date, a reply received, a document filed, a next step taken…\n\nThe AI already knows the case background from prior entries.`
+                    : "Enter the initial case brief — facts, parties involved, legal issue, what relief you are seeking, and any relevant dates or documents…"
+                }
                 value={entryText}
                 onChange={e => setEntryText(e.target.value)}
                 rows={6}
@@ -1090,7 +1107,7 @@ const MyCases: React.FC = () => {
                   Run AI Analysis on this entry
                 </label>
                 <button className="diary-btn diary-btn-primary" onClick={handleAddEntry} disabled={addingEntry || !entryText.trim()}>
-                  {addingEntry ? 'Processing...' : 'Submit Entry'}
+                  {addingEntry ? 'Analysing with full case context…' : 'Submit Entry'}
                 </button>
               </div>
             </div>
