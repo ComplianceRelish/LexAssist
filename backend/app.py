@@ -2042,6 +2042,10 @@ def document_scan():
         return jsonify({"error": "No filename"}), 400
 
     case_id = request.form.get("case_id", None)
+    # IETF language hint: 'auto', 'hi', 'ta', 'te', 'kn', 'ml', 'bn', 'mr',
+    # 'gu', 'pa', 'or', 'ur', 'sa', 'mixed', or 'en'.
+    # Enables vernacular-aware OCR for Indic scripts.
+    language_hint = request.form.get("language_hint", "auto")
 
     try:
         file_data = uploaded_file.read()
@@ -2053,6 +2057,7 @@ def document_scan():
             filename=uploaded_file.filename,
             user_id=user_id,
             case_id=case_id,
+            language_hint=language_hint,
         )
 
         # Log activity

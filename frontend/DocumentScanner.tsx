@@ -25,6 +25,26 @@ const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 const ACCEPTED_FORMATS = '.pdf,.jpg,.jpeg,.png,.tiff,.tif,.webp,.bmp,.doc,.docx';
 const MAX_FILE_SIZE_MB = 20;
 
+// ── Supported Indian Vernacular Languages ─────────────────────────
+const LANGUAGE_OPTIONS = [
+  { code: 'auto',  label: 'Auto-detect' },
+  { code: 'en',    label: 'English' },
+  { code: 'hi',    label: 'Hindi / हिंदी' },
+  { code: 'ta',    label: 'Tamil / தமிழ்' },
+  { code: 'te',    label: 'Telugu / తెలుగు' },
+  { code: 'kn',    label: 'Kannada / ಕನ್ನಡ' },
+  { code: 'ml',    label: 'Malayalam / മലയാളം' },
+  { code: 'bn',    label: 'Bengali / বাংলা' },
+  { code: 'mr',    label: 'Marathi / मराठी' },
+  { code: 'gu',    label: 'Gujarati / ગુજરાતી' },
+  { code: 'pa',    label: 'Punjabi / ਪੰਜਾਬੀ' },
+  { code: 'or',    label: 'Odia / ଓଡ଼ିଆ' },
+  { code: 'ur',    label: 'Urdu / اردو' },
+  { code: 'mixed', label: 'Mixed / Multiple' },
+] as const;
+
+type LanguageCode = typeof LANGUAGE_OPTIONS[number]['code'];
+
 // ── Component ─────────────────────────────────────────────────────
 
 const DocumentScanner: React.FC<DocumentScannerProps> = ({
@@ -43,6 +63,7 @@ const DocumentScanner: React.FC<DocumentScannerProps> = ({
   const [showCamera, setShowCamera] = useState(false);
   const [hasCamera, setHasCamera] = useState(false);
   const [extractedText, setExtractedText] = useState('');
+  const [languageHint, setLanguageHint] = useState<LanguageCode>('auto');
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -114,7 +135,7 @@ const DocumentScanner: React.FC<DocumentScannerProps> = ({
     setError(null);
 
     try {
-      const scanResult = await scanDocument(file, caseId);
+      const scanResult = await scanDocument(file, caseId, languageHint === 'auto' ? undefined : languageHint);
 
       if (scanResult.error) {
         setError(scanResult.error);
@@ -131,7 +152,7 @@ const DocumentScanner: React.FC<DocumentScannerProps> = ({
       setError(err.message || 'Document processing failed. Please try again.');
       setState('idle');
     }
-  }, [isLoggedIn, caseId, onScanResult]);
+  }, [isLoggedIn, caseId, onScanResult, languageHint]);
 
   // ── Camera Capture (Mobile) ─────────────────────────────────────
 
@@ -355,11 +376,34 @@ const DocumentScanner: React.FC<DocumentScannerProps> = ({
 
             <p className="doc-drop-title">Scan or Upload Document</p>
             <p className="doc-drop-hint">
-              Drag & drop a file here, or use the buttons below
+              Drag &amp; drop a file here, or use the buttons below
             </p>
             <p className="doc-drop-formats">
               PDF, JPG, PNG, TIFF, DOCX — up to {MAX_FILE_SIZE_MB} MB
             </p>
+
+            {/* Language Selector */}
+            <div className="doc-lang-selector">
+              <label className="doc-lang-label" htmlFor="doc-lang-select">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                Document language
+              </label>
+              <select
+                id="doc-lang-select"
+                className="doc-lang-select"
+                value={languageHint}
+                onChange={(e) => setLanguageHint(e.target.value as LanguageCode)}
+                disabled={disabled || !isLoggedIn}
+              >
+                {LANGUAGE_OPTIONS.map(({ code, label }) => (
+                  <option key={code} value={code}>{label}</option>
+                ))}
+              </select>
+            </div>
 
             <div className="doc-input-buttons">
               {/* Upload Button (always available) */}
@@ -411,7 +455,10 @@ const DocumentScanner: React.FC<DocumentScannerProps> = ({
             <p className="doc-processing-detail">
               {previewFile?.name && <span className="doc-filename">{previewFile.name}</span>}
               <br />
-              Running OCR, classifying document type, and extracting legal text
+              {languageHint && languageHint !== 'auto' && languageHint !== 'en'
+                ? `Running multilingual OCR (${LANGUAGE_OPTIONS.find(l => l.code === languageHint)?.label ?? languageHint}), classifying and extracting legal text`
+                : 'Running OCR, classifying document type, and extracting legal text'
+              }
             </p>
           </div>
         </div>
@@ -440,6 +487,13 @@ const DocumentScanner: React.FC<DocumentScannerProps> = ({
                   {result.metadata?.ocr_used && (
                     <span className="doc-badge doc-badge-ocr">OCR</span>
                   )}
+                  {/* Show vernacular badge when significant non-English content is detected */}
+                  {result.classification?.vernacular_content_percent !== undefined &&
+                   Number(result.classification.vernacular_content_percent) > 10 && (
+                    <span className="doc-badge doc-badge-vernacular" title="Document contains vernacular (Indic) script content">
+                      🌐 Vernacular {result.classification.vernacular_content_percent}%
+                    </span>
+                  )}
                   <span className="doc-badge doc-badge-info">
                     {result.pages} page{result.pages !== 1 ? 's' : ''} · {result.metadata?.word_count} words · {result.metadata?.processing_ms}ms
                   </span>
@@ -452,6 +506,17 @@ const DocumentScanner: React.FC<DocumentScannerProps> = ({
           {result.classification && (
             <div className="doc-classification">
               <div className="doc-class-grid">
+            {result.classification?.language && (
+                  <div className="doc-class-item">
+                    <span className="doc-class-label">Language</span>
+                    <span className="doc-class-value">
+                      {result.classification.language.toUpperCase()}
+                      {result.classification.scripts_detected && result.classification.scripts_detected.length > 1 && (
+                        <span className="doc-lang-scripts"> · {result.classification.scripts_detected.join(', ')}</span>
+                      )}
+                    </span>
+                  </div>
+                )}
                 {result.classification.court && (
                   <div className="doc-class-item">
                     <span className="doc-class-label">Court</span>

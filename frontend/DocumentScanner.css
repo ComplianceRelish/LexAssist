@@ -379,6 +379,11 @@
   color: #1e40af;
 }
 
+.doc-badge-vernacular {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .doc-badge-info {
   background: #f1f5f9;
   color: #64748b;
@@ -580,4 +585,61 @@
     width: 100%;
     justify-content: center;
   }
+}
+
+/* ── Language Selector ────────────────────────────────────────── */
+
+.doc-lang-selector {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  margin-bottom: 2px;
+}
+
+.doc-lang-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  color: #6b7e9b;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.doc-lang-select {
+  font-size: 0.8rem;
+  color: #2d3a4f;
+  background: #fff;
+  border: 1px solid #c9d3e0;
+  border-radius: 6px;
+  padding: 4px 28px 4px 9px;
+  /* Custom arrow */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7e9b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  min-width: 185px;
+}
+
+.doc-lang-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
+}
+
+.doc-lang-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Language / Scripts badge in results ─────────────────────── */
+
+.doc-lang-scripts {
+  font-size: 0.75rem;
+  color: #6b7e9b;
+  font-weight: 400;
 }

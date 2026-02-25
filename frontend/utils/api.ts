@@ -845,7 +845,12 @@ export interface DocumentScanResult {
     date: string | null;
     key_sections: string[];
     summary: string;
+    /** IETF language code of the primary language */
     language: string;
+    /** Scripts detected in the document, e.g. ['Latin', 'Tamil', 'Devanagari'] */
+    scripts_detected?: string[];
+    /** Estimated % of text that is vernacular (non-English) */
+    vernacular_content_percent?: number | string;
     confidence: number;
   };
   pages: number;
@@ -857,6 +862,8 @@ export interface DocumentScanResult {
     processing_ms: number;
     word_count: number;
     char_count: number;
+    /** Language hint that was supplied for this scan */
+    language_hint?: string;
     status: string;
   };
   error?: string;
@@ -875,14 +882,20 @@ export interface DocumentServiceStatus {
 /**
  * Upload and process a document (OCR + classification + text extraction).
  * Accepts PDF, images, DOCX.
+ *
+ * @param languageHint - IETF code of the document's language ('auto', 'ta', 'hi', 'ml', ...)
+ *   Pass 'auto' or omit to let the model detect. Passing a specific code greatly
+ *   improves accuracy for vernacular / Indic-script documents.
  */
 export async function scanDocument(
   file: File,
   caseId?: string,
+  languageHint?: string,
 ): Promise<DocumentScanResult> {
   const formData = new FormData();
   formData.append('file', file);
   if (caseId) formData.append('case_id', caseId);
+  if (languageHint && languageHint !== 'auto') formData.append('language_hint', languageHint);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3min for large docs

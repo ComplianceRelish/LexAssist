@@ -65,6 +65,26 @@ ALL_SUPPORTED_FORMATS = SUPPORTED_IMAGE_FORMATS | SUPPORTED_DOC_FORMATS
 MAX_FILE_SIZE_MB = 20
 MAX_PAGES_FOR_OCR = 20  # Limit pages sent to Vision API
 
+# ── Supported Indian Vernacular Languages ─────────────────────────
+# Maps language hint codes → display names and script names used in prompts
+VERNACULAR_LANGUAGES: dict = {
+    "auto":  {"label": "Auto-detect",          "script": None},
+    "en":    {"label": "English",               "script": "Latin"},
+    "hi":    {"label": "Hindi",                 "script": "Devanagari"},
+    "ta":    {"label": "Tamil / தமிழ்",         "script": "Tamil"},
+    "te":    {"label": "Telugu / తెలుగు",       "script": "Telugu"},
+    "kn":    {"label": "Kannada / ಕನ್ನಡ",       "script": "Kannada"},
+    "ml":    {"label": "Malayalam / മലയാളം",   "script": "Malayalam"},
+    "bn":    {"label": "Bengali / বাংলা",       "script": "Bengali"},
+    "mr":    {"label": "Marathi / मराठी",       "script": "Devanagari"},
+    "gu":    {"label": "Gujarati / ગુજરાતી",    "script": "Gujarati"},
+    "pa":    {"label": "Punjabi / ਪੰਜਾਬੀ",      "script": "Gurmukhi"},
+    "or":    {"label": "Odia / ଓଡ଼ିଆ",          "script": "Odia"},
+    "ur":    {"label": "Urdu / اردو",           "script": "Perso-Arabic"},
+    "sa":    {"label": "Sanskrit / संस्कृतम्", "script": "Devanagari"},
+    "mixed": {"label": "Mixed / Multiple",      "script": "multiple"},
+}
+
 # Document type classification keywords
 DOCUMENT_TYPES = {
     "petition": ["petition", "writ petition", "special leave petition", "SLP", "pray", "prayer",
@@ -93,28 +113,48 @@ DOCUMENT_TYPES = {
 
 # ── OCR System Prompt ─────────────────────────────────────────────
 
-OCR_SYSTEM_PROMPT = """You are a legal document OCR specialist for Indian law. Extract ALL text from this document image with perfect accuracy.
+OCR_SYSTEM_PROMPT = """You are a legal document OCR specialist for Indian law with full multilingual script recognition.
+Extract ALL text from this document image with perfect accuracy, preserving every character exactly as it appears.
 
-**Critical rules:**
-1. Preserve the EXACT text — do not paraphrase, summarise, or interpret
+**Critical extraction rules:**
+1. Preserve the EXACT text — do NOT paraphrase, summarise, or interpret
 2. Maintain paragraph structure and line breaks
 3. Preserve all section numbers, article numbers, case citations exactly as printed
 4. Preserve formatting: headings, numbered lists, bullet points
 5. For tables, use markdown table format
-6. Include all stamps, seals descriptions in [brackets]: [COURT SEAL], [NOTARY STAMP]
+6. Include all stamps and seals in [brackets]: [COURT SEAL], [NOTARY STAMP], [FILING STAMP: date]
 7. Include all handwritten text with [handwritten: text] markers
 8. Preserve all dates, names, addresses, and reference numbers exactly
 9. If text is partially illegible, note it as [illegible] or [partially illegible: best guess]
 10. For multi-column layouts, read left to right, top to bottom
 
+**VERNACULAR SCRIPT RULES — CRITICAL:**
+- **NEVER transliterate vernacular text into Latin/English characters**
+- Preserve all Indian scripts in their ORIGINAL Unicode characters:
+  • Devanagari  (Hindi / हिंदी, Marathi / मराठी, Sanskrit / संस्कृतम्)
+  • Tamil       (தமிழ்)
+  • Telugu      (తెలుగు)
+  • Kannada     (ಕನ್ನಡ)
+  • Malayalam   (മലയാളം)
+  • Bengali     (বাংলা)
+  • Gujarati    (ગુજરાતી)
+  • Gurmukhi    (Punjabi / ਪੰਜਾਬੀ)
+  • Odia        (ଓଡ଼ିଆ)
+  • Perso-Arabic (Urdu / اردو) — right-to-left, preserve direction
+- For MIXED-LANGUAGE documents, output each script segment in its original script
+  exactly as it appears — do NOT merge, skip, or convert any segment
+- If a paragraph contains both English and Tamil (for example), output both exactly
+- Mark language switches with [LANG: language_name] only if the switch is abrupt
+  and helps readability; otherwise just output text naturally
+
 **Indian legal document specifics:**
 - Preserve cause title formatting (IN THE COURT OF ...)
 - Keep all section references (Section 302 IPC, Article 226, Order VII Rule 11)
 - Preserve case citations (AIR 2023 SC 450, (2023) 5 SCC 120)
-- Keep all Hindi/vernacular text as-is using transliteration if needed
+- Keep vernacular legal terms in their ORIGINAL script (e.g. धारा, பிரிவு, ধারা)
 - Note court stamps, filing stamps, and their dates
 
-Return ONLY the extracted text. No commentary."""
+Return ONLY the extracted text. No commentary, no translation, no language labels unless instructed."""
 
 CLASSIFICATION_PROMPT = """Analyse this legal document text and classify it. Return ONLY valid JSON:
 
@@ -130,9 +170,11 @@ CLASSIFICATION_PROMPT = """Analyse this legal document text and classify it. Ret
   "case_number": "Case number if found, or null",
   "date": "Document date if found, or null",
   "key_sections": ["Section 302 IPC", "Article 226"],
-  "summary": "2-3 sentence summary of the document",
+  "summary": "2-3 sentence summary of the document. If the document is in a vernacular language, write the summary in English.",
   "page_count_estimate": 1,
-  "language": "English|Hindi|Mixed|Other",
+  "language": "Primary language of this document — use IETF codes: en, hi, ta, te, kn, ml, bn, mr, gu, pa, or, ur, mixed",
+  "scripts_detected": ["List of scripts present, e.g. Latin, Devanagari, Tamil, Telugu, Kannada, Malayalam, Bengali, Gujarati, Gurmukhi, Odia, Perso-Arabic"],
+  "vernacular_content_percent": "Estimated percentage (0-100) of text that is in non-English vernacular scripts",
   "confidence": 0.95
 }"""
 
@@ -172,6 +214,7 @@ class DocumentService:
         filename: str,
         user_id: Optional[str] = None,
         case_id: Optional[str] = None,
+        language_hint: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Full document processing pipeline.
@@ -181,6 +224,9 @@ class DocumentService:
             filename: Original filename
             user_id: Authenticated user ID
             case_id: Optional case to link to
+            language_hint: IETF language code hint (e.g. 'ta', 'hi', 'ml', 'auto').
+                           Passed through to the Vision OCR call to improve accuracy
+                           for vernacular/Indic scripts.
         
         Returns:
             {
@@ -206,10 +252,15 @@ class DocumentService:
         pages_processed = 0
         ocr_used = False
 
+        # Normalise language hint
+        lang = (language_hint or "auto").strip().lower()
+        if lang not in VERNACULAR_LANGUAGES:
+            lang = "auto"
+
         if is_pdf:
-            extracted_text, pages_processed, ocr_used = self._process_pdf(file_data, filename)
+            extracted_text, pages_processed, ocr_used = self._process_pdf(file_data, filename, lang)
         elif is_image:
-            extracted_text, ocr_used = self._process_image(file_data, filename, ext)
+            extracted_text, ocr_used = self._process_image(file_data, filename, ext, lang)
             pages_processed = 1
         elif ext in ("doc", "docx"):
             extracted_text = self._process_docx(file_data, filename)
@@ -220,7 +271,7 @@ class DocumentService:
         if not extracted_text.strip():
             # Image-only PDF or failed text extraction — try OCR on first page
             if is_pdf and self._ocr_available:
-                extracted_text, ocr_used = self._ocr_pdf_pages(file_data, filename)
+                extracted_text, ocr_used = self._ocr_pdf_pages(file_data, filename, lang)
                 if not extracted_text.strip():
                     return {
                         "error": "Could not extract text from this document. The file may be empty or corrupted.",
@@ -245,6 +296,7 @@ class DocumentService:
                 "processing_ms": total_ms,
                 "word_count": len(extracted_text.split()),
                 "char_count": len(extracted_text),
+                "language_hint": lang,
                 "status": "success",
             },
         }
@@ -283,17 +335,23 @@ class DocumentService:
 
     # ── PDF Processing ────────────────────────────────────────────
 
-    def _process_pdf(self, file_data: bytes, filename: str) -> Tuple[str, int, bool]:
+    def _process_pdf(self, file_data: bytes, filename: str, language_hint: str = "auto") -> Tuple[str, int, bool]:
         """
         Extract text from PDF. First try native text extraction (PyMuPDF),
         if that fails (scanned PDF), fall back to OCR.
+
+        For vernacular-hinted documents we always OCR even when PyMuPDF finds
+        some text, because embedded fonts may produce garbled Unicode for Indic
+        scripts while the visual rendering is correct.
         
         Returns: (text, page_count, ocr_used)
         """
+        force_ocr = language_hint not in ("auto", "en", None)
+
         if not _PYMUPDF_AVAILABLE:
             # No PyMuPDF — try OCR directly
             if self._ocr_available:
-                text, ocr_used = self._ocr_pdf_pages(file_data, filename)
+                text, ocr_used = self._ocr_pdf_pages(file_data, filename, language_hint)
                 return text, max(1, text.count('\n\n')), True
             return "", 0, False
 
@@ -302,22 +360,23 @@ class DocumentService:
             page_count = len(doc)
             text_parts = []
 
-            for page_num in range(min(page_count, 100)):  # Limit to 100 pages
-                page = doc[page_num]
-                text = page.get_text("text")
-                if text.strip():
-                    text_parts.append(f"--- Page {page_num + 1} ---\n{text.strip()}")
+            if not force_ocr:
+                for page_num in range(min(page_count, 100)):  # Limit to 100 pages
+                    page = doc[page_num]
+                    text = page.get_text("text")
+                    if text.strip():
+                        text_parts.append(f"--- Page {page_num + 1} ---\n{text.strip()}")
 
             doc.close()
             full_text = "\n\n".join(text_parts)
 
-            # If we got meaningful text, return it
-            if len(full_text.strip()) > 50:
+            # If we got meaningful text AND no vernacular hint, return it
+            if len(full_text.strip()) > 50 and not force_ocr:
                 return full_text, page_count, False
 
-            # Scanned PDF — fall back to OCR
+            # Scanned PDF OR vernacular PDF — fall back to Vision OCR
             if self._ocr_available:
-                ocr_text, _ = self._ocr_pdf_pages(file_data, filename)
+                ocr_text, _ = self._ocr_pdf_pages(file_data, filename, language_hint)
                 return ocr_text, page_count, True
 
             return full_text, page_count, False
@@ -325,13 +384,14 @@ class DocumentService:
         except Exception as e:
             logger.error("PDF processing error: %s", e)
             if self._ocr_available:
-                text, _ = self._ocr_pdf_pages(file_data, filename)
+                text, _ = self._ocr_pdf_pages(file_data, filename, language_hint)
                 return text, 1, True
             return "", 0, False
 
-    def _ocr_pdf_pages(self, file_data: bytes, filename: str) -> Tuple[str, bool]:
+    def _ocr_pdf_pages(self, file_data: bytes, filename: str, language_hint: str = "auto") -> Tuple[str, bool]:
         """
         Convert PDF pages to images and OCR them via OpenAI Vision.
+        Uses 300 DPI rendering for crisp Indic script characters.
         """
         if not _PYMUPDF_AVAILABLE or not self._ocr_available:
             return "", False
@@ -343,13 +403,18 @@ class DocumentService:
 
             for page_num in range(page_count):
                 page = doc[page_num]
-                # Render page to image at 200 DPI
-                mat = pymupdf.Matrix(200 / 72, 200 / 72)
+                # Render page to image at 300 DPI (was 200) — critical for
+                # small Indic glyphs (Tamil, Malayalam, Devanagari, etc.)
+                mat = pymupdf.Matrix(300 / 72, 300 / 72)
                 pix = page.get_pixmap(matrix=mat)
                 img_bytes = pix.tobytes("png")
 
-                # OCR this page
-                page_text = self._ocr_image_bytes(img_bytes, f"{filename}_page_{page_num + 1}.png")
+                # OCR this page with language hint
+                page_text = self._ocr_image_bytes(
+                    img_bytes,
+                    f"{filename}_page_{page_num + 1}.png",
+                    language_hint=language_hint,
+                )
                 if page_text:
                     text_parts.append(f"--- Page {page_num + 1} ---\n{page_text}")
 
@@ -362,7 +427,7 @@ class DocumentService:
 
     # ── Image Processing ──────────────────────────────────────────
 
-    def _process_image(self, file_data: bytes, filename: str, ext: str) -> Tuple[str, bool]:
+    def _process_image(self, file_data: bytes, filename: str, ext: str, language_hint: str = "auto") -> Tuple[str, bool]:
         """
         Process an image file: enhance then OCR.
         
@@ -375,7 +440,7 @@ class DocumentService:
 
         # OCR via Vision API
         if self._ocr_available:
-            text = self._ocr_image_bytes(enhanced_data, filename)
+            text = self._ocr_image_bytes(enhanced_data, filename, language_hint=language_hint)
             return text, True
 
         return "", False
@@ -426,9 +491,16 @@ class DocumentService:
 
     # ── OCR via OpenAI Vision ─────────────────────────────────────
 
-    def _ocr_image_bytes(self, image_data: bytes, filename: str) -> str:
+    def _ocr_image_bytes(
+        self,
+        image_data: bytes,
+        filename: str,
+        language_hint: str = "auto",
+    ) -> str:
         """
         Send image to GPT-4o Vision for OCR.
+        Injects a language-specific instruction when a vernacular hint is given
+        so the model pays special attention to the relevant script.
         Returns extracted text.
         """
         if not self._ocr_available:
@@ -449,6 +521,31 @@ class DocumentService:
             elif lower_fn.endswith((".tiff", ".tif")):
                 mime = "image/tiff"
 
+            # Build language-aware user instruction
+            lang_info = VERNACULAR_LANGUAGES.get(language_hint or "auto")
+            if lang_info and lang_info["script"] and language_hint not in ("auto", "en"):
+                lang_label = lang_info["label"]
+                script_name = lang_info["script"]
+                ocr_user_instruction = (
+                    f"This document is in {lang_label} ({script_name} script). "
+                    f"Extract ALL text preserving every {script_name} character exactly — "
+                    "do NOT transliterate, skip, or convert any vernacular characters. "
+                    "Output the original script characters as-is."
+                )
+            elif language_hint == "mixed":
+                ocr_user_instruction = (
+                    "This document contains MIXED languages (e.g. English + an Indian vernacular script). "
+                    "Extract ALL text for EVERY language segment, preserving each script exactly as it appears. "
+                    "Do not skip or transliterate any vernacular portion."
+                )
+            else:
+                ocr_user_instruction = (
+                    "Extract all text from this legal document image. "
+                    "If you detect any Indic or vernacular script (Devanagari, Tamil, Telugu, Kannada, "
+                    "Malayalam, Bengali, Gujarati, Gurmukhi, Odia, Perso-Arabic/Urdu), preserve every "
+                    "character in its original Unicode script — do NOT transliterate."
+                )
+
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
@@ -465,7 +562,7 @@ class DocumentService:
                             },
                             {
                                 "type": "text",
-                                "text": "Extract all text from this legal document image.",
+                                "text": ocr_user_instruction,
                             },
                         ],
                     },
@@ -563,4 +660,10 @@ class DocumentService:
             "supported_formats": sorted(ALL_SUPPORTED_FORMATS),
             "max_file_size_mb": MAX_FILE_SIZE_MB,
             "max_ocr_pages": MAX_PAGES_FOR_OCR,
+            "pdf_render_dpi": 300,
+            "multilingual_ocr": True,
+            "supported_languages": {
+                code: info["label"]
+                for code, info in VERNACULAR_LANGUAGES.items()
+            },
         }
