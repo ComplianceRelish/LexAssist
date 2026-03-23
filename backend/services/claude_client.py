@@ -18,6 +18,7 @@ import re
 import time
 from typing import Any, Dict, Generator, List, Optional
 from backend.config import Config
+from backend.data.indian_statutes import lookup_sections
 from backend.utils.logger import setup_logger
 
 logger = setup_logger("ClaudeClient")
@@ -440,6 +441,8 @@ Brief:
         if p.get("headline"):
             clean_headline = re.sub(r'<[^>]+>', '', p['headline'])[:200]
             line += f"\n   Summary: {clean_headline}"
+        if p.get("excerpt"):
+            line += f"\n   **Judgment Excerpt (ratio decidendi):**\n   {p['excerpt'][:2000]}"
         return line + "\n"
 
     def _identify_issues(self, brief_text: str, context: Optional[Dict] = None) -> Dict:
@@ -762,6 +765,15 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 enrichment_parts.append(f"Courts mentioned: {', '.join(context['entities']['courts'])}")
             if enrichment_parts:
                 prompt += "\n\nRegex extraction (verify and expand):\n" + "\n".join(enrichment_parts)
+
+            # ── Authoritative statute text from local reference ───
+            sections_found = context.get("entities", {}).get("sections", [])
+            if sections_found:
+                statute_text = lookup_sections(sections_found)
+                if statute_text:
+                    prompt += "\n\n**AUTHORITATIVE STATUTE TEXT (local reference — use this exact wording, do NOT paraphrase or guess):**\n"
+                    prompt += statute_text + "\n"
+                    logger.info("Injected statute text for %d sections into Pass 2 prompt", len(sections_found))
 
             # ── Indian Kanoon ground-truth precedents ─────────────
             kanoon_precedents = context.get("precedents", [])

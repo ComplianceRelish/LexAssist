@@ -65,6 +65,31 @@ class IndianKanoonAPI:
             self.logger.error("get_doc(%s) failed: %s", doc_id, e)
             return {"error": str(e)}
 
+    def get_doc_excerpt(self, doc_id: str, max_chars: int = 3000) -> str:
+        """Fetch a judgment and return a trimmed excerpt of the core text.
+
+        Strips HTML, takes the tail portion (where the ratio decidendi
+        and operative order typically appear), capped at *max_chars*.
+        Returns an empty string on failure.
+        """
+        import re as _re
+
+        data = self.get_doc(doc_id)
+        if "error" in data or "doc" not in data:
+            return ""
+        raw = data["doc"]
+        # Strip HTML tags
+        text = _re.sub(r"<[^>]+>", " ", raw)
+        # Collapse whitespace
+        text = _re.sub(r"\s+", " ", text).strip()
+        if not text:
+            return ""
+        # Take the last `max_chars` characters — the holding / ratio
+        # decidendi is almost always near the end of Indian judgments.
+        if len(text) > max_chars:
+            text = "…" + text[-max_chars:]
+        return text
+
     def search_recent(self, query: str, years: int = 3, **kwargs) -> dict:
         """Search Indian Kanoon sorted by most-recent, filtered to the last *years*.
 

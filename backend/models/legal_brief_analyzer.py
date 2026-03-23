@@ -497,6 +497,25 @@ class LegalBriefAnalyzer:
                      sum(1 for p in precedents if p["match_type"] == "relevance"),
                      sum(1 for p in precedents if p["match_type"] == "recent"),
                      len(queries))
+
+        # ── Fetch full-text excerpts for top 3 precedents ────────
+        fetched = 0
+        for p in precedents:
+            if fetched >= 3:
+                break
+            doc_id = p.get("doc_id")
+            if not doc_id:
+                continue
+            try:
+                excerpt = self.indian_kanoon.get_doc_excerpt(str(doc_id), max_chars=3000)
+                if excerpt:
+                    p["excerpt"] = excerpt
+                    fetched += 1
+            except Exception as e:
+                logger.warning("Excerpt fetch failed for doc %s: %s", doc_id, e)
+        if fetched:
+            logger.info("Fetched full-text excerpts for %d precedents", fetched)
+
         return precedents
 
     def _strategic_analysis(self, text: str, entities: dict,
