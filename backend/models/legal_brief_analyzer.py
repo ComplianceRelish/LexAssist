@@ -439,7 +439,7 @@ class LegalBriefAnalyzer:
         return statutes
 
     def _search_precedents(self, text: str, entities: dict, case_type: dict) -> list:
-        """Query Indian Kanoon for relevant precedents."""
+        """Query Indian Kanoon for relevant precedents (relevance + recent)."""
         if not self.indian_kanoon:
             return []
 
@@ -459,27 +459,44 @@ class LegalBriefAnalyzer:
 
         precedents = []
         seen_titles = set()
+
+        def _add_docs(docs, tag):
+            for doc in docs:
+                title = doc.get("title", "")
+                if title and title not in seen_titles:
+                    seen_titles.add(title)
+                    precedents.append({
+                        "title": title,
+                        "citation": doc.get("citation", ""),
+                        "doc_id": doc.get("tid", ""),
+                        "headline": doc.get("headline", ""),
+                        "docsource": doc.get("docsource", ""),
+                        "publishdate": doc.get("publishdate", ""),
+                        "source": "Indian Kanoon",
+                        "match_type": tag,
+                    })
+
+        # ── Pass A: relevance-ranked results ──────────────────────
         for q in queries:
             try:
                 results = self.indian_kanoon.search_judgments(q, pagenum=0)
-                docs = results.get("docs", [])
-                for doc in docs[:5]:
-                    title = doc.get("title", "")
-                    if title and title not in seen_titles:
-                        seen_titles.add(title)
-                        precedents.append({
-                            "title": title,
-                            "citation": doc.get("citation", ""),
-                            "doc_id": doc.get("tid", ""),
-                            "headline": doc.get("headline", ""),
-                            "docsource": doc.get("docsource", ""),
-                            "publishdate": doc.get("publishdate", ""),
-                            "source": "Indian Kanoon"
-                        })
+                _add_docs(results.get("docs", [])[:5], "relevance")
             except Exception as e:
                 logger.warning("Precedent search failed for query '%s': %s", q, e)
 
-        logger.info("Indian Kanoon returned %d precedents for %d queries", len(precedents), len(queries))
+        # ── Pass B: most-recent results (last 3 years) ───────────
+        for q in queries:
+            try:
+                results = self.indian_kanoon.search_recent(q, years=3, pagenum=0)
+                _add_docs(results.get("docs", [])[:5], "recent")
+            except Exception as e:
+                logger.warning("Recent precedent search failed for query '%s': %s", q, e)
+
+        logger.info("Indian Kanoon returned %d precedents (%d relevance + %d recent) for %d queries",
+                     len(precedents),
+                     sum(1 for p in precedents if p["match_type"] == "relevance"),
+                     sum(1 for p in precedents if p["match_type"] == "recent"),
+                     len(queries))
         return precedents
 
     def _strategic_analysis(self, text: str, entities: dict,

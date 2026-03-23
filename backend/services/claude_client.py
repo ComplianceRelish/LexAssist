@@ -427,6 +427,21 @@ Brief:
 
     # ── Multi-Pass Analysis Helpers ──────────────────────────────
 
+    @staticmethod
+    def _format_precedent_line(index: int, p: dict) -> str:
+        """Format a single Indian Kanoon precedent for prompt injection."""
+        line = f"{index}. **{p.get('title', 'Unknown')}**"
+        if p.get("citation"):
+            line += f" — {p['citation']}"
+        if p.get("docsource"):
+            line += f" ({p['docsource']})"
+        if p.get("publishdate"):
+            line += f" [{p['publishdate']}]"
+        if p.get("headline"):
+            clean_headline = re.sub(r'<[^>]+>', '', p['headline'])[:200]
+            line += f"\n   Summary: {clean_headline}"
+        return line + "\n"
+
     def _identify_issues(self, brief_text: str, context: Optional[Dict] = None) -> Dict:
         """
         Pass 1 — Fast issue identification and case classification.
@@ -751,23 +766,27 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             # ── Indian Kanoon ground-truth precedents ─────────────
             kanoon_precedents = context.get("precedents", [])
             if kanoon_precedents:
+                # Split into landmark (relevance) and recent buckets
+                landmark = [p for p in kanoon_precedents if p.get("match_type") != "recent"]
+                recent   = [p for p in kanoon_precedents if p.get("match_type") == "recent"]
+
                 prompt += "\n\n**VERIFIED PRECEDENTS FROM INDIAN KANOON DATABASE (ground-truth — these are REAL cases):**\n"
                 prompt += "Use these as your PRIMARY citation source. You may cite additional cases from your knowledge, "
-                prompt += "but PRIORITIZE these verified cases where relevant. For each, the title and citation are confirmed real.\n\n"
-                for i, p in enumerate(kanoon_precedents[:15], 1):
-                    line = f"{i}. **{p.get('title', 'Unknown')}**"
-                    if p.get("citation"):
-                        line += f" — {p['citation']}"
-                    if p.get("docsource"):
-                        line += f" ({p['docsource']})"
-                    if p.get("publishdate"):
-                        line += f" [{p['publishdate']}]"
-                    if p.get("headline"):
-                        # Strip HTML tags from headline
-                        clean_headline = re.sub(r'<[^>]+>', '', p['headline'])[:200]
-                        line += f"\n   Summary: {clean_headline}"
-                    prompt += line + "\n"
-                logger.info("Injected %d Indian Kanoon precedents into Pass 2 prompt", len(kanoon_precedents[:15]))
+                prompt += "but PRIORITIZE these verified cases where relevant. For each, the title and citation are confirmed real.\n"
+
+                if landmark:
+                    prompt += "\n── Landmark / Most Relevant ──\n"
+                    for i, p in enumerate(landmark[:10], 1):
+                        prompt += self._format_precedent_line(i, p)
+
+                if recent:
+                    prompt += "\n── Most Recent Judgments (last 3 years) ──\n"
+                    prompt += "⚡ These are the LATEST rulings — highlight them when they strengthen the client's position.\n"
+                    for i, p in enumerate(recent[:10], 1):
+                        prompt += self._format_precedent_line(i, p)
+
+                logger.info("Injected %d Indian Kanoon precedents (%d landmark + %d recent) into Pass 2 prompt",
+                            len(kanoon_precedents[:20]), len(landmark[:10]), len(recent[:10]))
             else:
                 pipeline_notes.append("No Indian Kanoon precedents available — all citations are AI-generated (verify independently)")
 

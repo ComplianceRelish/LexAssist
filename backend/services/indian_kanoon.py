@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import requests
 from backend.config import Config
 from backend.utils.logger import setup_logger
@@ -62,3 +64,15 @@ class IndianKanoonAPI:
         except Exception as e:
             self.logger.error("get_doc(%s) failed: %s", doc_id, e)
             return {"error": str(e)}
+
+    def search_recent(self, query: str, years: int = 3, **kwargs) -> dict:
+        """Search Indian Kanoon sorted by most-recent, filtered to the last *years*.
+
+        Appends ``sortby:mostrecent`` and ``fromdate:DD-MM-YYYY`` qualifiers
+        to the query so the API returns newest judgments first.
+        """
+        cutoff = datetime.now() - timedelta(days=years * 365)
+        date_str = cutoff.strftime("%d-%m-%Y")
+        recent_query = f"{query} sortby:mostrecent fromdate:{date_str}"
+        self.logger.info("search_recent query: %s", recent_query)
+        return self.search_judgments(recent_query, **kwargs)
