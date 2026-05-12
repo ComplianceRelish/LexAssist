@@ -688,7 +688,7 @@ export async function addCaseEntryWithDocument(
   if (languageHint) formData.append('language_hint', languageHint);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3min for large docs
+  const timeoutId = setTimeout(() => controller.abort(), 300_000); // 5min for large docs
 
   try {
     const headers: Record<string, string> = {};
@@ -940,7 +940,7 @@ export async function scanDocument(
   if (languageHint && languageHint !== 'auto') formData.append('language_hint', languageHint);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3min for large docs
+  const timeoutId = setTimeout(() => controller.abort(), 300_000); // 5min for large docs
 
   try {
     const headers: Record<string, string> = {};

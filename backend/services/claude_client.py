@@ -246,7 +246,9 @@ class ClaudeClient:
     MODEL = "claude-sonnet-4-6"            # All features — chat, drafting, analysis
     MODEL_DEEP = "claude-sonnet-4-6"        # Deep analysis — thorough multi-pass (same model, higher tokens)
     MODEL_FAST = "claude-haiku-4-5-20251001"  # Fast preprocessing — context summarization
-    MAX_TOKENS = 8192
+    MAX_TOKENS = 8192                         # Quick analysis / fallback
+    MAX_TOKENS_CHAT = 16384                   # Chat: deep legal Q&A can require long, structured responses
+    MAX_TOKENS_DRAFT = 16384                  # Drafting: bail apps / writ petitions routinely exceed 8 K tokens
     MAX_TOKENS_DEEP = 16384                   # Larger budget for deep analysis (Pass 2) to avoid truncated JSON
 
     def __init__(self):
@@ -267,7 +269,7 @@ class ClaudeClient:
         try:
             self.client = anthropic.Anthropic(
                 api_key=self.api_key,
-                timeout=240.0,  # 4-minute timeout for deep legal analysis
+                timeout=290.0,  # Stay under gunicorn's 300s worker timeout; gives enough room for 16K-token responses
             )
             self._available = True
             logger.info("Claude client initialized (chat: %s, deep: %s, fast: %s)", self.MODEL, self.MODEL_DEEP, self.MODEL_FAST)
@@ -827,7 +829,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
                 max_tokens=self.MAX_TOKENS_DEEP,
                 system=BRIEF_ANALYSIS_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.05,
+                temperature=0.0,   # Fully deterministic — legal analysis must not vary between runs
             ) as stream:
                 for chunk in stream.text_stream:
                     chunks.append(chunk)
@@ -956,10 +958,10 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
         try:
             with self.client.messages.stream(
                 model=self.MODEL,
-                max_tokens=self.MAX_TOKENS,
+                max_tokens=self.MAX_TOKENS_CHAT,
                 system=system,
                 messages=messages,
-                temperature=0.2,
+                temperature=0.1,   # Precise legal advice; minimal variation while still reading naturally
             ) as stream:
                 for text in stream.text_stream:
                     yield text
@@ -990,10 +992,10 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
         try:
             response = self.client.messages.create(
                 model=self.MODEL,
-                max_tokens=self.MAX_TOKENS,
+                max_tokens=self.MAX_TOKENS_CHAT,
                 system=system,
                 messages=messages,
-                temperature=0.2,
+                temperature=0.1,   # Precise legal advice; matches chat_stream setting
             )
             return response.content[0].text
         except Exception as e:
@@ -1041,10 +1043,10 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
         try:
             with self.client.messages.stream(
                 model=self.MODEL,
-                max_tokens=self.MAX_TOKENS,
+                max_tokens=self.MAX_TOKENS_DRAFT,   # 16 K — bail apps, writ petitions routinely exceed 8 K
                 system=DOCUMENT_DRAFTER_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.05,
+                temperature=0.0,   # Fully deterministic — drafted documents must be consistent and exact
             ) as stream:
                 for text in stream.text_stream:
                     yield text
@@ -1087,10 +1089,10 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             chunks: List[str] = []
             with self.client.messages.stream(
                 model=self.MODEL,
-                max_tokens=self.MAX_TOKENS,
+                max_tokens=self.MAX_TOKENS_DEEP,   # Use deep budget even in quick mode — avoids truncated JSON
                 system=BRIEF_ANALYSIS_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.05,
+                temperature=0.0,   # Deterministic for legal analysis
             ) as stream:
                 for chunk in stream.text_stream:
                     chunks.append(chunk)

@@ -97,6 +97,8 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   archived: { label: 'Archived', className: 'status-archived' },
 };
 
+const MAX_CASE_UPLOAD_SIZE_MB = 5;
+
 /* ═══════════════════════════════════════════════════════════════════
    Case Diary Export Helpers
    ═══════════════════════════════════════════════════════════════════ */
@@ -1140,7 +1142,22 @@ const MyCases: React.FC = () => {
                   <input
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.webp,.bmp,.doc,.docx"
-                    onChange={e => setEntryFile(e.target.files?.[0] || null)}
+                    onChange={e => {
+                      const file = e.target.files?.[0] || null;
+                      if (!file) {
+                        setEntryFile(null);
+                        return;
+                      }
+                      const sizeMB = file.size / (1024 * 1024);
+                      if (sizeMB > MAX_CASE_UPLOAD_SIZE_MB) {
+                        setEntryFile(null);
+                        setError(`File too large (${sizeMB.toFixed(1)} MB). Maximum: ${MAX_CASE_UPLOAD_SIZE_MB} MB.`);
+                        e.currentTarget.value = '';
+                        return;
+                      }
+                      setError(null);
+                      setEntryFile(file);
+                    }}
                     disabled={addingEntry}
                   />
                 </label>

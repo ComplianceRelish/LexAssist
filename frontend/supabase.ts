@@ -51,7 +51,42 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: false
+  }
+});
+
+const TOKEN_KEY = 'lex_access_token';
+const REFRESH_KEY = 'lex_refresh_token';
+
+const syncLocalApiTokens = (session: any | null) => {
+  try {
+    if (session?.access_token) {
+      localStorage.setItem(TOKEN_KEY, session.access_token);
+      localStorage.setItem(REFRESH_KEY, session.refresh_token || '');
+      return;
+    }
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+  } catch {
+    // Ignore storage write failures (private mode, quota exceeded, etc.)
+  }
+};
+
+const isRefreshTokenReuseError = (error: any): boolean => {
+  const msg = String(error?.message || '').toLowerCase();
+  const code = String(error?.code || '').toLowerCase();
+  return code === 'refresh_token_already_used' ||
+    msg.includes('refresh_token_already_used') ||
+    (msg.includes('invalid refresh token') && msg.includes('already used'));
+};
+
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT') {
+    syncLocalApiTokens(null);
+    return;
+  }
+  if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+    syncLocalApiTokens(session);
   }
 });
 
@@ -73,6 +108,15 @@ export const authService = {
   },
   getSession: async () => {
     const { data, error } = await supabase.auth.getSession();
+    if (error && isRefreshTokenReuseError(error)) {
+      // Local recovery path for rotated/reused refresh tokens.
+      await supabase.auth.signOut({ scope: 'local' });
+      syncLocalApiTokens(null);
+      return { data: { session: null } as any };
+    }
+    if (!error) {
+      syncLocalApiTokens(data?.session || null);
+    }
     return error ? handleSupabaseError(error) : { data };
   }
 };

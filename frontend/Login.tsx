@@ -53,10 +53,12 @@ const Login: React.FC = () => {
 
       // Sync frontend Supabase client session using tokens from backend
       // (avoids a redundant network round-trip vs signInWithPassword)
-      if (data.access_token) {
+      if (data.access_token && data.refresh_token) {
+        // Clear stale local auth state first to prevent token-rotation races.
+        await supabase.auth.signOut({ scope: 'local' });
         await supabase.auth.setSession({
           access_token: data.access_token,
-          refresh_token: data.refresh_token || '',
+          refresh_token: data.refresh_token,
         });
       }
 

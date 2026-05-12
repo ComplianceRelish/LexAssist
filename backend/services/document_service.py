@@ -62,7 +62,7 @@ except ImportError:
 SUPPORTED_IMAGE_FORMATS = {"jpg", "jpeg", "png", "webp", "tiff", "tif", "bmp", "gif"}
 SUPPORTED_DOC_FORMATS = {"pdf", "doc", "docx"}
 ALL_SUPPORTED_FORMATS = SUPPORTED_IMAGE_FORMATS | SUPPORTED_DOC_FORMATS
-MAX_FILE_SIZE_MB = 20
+MAX_FILE_SIZE_MB = 5
 MAX_PAGES_FOR_OCR = 20  # Limit pages sent to Vision API
 
 # ── Supported Indian Vernacular Languages ─────────────────────────

@@ -23,7 +23,7 @@ type ScanState = 'idle' | 'capturing' | 'processing' | 'preview';
 const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
 const ACCEPTED_FORMATS = '.pdf,.jpg,.jpeg,.png,.tiff,.tif,.webp,.bmp,.doc,.docx';
-const MAX_FILE_SIZE_MB = 20;
+const MAX_FILE_SIZE_MB = 5;
 
 // ── Supported Indian Vernacular Languages ─────────────────────────
 const LANGUAGE_OPTIONS = [
