@@ -674,6 +674,48 @@ export async function addCaseEntry(caseId: string, text: string, analyze: boolea
   return data;
 }
 
+export async function addCaseEntryWithDocument(
+  caseId: string,
+  file: File,
+  text: string = '',
+  analyze: boolean = false,
+  languageHint: string = 'auto',
+) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (text) formData.append('text', text);
+  formData.append('analyze', analyze ? 'true' : 'false');
+  if (languageHint) formData.append('language_hint', languageHint);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180_000); // 3min for large docs
+
+  try {
+    const headers: Record<string, string> = {};
+    const token = getAccessToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${BASE_URL}/api/cases/${caseId}/entry`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Failed to add entry with document');
+    return data;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Document processing timed out — please try with a smaller file.');
+    }
+    throw err;
+  }
+}
+
 export async function deleteCase(caseId: string) {
   const response = await fetch(`${BASE_URL}/api/cases/${caseId}`, {
     method: 'DELETE',

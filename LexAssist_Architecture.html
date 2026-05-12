@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LexAssist — Architecture Overview</title>
+<style>
+  @page { margin: 1.5cm; size: A4; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 720px; margin: 0 auto; padding: 20px; color: #1a1a1a; font-size: 13px; line-height: 1.5; }
+  h1 { font-size: 22px; border-bottom: 3px solid #1e3a5f; padding-bottom: 6px; color: #1e3a5f; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 12px; margin-bottom: 20px; }
+  h2 { font-size: 16px; color: #1e3a5f; margin: 18px 0 8px; border-left: 4px solid #1e3a5f; padding-left: 8px; }
+  h3 { font-size: 13px; color: #333; margin: 10px 0 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 12px; }
+  th { background: #1e3a5f; color: #fff; padding: 6px 8px; text-align: left; }
+  td { border: 1px solid #ddd; padding: 5px 8px; vertical-align: top; }
+  tr:nth-child(even) { background: #f7f9fb; }
+  .flow { background: #f4f7fa; border: 1px solid #cdd8e4; border-radius: 6px; padding: 12px 16px; margin: 10px 0; font-size: 12px; }
+  .step { display: flex; align-items: flex-start; margin: 6px 0; }
+  .num { background: #1e3a5f; color: #fff; border-radius: 50%; min-width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; margin-right: 8px; flex-shrink: 0; }
+  .arrow { text-align: center; color: #1e3a5f; font-size: 14px; margin: 2px 0; }
+  .tag { display: inline-block; background: #e8eef5; color: #1e3a5f; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+  footer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 8px; font-size: 10px; color: #999; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>LexAssist — Architecture Overview</h1>
+<div class="subtitle">Indian Legal Research & Analysis Platform &nbsp;|&nbsp; March 2026</div>
+
+<!-- ─── SECTION 1 ─── -->
+<h2>1. Application Structure</h2>
+
+<h3>Frontend (React + TypeScript + Vite)</h3>
+<table>
+  <tr><th>Component</th><th>Purpose</th></tr>
+  <tr><td>ChatPanel.tsx</td><td>AI conversational interface — streaming chat with Claude</td></tr>
+  <tr><td>BriefInput.tsx</td><td>Legal brief submission — text / file upload / speech</td></tr>
+  <tr><td>ResponseTabs.tsx</td><td>Structured analysis display (issues, precedents, strategy)</td></tr>
+  <tr><td>DocumentScanner.tsx</td><td>OCR — scan PDFs/images via OpenAI GPT-4o Vision</td></tr>
+  <tr><td>MyCases.tsx</td><td>Case diary & folder management (saved to Supabase)</td></tr>
+  <tr><td>Login.tsx / AdminPanel.tsx</td><td>Auth (Supabase) and role-based admin panel</td></tr>
+  <tr><td>utils/api.ts</td><td>API client — all backend calls, SSE streaming</td></tr>
+</table>
+
+<h3>Backend (Python Flask — deployed on Railway)</h3>
+<table>
+  <tr><th>Module</th><th>Purpose</th></tr>
+  <tr><td>app.py</td><td>Flask routes — /api/ai/chat, /api/ai/analyze, /api/doc/*</td></tr>
+  <tr><td>services/claude_client.py</td><td>Claude AI multi-pass analysis engine + chat</td></tr>
+  <tr><td>services/indian_kanoon.py</td><td>Indian Kanoon API client — search, recent, full-text</td></tr>
+  <tr><td>services/document_service.py</td><td>Document OCR via OpenAI GPT-4o Vision</td></tr>
+  <tr><td>services/supabase_client.py</td><td>Database ops — cases, diaries, user profiles</td></tr>
+  <tr><td>models/legal_brief_analyzer.py</td><td>Regex pipeline — entities, statutes, precedent search</td></tr>
+  <tr><td>data/indian_statutes.py</td><td>Local statute reference — 20 acts, ~200 key sections</td></tr>
+  <tr><td>services/inlegalbert_processor.py</td><td>NLP enrichment — legal NER, domain classification</td></tr>
+</table>
+
+<!-- ─── SECTION 2 ─── -->
+<h2>2. APIs Used for Legal Research &amp; Analysis</h2>
+<table>
+  <tr><th>API</th><th>Provider</th><th>Role in Pipeline</th></tr>
+  <tr>
+    <td><strong>Claude AI</strong></td>
+    <td>Anthropic</td>
+    <td>Core analysis engine — 3-pass deep analysis, citation verification, chat, document drafting</td>
+  </tr>
+  <tr>
+    <td><strong>Indian Kanoon</strong></td>
+    <td>indiankanoon.org</td>
+    <td>Case law search (relevance + most-recent), full judgment text fetching, citation ground-truth</td>
+  </tr>
+  <tr>
+    <td><strong>GPT-4o Vision</strong></td>
+    <td>OpenAI</td>
+    <td>Document OCR — extracts text from scanned PDFs, images, handwritten documents</td>
+  </tr>
+  <tr>
+    <td><strong>Supabase</strong></td>
+    <td>Supabase</td>
+    <td>Auth, PostgreSQL database, row-level security, case diary storage</td>
+  </tr>
+  <tr>
+    <td><strong>Local Statute DB</strong></td>
+    <td>Built-in</td>
+    <td>Authoritative section text for 20 acts (IPC/BNS, CrPC/BNSS, CPC, Constitution, etc.)</td>
+  </tr>
+</table>
+
+<!-- ─── SECTION 3 ─── -->
+<h2>3. Legal Research &amp; Analysis Sequence</h2>
+<div class="flow">
+
+  <div class="step"><div class="num">1</div><div><strong>User Input</strong> — Brief text, file upload, or voice input submitted via frontend</div></div>
+  <div class="arrow">↓</div>
+
+  <div class="step"><div class="num">2</div><div><strong>Regex Extraction</strong> — Extracts parties, dates, sections, articles, courts, FIR numbers from raw text</div></div>
+  <div class="arrow">↓</div>
+
+  <div class="step"><div class="num">3</div><div><strong>Case Classification</strong> — Determines type (Criminal / Civil / Constitutional / Family / Commercial) and jurisdiction</div></div>
+  <div class="arrow">↓</div>
+
+  <div class="step"><div class="num">4</div><div><strong>Indian Kanoon Search</strong> <span class="tag">API</span><br>
+    Pass A: Relevance-ranked results &nbsp;|&nbsp; Pass B: Most recent (last 3 years, sorted by date)<br>
+    Full judgment text fetched for top 3 precedents (ratio decidendi)</div></div>
+  <div class="arrow">↓</div>
+
+  <div class="step"><div class="num">5</div><div><strong>Statute Lookup</strong> <span class="tag">Local DB</span> — Matches extracted sections against authoritative statute text (20 acts, ~200 sections)</div></div>
+  <div class="arrow">↓</div>
+
+  <div class="step"><div class="num">6</div><div><strong>Claude Pass 1 — Issue Identification</strong> <span class="tag">API</span><br>
+    Fast classification of legal issues and case type (skipped for briefs &lt; 3000 chars)</div></div>
+  <div class="arrow">↓</div>
+
+  <div class="step"><div class="num">7</div><div><strong>Claude Pass 2 — Deep Structured Analysis</strong> <span class="tag">API</span><br>
+    Full analysis with injected context: statute text + Indian Kanoon precedents (with judgment excerpts) + regex entities.<br>
+    Produces: legal issues, precedents, arguments, strategy, limitation periods, court fees, old↔new code mapping</div></div>
+  <div class="arrow">↓</div>
+
+  <div class="step"><div class="num">8</div><div><strong>Claude Pass 3 — Citation Verification</strong> <span class="tag">API</span><br>
+    Layer 1: Cross-reference AI citations against Indian Kanoon ground-truth<br>
+    Layer 2: AI verification for citations not in Kanoon results — flags unverified with ⚠️</div></div>
+  <div class="arrow">↓</div>
+
+  <div class="step"><div class="num">9</div><div><strong>Response Delivery</strong> — Structured JSON streamed via SSE to frontend → displayed in tabbed UI</div></div>
+
+</div>
+
+<footer>LexAssist &copy; 2026 &nbsp;|&nbsp; ComplianceRelish &nbsp;|&nbsp; Generated March 23, 2026</footer>
+
+</body>
+</html>

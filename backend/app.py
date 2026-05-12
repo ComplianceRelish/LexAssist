@@ -809,6 +809,20 @@ def get_case(case_id):
             )
             analyses = analysis_rows.data or []
 
+        # 3b. All uploaded case documents linked to these briefs
+        documents = []
+        if brief_ids:
+            document_rows = (
+                supabase.client.table("case_documents")
+                .select("id, brief_id, filename, document_type, document_title, language, metadata, created_at")
+                .eq("case_id", case_id)
+                .eq("user_id", user_id)
+                .in_("brief_id", brief_ids)
+                .order("created_at", desc=False)
+                .execute()
+            )
+            documents = document_rows.data or []
+
         # 4. Activity log entries for this case
         activities = (
             supabase.client.table("activity_log")
@@ -825,14 +839,19 @@ def get_case(case_id):
         for a in analyses:
             analysis_by_brief.setdefault(a["brief_id"], []).append(a)
 
+        document_by_brief = {}
+        for d in documents:
+            document_by_brief[d["brief_id"]] = d
+
         for b in (briefs.data or []):
             entry = {
-                "type": "brief",
+                "type": "document" if b["id"] in document_by_brief else "brief",
                 "brief_id": b["id"],
                 "title": b["title"],
                 "content": b["content"],
                 "created_at": b["created_at"],
                 "analyses": analysis_by_brief.get(b["id"], []),
+                "document": document_by_brief.get(b["id"]),
             }
             timeline.append(entry)
 
@@ -937,15 +956,37 @@ def delete_case(case_id):
 
 @app.route("/api/cases/<case_id>/entry", methods=["POST"])
 def add_case_entry(case_id):
-    """Add a new brief/note entry to an existing case, optionally with AI analysis."""
+    """Add a new brief/note entry or document to an existing case, optionally with AI analysis.
+    
+    Accepts either:
+      - JSON: { "text": "...", "analyze": true/false }
+      - multipart/form-data: { "file": <document>, "text": "optional", "analyze": true/false, "language_hint": "auto" }
+    """
     user_id, _ = _get_current_user()
     if not user_id:
         return jsonify({"error": "Not authenticated"}), 401
-    data = request.json or {}
-    text = data.get("text", "").strip()
-    run_analysis = data.get("analyze", False)
+    
+    # Determine if this is a file upload or text entry
+    is_file_upload = "file" in request.files
+    
+    if is_file_upload:
+        # Handle document upload
+        data = request.form or {}
+        uploaded_file = request.files.get("file")
+        if not uploaded_file or not uploaded_file.filename:
+            return jsonify({"error": "A valid document file is required"}), 400
+        text = data.get("text", "").strip()
+        run_analysis = data.get("analyze", "false").lower() == "true"
+        language_hint = data.get("language_hint", "auto")
+    else:
+        # Handle text-only entry
+        data = request.json or {}
+        uploaded_file = None
+        text = data.get("text", "").strip()
+        run_analysis = data.get("analyze", False)
+        language_hint = None
 
-    if not text:
+    if not text and not is_file_upload:
         return jsonify({"error": "Entry text is required"}), 400
 
     try:
@@ -961,10 +1002,45 @@ def add_case_entry(case_id):
         if not existing.data:
             return jsonify({"error": "Case not found"}), 404
 
+        # Initialize result and document info
+        document_id = None
+        document_data = None
+        file_data = None
+        
+        # If file is uploaded, process it
+        if is_file_upload and uploaded_file and uploaded_file.filename:
+            file_data = uploaded_file.read()
+            if len(file_data) == 0:
+                return jsonify({"error": "File is empty"}), 400
+            
+            # Process document with DocumentService
+            document_data = document_service.process_document(
+                file_data=file_data,
+                filename=uploaded_file.filename,
+                user_id=user_id,
+                case_id=case_id,
+                language_hint=language_hint,
+            )
+            
+            if "error" in document_data:
+                status_code = 400 if document_data.get("status") in ("unsupported_format", "file_too_large", "empty_file") else 500
+                return jsonify(document_data), status_code
+            
+            # Extract document text and use it for analysis if no separate text was provided
+            extracted_text = document_data.get("text", "")
+            if not text and extracted_text:
+                text = extracted_text
+
+        if not text:
+            return jsonify({"error": "Could not extract any usable text from the document. Please add a short note with the upload or try a clearer file."}), 400
+
         # 1. Save brief entry to this case
         # Strip leading markdown heading chars (e.g. "## Title") for the stored title label
         import re as _re
-        raw_title = text[:120].replace("\n", " ").strip()
+        raw_title = (
+            document_data.get("classification", {}).get("document_title")
+            if document_data else text[:120].replace("\n", " ").strip()
+        )
         brief_title = _re.sub(r'^#+\s*', '', raw_title)[:100].strip()
         brief_row = supabase.client.table("briefs").insert({
             "user_id": user_id,
@@ -974,9 +1050,37 @@ def add_case_entry(case_id):
         }).execute()
         brief_id = brief_row.data[0]["id"] if brief_row.data else None
 
-        result = {"brief_id": brief_id, "analysis": None}
+        # 2. If document was uploaded, save document metadata to case_documents table
+        if document_data and brief_id:
+            classification = document_data.get("classification", {})
+            metadata = document_data.get("metadata", {})
+            
+            doc_insert = {
+                "user_id": user_id,
+                "case_id": case_id,
+                "brief_id": brief_id,
+                "filename": uploaded_file.filename,
+                "file_size_bytes": len(file_data) if file_data else None,
+                "mime_type": uploaded_file.content_type if uploaded_file else None,
+                "extracted_text": document_data.get("text", ""),
+                "is_ocr": metadata.get("ocr_used", False),
+                "document_type": classification.get("document_type"),
+                "document_title": classification.get("document_title"),
+                "classification": classification,
+                "language": document_data.get("language", "en"),
+                "metadata": metadata,
+            }
+            doc_row = supabase.client.table("case_documents").insert(doc_insert).execute()
+            document_id = doc_row.data[0]["id"] if doc_row.data else None
 
-        # 2. Optionally run AI analysis on the new entry
+        result = {
+            "brief_id": brief_id,
+            "document_id": document_id,
+            "document_data": document_data,
+            "analysis": None
+        }
+
+        # 3. Optionally run AI analysis on the new entry
         if run_analysis and claude.is_available and brief_id:
             # ── Build case context for Claude ──────────────────────────────
             # Fetch up to 4 prior brief entries for this case (most recent first)
@@ -1019,6 +1123,13 @@ def add_case_entry(case_id):
                     )
 
             context_lines.append("\n=== NEW DEVELOPMENT / UPDATE ===")
+            if document_data:
+                doc_info = document_data.get("classification", {})
+                context_lines.append(f"[DOCUMENT: {doc_info.get('document_title', 'Untitled')} ({doc_info.get('document_type', 'unknown')})]")
+                context_lines.append(f"Language: {document_data.get('language', 'Unknown')}")
+                if uploaded_file:
+                    context_lines.append(f"Source File: {uploaded_file.filename}")
+                context_lines.append("")
             context_lines.append(text)
 
             analysis_text = "\n".join(context_lines)
@@ -1042,16 +1153,28 @@ def add_case_entry(case_id):
             }).execute()
             result["analysis"] = merged
 
-        # 3. Log activity
+        # 4. Log activity
         snippet = text[:200].replace("\n", " ")
-        action = "ai_brief_analyzed" if run_analysis else "brief_analyzed"
+        if document_data:
+            action = "document_uploaded_to_case_analyzed" if run_analysis else "document_uploaded_to_case"
+            doc_title = document_data.get("classification", {}).get("document_title", uploaded_file.filename if uploaded_file else "Document")
+            title = f"Document: {doc_title}"
+        else:
+            action = "ai_brief_analyzed" if run_analysis else "brief_analyzed"
+            title = f"Entry: {existing.data['title'][:50]}"
+        
         supabase.client.table("activity_log").insert({
             "user_id": user_id,
             "case_id": case_id,
             "action": action,
-            "title": f"Entry: {existing.data['title'][:50]}",
+            "title": title,
             "detail": snippet,
-            "metadata": {"brief_id": brief_id, "case_id": case_id},
+            "metadata": {
+                "brief_id": brief_id,
+                "case_id": case_id,
+                "document_id": document_id,
+                "document_type": document_data.get("classification", {}).get("document_type") if document_data else None,
+            },
         }).execute()
 
         # Touch the case updated_at
@@ -1062,8 +1185,6 @@ def add_case_entry(case_id):
     except Exception as e:
         logger.error("Add case entry error: %s", e)
         return jsonify({"error": str(e)}), 500
-
-
 # ---------------------------------------------------------------------------
 # AI – Claude-powered endpoints
 # ---------------------------------------------------------------------------

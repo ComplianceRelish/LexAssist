@@ -6,6 +6,7 @@ import {
   createCase,
   updateCase,
   addCaseEntry,
+  addCaseEntryWithDocument,
   deleteCase,
   fetchFolders,
   createFolder,
@@ -45,6 +46,16 @@ interface TimelineEntry {
   content: string;
   created_at: string;
   analyses: any[];
+  document?: {
+    id: string;
+    brief_id: string;
+    filename: string;
+    document_type: string;
+    document_title: string;
+    language: string;
+    metadata?: Record<string, any>;
+    created_at: string;
+  } | null;
 }
 
 interface CaseDiaryData {
@@ -566,6 +577,8 @@ const MyCases: React.FC = () => {
   const [entryText, setEntryText] = useState('');
   const [runAnalysis, setRunAnalysis] = useState(true);
   const [addingEntry, setAddingEntry] = useState(false);
+  const [entryFile, setEntryFile] = useState<File | null>(null);
+  const [entryLanguageHint, setEntryLanguageHint] = useState('auto');
 
   // ── Notes editing state ──
   const [editingNotes, setEditingNotes] = useState(false);
@@ -576,6 +589,10 @@ const MyCases: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // ── Documents panel state ──
+  const [showDocuments, setShowDocuments] = useState(false);
+  const [expandedDocText, setExpandedDocText] = useState<string | null>(null);
 
   // ── Share menu state ──
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -828,16 +845,33 @@ const MyCases: React.FC = () => {
   const handleBack = () => {
     setDiary(null);
     setShowAddEntry(false);
+    setShowDocuments(false);
+    setExpandedDocText(null);
+    setEntryText('');
+    setEntryFile(null);
+    setEntryLanguageHint('auto');
     setEditingNotes(false);
     loadCases();
   };
 
   const handleAddEntry = async () => {
-    if (!entryText.trim() || !diary) return;
+    if ((!entryText.trim() && !entryFile) || !diary) return;
     setAddingEntry(true);
     try {
-      await addCaseEntry(diary.case.id, entryText.trim(), runAnalysis);
+      if (entryFile) {
+        await addCaseEntryWithDocument(
+          diary.case.id,
+          entryFile,
+          entryText.trim(),
+          runAnalysis,
+          entryLanguageHint,
+        );
+      } else {
+        await addCaseEntry(diary.case.id, entryText.trim(), runAnalysis);
+      }
       setEntryText('');
+      setEntryFile(null);
+      setEntryLanguageHint('auto');
       setShowAddEntry(false);
       handleOpenCase(diary.case.id);
     } catch (err: any) {
@@ -1021,6 +1055,12 @@ const MyCases: React.FC = () => {
             <button className="diary-btn diary-btn-secondary" onClick={() => setEditingNotes(!editingNotes)}>
               {editingNotes ? '✕ Cancel Notes' : '📝 Case Notes'}
             </button>
+            <button
+              className={`diary-btn diary-btn-secondary${showDocuments ? ' active' : ''}`}
+              onClick={() => setShowDocuments(!showDocuments)}
+            >
+              {showDocuments ? '✕ Close Documents' : `📎 Documents (${diary.timeline.filter(e => e.document).length})`}
+            </button>
             <select className="diary-status-select" value={c.status} onChange={e => handleStatusChange(e.target.value)}>
               <option value="active">Active</option>
               <option value="closed">Closed</option>
@@ -1078,6 +1118,9 @@ const MyCases: React.FC = () => {
           {showAddEntry && (
             <div className="diary-add-entry">
               <h3>Add New Entry to Case</h3>
+              <p className="diary-upload-hint">
+                You can add a written update, upload a supporting document, or do both together.
+              </p>
 
               {/* Context-aware notice */}
               {runAnalysis && diary.timeline.length > 0 && (
@@ -1091,10 +1134,59 @@ const MyCases: React.FC = () => {
                 </div>
               )}
 
+              <div className="diary-document-upload">
+                <label className="diary-file-label">
+                  <span>Attach supporting document</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.webp,.bmp,.doc,.docx"
+                    onChange={e => setEntryFile(e.target.files?.[0] || null)}
+                    disabled={addingEntry}
+                  />
+                </label>
+                {entryFile && (
+                  <div className="diary-file-meta">
+                    <span>📎 {entryFile.name}</span>
+                    <button
+                      type="button"
+                      className="diary-file-clear"
+                      onClick={() => setEntryFile(null)}
+                      disabled={addingEntry}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+
+                <label className="diary-language-label">
+                  <span>Document language</span>
+                  <select
+                    value={entryLanguageHint}
+                    onChange={e => setEntryLanguageHint(e.target.value)}
+                    disabled={addingEntry}
+                  >
+                    <option value="auto">Auto-detect</option>
+                    <option value="en">English</option>
+                    <option value="hi">Hindi / हिंदी</option>
+                    <option value="ta">Tamil / தமிழ்</option>
+                    <option value="te">Telugu / తెలుగు</option>
+                    <option value="kn">Kannada / ಕನ್ನಡ</option>
+                    <option value="ml">Malayalam / മലയാളം</option>
+                    <option value="bn">Bengali / বাংলা</option>
+                    <option value="mr">Marathi / मराठी</option>
+                    <option value="gu">Gujarati / ગુજરાતી</option>
+                    <option value="pa">Punjabi / ਪੰਜਾਬੀ</option>
+                    <option value="or">Odia / ଓଡ଼ିଆ</option>
+                    <option value="ur">Urdu / اردو</option>
+                    <option value="mixed">Mixed / Multiple</option>
+                  </select>
+                </label>
+              </div>
+
               <textarea
                 placeholder={
                   diary.timeline.length > 0
-                    ? `Describe what has happened since the last entry — a new hearing date, a reply received, a document filed, a next step taken…\n\nThe AI already knows the case background from prior entries.`
+                    ? `Describe what has happened since the last entry — a new hearing date, a reply received, a document filed, a next step taken…\n\nIf you are uploading a document, you can also add a short note explaining why it matters.`
                     : "Enter the initial case brief — facts, parties involved, legal issue, what relief you are seeking, and any relevant dates or documents…"
                 }
                 value={entryText}
@@ -1106,8 +1198,8 @@ const MyCases: React.FC = () => {
                   <input type="checkbox" checked={runAnalysis} onChange={e => setRunAnalysis(e.target.checked)} />
                   Run AI Analysis on this entry
                 </label>
-                <button className="diary-btn diary-btn-primary" onClick={handleAddEntry} disabled={addingEntry || !entryText.trim()}>
-                  {addingEntry ? 'Analysing with full case context…' : 'Submit Entry'}
+                <button className="diary-btn diary-btn-primary" onClick={handleAddEntry} disabled={addingEntry || (!entryText.trim() && !entryFile)}>
+                  {addingEntry ? 'Processing case update…' : entryFile ? 'Upload to Case Diary' : 'Submit Entry'}
                 </button>
               </div>
             </div>
@@ -1129,6 +1221,78 @@ const MyCases: React.FC = () => {
             </div>
           )}
 
+          {/* ── Uploaded Documents Panel ── */}
+          {showDocuments && (() => {
+            const docEntries = diary.timeline.filter(e => e.document);
+            return (
+              <div className="case-documents-panel">
+                <div className="case-documents-header">
+                  <h2>📎 Uploaded Documents</h2>
+                  <span className="case-documents-count">{docEntries.length} {docEntries.length === 1 ? 'document' : 'documents'}</span>
+                </div>
+                {docEntries.length === 0 ? (
+                  <div className="case-documents-empty">
+                    No documents have been uploaded to this case yet. Use <strong>+ Add New Entry</strong> and attach a file.
+                  </div>
+                ) : (
+                  <div className="case-documents-list">
+                    {docEntries.map((entry, idx) => {
+                      const doc = entry.document!;
+                      const docId = doc.id || `${idx}`;
+                      const isExpanded = expandedDocText === docId;
+                      const fileSize = doc.metadata?.file_size_bytes
+                        ? doc.metadata.file_size_bytes < 1024 * 1024
+                          ? `${(doc.metadata.file_size_bytes / 1024).toFixed(1)} KB`
+                          : `${(doc.metadata.file_size_bytes / (1024 * 1024)).toFixed(1)} MB`
+                        : null;
+                      const hasText = entry.content && entry.content.trim().length > 0;
+                      return (
+                        <div className="case-document-card" key={docId}>
+                          <div className="case-document-card-top">
+                            <div className="case-document-icon">📄</div>
+                            <div className="case-document-info">
+                              <div className="case-document-filename">{doc.filename}</div>
+                              <div className="case-document-tags">
+                                {(doc.document_title || doc.document_type) && (
+                                  <span className="doc-tag doc-tag-type">{doc.document_title || doc.document_type}</span>
+                                )}
+                                {doc.language && doc.language !== 'auto' && (
+                                  <span className="doc-tag doc-tag-lang">{doc.language.toUpperCase()}</span>
+                                )}
+                                {fileSize && (
+                                  <span className="doc-tag doc-tag-size">{fileSize}</span>
+                                )}
+                                {entry.analyses.length > 0 && (
+                                  <span className="doc-tag doc-tag-analysis">✓ AI Analysed</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="case-document-date">{formatDate(entry.created_at)}</div>
+                          </div>
+                          {hasText && (
+                            <div className="case-document-actions">
+                              <button
+                                className="case-document-toggle"
+                                onClick={() => setExpandedDocText(isExpanded ? null : docId)}
+                              >
+                                {isExpanded ? '▲ Hide extracted text' : '▼ View extracted text'}
+                              </button>
+                            </div>
+                          )}
+                          {isExpanded && hasText && (
+                            <div className="case-document-text">
+                              <pre>{entry.content}</pre>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Timeline */}
           <div className="diary-timeline">
             <h2>Case Timeline</h2>
@@ -1146,10 +1310,19 @@ const MyCases: React.FC = () => {
                     <div className="timeline-card">
                       <div className="timeline-card-header">
                         <span className="timeline-type-badge">
-                          {entry.analyses.length > 0 ? '🔍 Analysis' : '📄 Brief'}
+                          {entry.type === 'document'
+                            ? (entry.analyses.length > 0 ? '📎 Document + Analysis' : '📎 Document')
+                            : (entry.analyses.length > 0 ? '🔍 Analysis' : '📄 Brief')}
                         </span>
                         <span className="timeline-date">{formatDate(entry.created_at)}</span>
                       </div>
+                      {entry.document && (
+                        <div className="timeline-document-meta">
+                          <div><strong>File:</strong> {entry.document.filename}</div>
+                          <div><strong>Type:</strong> {entry.document.document_title || entry.document.document_type || 'Supporting document'}</div>
+                          {entry.document.language && <div><strong>Language:</strong> {entry.document.language}</div>}
+                        </div>
+                      )}
                       <BriefSection content={entry.content} />
                       {entry.analyses.map((a: any, aIdx: number) => (
                         <div className="timeline-analysis" key={a.id || aIdx}>
