@@ -196,7 +196,9 @@ Your response MUST be valid JSON with exactly this structure:
 12. Interim reliefs must cite the specific CPC Order/Rule or statutory provision with grounds for urgency
 13. NEVER fabricate a case citation. If you cannot recall the exact citation, state the legal principle and explicitly note "citation to be verified". An incorrect citation filed in court causes real harm — it can result in costs, contempt proceedings, and professional misconduct charges against the advocate.
 14. For EVERY case you cite, verify: Is this a real case? Is the reporter and year plausible? If ANY doubt, prefix with ⚠️.
-15. **next_steps_layman** MUST contain 5-7 steps in plain, simple English that ANY person — even someone with zero legal knowledge — can understand and act on. NO Latin, NO section numbers, NO court jargon. Tell them: WHAT to do, WHERE to go, WHO to contact, and WITHIN WHAT TIME. Example of a GOOD layman step: 'Collect all written agreements, payment receipts, and WhatsApp messages related to this dispute and keep them safe — you will need these as evidence.' Example of a BAD step: 'Preserve all documentary evidence in accordance with Section 65B.'"""
+15. **next_steps_layman** MUST contain 5-7 steps in plain, simple English that ANY person — even someone with zero legal knowledge — can understand and act on. NO Latin, NO section numbers, NO court jargon. Tell them: WHAT to do, WHERE to go, WHO to contact, and WITHIN WHAT TIME. Example of a GOOD layman step: 'Collect all written agreements, payment receipts, and WhatsApp messages related to this dispute and keep them safe — you will need these as evidence.' Example of a BAD step: 'Preserve all documentary evidence in accordance with Section 65B.'
+16. NEVER repeat the same point across multiple fields. Do not duplicate paragraphs in case_summary, do not duplicate statutes in applicable_statutes, and do not repeat the same precedent with minor wording changes.
+17. Keep the output clean and easy to scan: each legal_issues item must map to exact statute/article/order/rule references (e.g., 'Article 226 Constitution', 'Order XXXIX Rule 1 & 2 CPC', 'Section 138 NI Act')."""
 
 DOCUMENT_DRAFTER_SYSTEM = """You are **LexAssist AI**, a senior legal document drafter with 20+ years of Indian litigation experience. You produce court-ready documents that meet the exacting standards of Indian High Courts and the Supreme Court.
 
@@ -367,6 +369,119 @@ class ClaudeClient:
         repaired += "}" * max(0, open_braces)
 
         return repaired
+
+    # ── Output Normalization Helpers ─────────────────────────────
+
+    @staticmethod
+    def _normalize_whitespace(text: str) -> str:
+        """Normalize whitespace while preserving paragraph breaks."""
+        if not isinstance(text, str):
+            return text
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = [re.sub(r"\s+", " ", line).strip() for line in text.split("\n")]
+        return "\n".join(lines).strip()
+
+    @classmethod
+    def _dedupe_paragraphs(cls, text: str) -> str:
+        """Remove repeated paragraphs/sentences from long model text blocks."""
+        if not isinstance(text, str) or not text.strip():
+            return text
+
+        normalized = cls._normalize_whitespace(text)
+        paragraphs = [p.strip() for p in re.split(r"\n{2,}", normalized) if p.strip()]
+        if len(paragraphs) <= 1:
+            return normalized
+
+        seen = set()
+        unique: List[str] = []
+        for p in paragraphs:
+            key = re.sub(r"\W+", "", p).lower()
+            if key and key not in seen:
+                seen.add(key)
+                unique.append(p)
+
+        return "\n\n".join(unique).strip()
+
+    @staticmethod
+    def _dedupe_list_by_key(items: List[Any], key_fn) -> List[Any]:
+        """Stable deduplication for heterogeneous lists."""
+        if not isinstance(items, list):
+            return items
+        seen = set()
+        result = []
+        for item in items:
+            try:
+                key = key_fn(item)
+            except Exception:
+                key = None
+            if not key:
+                result.append(item)
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(item)
+        return result
+
+    @classmethod
+    def _postprocess_analysis(cls, result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Clean and deduplicate model output for consistent, readable UI rendering.
+        Focuses on fields that often repeat in long legal outputs.
+        """
+        if not isinstance(result, dict):
+            return result
+
+        # Normalize and dedupe long text blocks
+        for field in ["case_summary"]:
+            if isinstance(result.get(field), str):
+                result[field] = cls._dedupe_paragraphs(result[field])
+
+        # Normalize list-of-strings fields
+        for field in [
+            "next_steps_layman",
+            "strategic_recommendations",
+            "arguments_for_petitioner",
+            "arguments_for_respondent",
+            "evidence_checklist",
+            "procedural_requirements",
+        ]:
+            value = result.get(field)
+            if isinstance(value, list):
+                cleaned = [cls._normalize_whitespace(v) for v in value if isinstance(v, str) and v.strip()]
+                result[field] = cls._dedupe_list_by_key(cleaned, lambda x: re.sub(r"\W+", "", x).lower())
+
+        # Deduplicate legal_issues by issue + applicable law
+        if isinstance(result.get("legal_issues"), list):
+            result["legal_issues"] = cls._dedupe_list_by_key(
+                result["legal_issues"],
+                lambda x: (
+                    re.sub(r"\W+", "", str(x.get("issue", ""))).lower() + "|" +
+                    re.sub(r"\W+", "", str(x.get("applicable_law", ""))).lower()
+                ) if isinstance(x, dict) else None,
+            )
+
+        # Deduplicate statutes by act + sections
+        if isinstance(result.get("applicable_statutes"), list):
+            result["applicable_statutes"] = cls._dedupe_list_by_key(
+                result["applicable_statutes"],
+                lambda x: (
+                    re.sub(r"\W+", "", str(x.get("act", ""))).lower() + "|" +
+                    ",".join(sorted([str(s).strip().lower() for s in (x.get("sections") or [])]))
+                ) if isinstance(x, dict) else None,
+            )
+
+        # Deduplicate precedents by case_name + citation
+        if isinstance(result.get("relevant_precedents"), list):
+            result["relevant_precedents"] = cls._dedupe_list_by_key(
+                result["relevant_precedents"],
+                lambda x: (
+                    re.sub(r"\W+", "", str(x.get("case_name", ""))).lower() + "|" +
+                    re.sub(r"\W+", "", str(x.get("citation", ""))).lower()
+                ) if isinstance(x, dict) else None,
+            )
+
+        return result
 
     # ── Smart Context Builder ────────────────────────────────────
 
@@ -844,6 +959,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             json_text = self._extract_json(text)
 
             result = json.loads(json_text)
+            result = self._postprocess_analysis(result)
             result["status"] = "success"
             result["ai_model"] = pass2_model
 
@@ -883,6 +999,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             try:
                 repaired = self._repair_truncated_json(json_text)
                 result = json.loads(repaired)
+                result = self._postprocess_analysis(result)
                 result["status"] = "success"
                 result["ai_model"] = pass2_model
                 # Only verify citations if precedents survived the truncation repair
@@ -1100,6 +1217,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             text = "".join(chunks).strip()
             json_text = self._extract_json(text)
             result = json.loads(json_text)
+            result = self._postprocess_analysis(result)
             result["status"] = "success"
             result["ai_model"] = self.MODEL
             result["analysis_pipeline"] = "quick-single-pass"
@@ -1113,6 +1231,7 @@ Respond in JSON array: [{{"index": 1, "confidence": 4, "note": "any concerns or 
             try:
                 repaired = self._repair_truncated_json(json_text)
                 result = json.loads(repaired)
+                result = self._postprocess_analysis(result)
                 result["status"] = "success"
                 result["ai_model"] = self.MODEL
                 result["analysis_pipeline"] = "quick-single-pass-repaired"

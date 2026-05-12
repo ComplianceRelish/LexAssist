@@ -53,6 +53,33 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
   const isFallback = hasAI && !ai.legal_issues && !ai.applicable_statutes && !ai.relevant_precedents;
   const rawText = ai?.raw_analysis || ai?.case_summary || '';
 
+  const normalize = (v: any) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const dedupeList = <T,>(items: T[] = [], keyFn: (item: T) => string) => {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      const key = keyFn(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const legalIssues = dedupeList(ai?.legal_issues || [], (issue: any) =>
+    `${normalize(issue?.issue)}|${normalize(issue?.applicable_law)}`
+  );
+  const applicableStatutes = dedupeList(ai?.applicable_statutes || [], (s: any) =>
+    `${normalize(s?.act)}|${(s?.sections || []).map((x: string) => normalize(x)).sort().join(',')}`
+  );
+  const relevantPrecedents = dedupeList(ai?.relevant_precedents || [], (p: any) =>
+    `${normalize(p?.case_name)}|${normalize(p?.citation)}`
+  );
+  const petitionerArguments = dedupeList(ai?.arguments_for_petitioner || [], (arg: string) => normalize(arg));
+  const respondentArguments = dedupeList(ai?.arguments_for_respondent || [], (arg: string) => normalize(arg));
+  const strategicRecommendations = dedupeList(ai?.strategic_recommendations || [], (rec: string) => normalize(rec));
+  const laymanSteps = dedupeList(ai?.next_steps_layman || [], (step: string) => normalize(step));
+  const proceduralRequirements = dedupeList(ai?.procedural_requirements || [], (step: string) => normalize(step));
+  const evidenceChecklist = dedupeList(ai?.evidence_checklist || [], (item: string) => normalize(item));
+
   // Helper: Relevance bar
   const RelevanceBar = ({ score, max = 10 }: { score: number; max?: number }) => (
     <div className="flex items-center gap-2">
@@ -216,11 +243,11 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </Card>
             )}
 
-            {hasAI && ai.legal_issues?.length > 0 && (
+            {hasAI && legalIssues.length > 0 && (
               <Card>
-                <SectionHeading icon="⚡" title="Legal Issues Identified" subtitle={`${ai.legal_issues.length} distinct legal questions`} />
+                <SectionHeading icon="⚡" title="Legal Issues Identified" subtitle={`${legalIssues.length} distinct legal questions`} />
                 <div className="space-y-3">
-                  {ai.legal_issues.map((issue: any, i: number) => (
+                  {legalIssues.map((issue: any, i: number) => (
                     <div key={i} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
                       <div className="flex justify-between items-start">
                         <h4 className="font-semibold text-[#0a2e5c] text-sm">{issue.issue}</h4>
@@ -243,11 +270,11 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
         {/* ── STATUTES TAB ──────────────────────────────────── */}
         {activeTab === 'law' && (
           <div className="space-y-4">
-            {hasAI && ai.applicable_statutes?.length > 0 && (
+            {hasAI && applicableStatutes.length > 0 && (
               <>
                 <SectionHeading icon="📜" title="Applicable Statutes (AI Analysis)" subtitle="Deep analysis of relevant legal provisions" />
                 <div className="space-y-4">
-                  {ai.applicable_statutes.map((s: any, i: number) => (
+                  {applicableStatutes.map((s: any, i: number) => (
                     <Card key={i}>
                       <h4 className="font-bold text-[#0a2e5c] text-base">{s.act || s.relevance || 'Statute'}</h4>
                       {s.sections?.length > 0 && (
@@ -286,10 +313,9 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </>
             )}
 
-            {isFallback && rawText && !ai.applicable_statutes?.length && lawSections.length === 0 && (
+            {isFallback && rawText && !applicableStatutes.length && lawSections.length === 0 && (
               <Card>
-                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Statutes details within full analysis" />
-                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
+                <SectionHeading icon="ℹ️" title="Structured statute extraction unavailable" subtitle="See complete AI text once in the Overview tab" />
               </Card>
             )}
 
@@ -305,11 +331,11 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
         {/* ── PRECEDENTS TAB ────────────────────────────────── */}
         {activeTab === 'cases' && (
           <div className="space-y-4">
-            {hasAI && ai.relevant_precedents?.length > 0 && (
+            {hasAI && relevantPrecedents.length > 0 && (
               <>
                 <SectionHeading icon="⚖️" title="Relevant Precedents (AI)" subtitle="Key judgments identified by AI analysis" />
                 <div className="space-y-4">
-                  {ai.relevant_precedents.map((p: any, i: number) => (
+                  {relevantPrecedents.map((p: any, i: number) => (
                     <Card key={i}>
                       <h4 className="font-bold text-[#0a2e5c]">{p.case_name}</h4>
                       <div className="flex flex-wrap gap-2 mt-1.5">
@@ -357,10 +383,9 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </>
             )}
 
-            {isFallback && rawText && !ai.relevant_precedents?.length && caseHistories.length === 0 && (
+            {isFallback && rawText && !relevantPrecedents.length && caseHistories.length === 0 && (
               <Card>
-                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Precedent details within full analysis" />
-                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
+                <SectionHeading icon="ℹ️" title="Structured precedent extraction unavailable" subtitle="See complete AI text once in the Overview tab" />
               </Card>
             )}
 
@@ -384,8 +409,8 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                 Arguments for Petitioner
               </h4>
               <ul className="space-y-2">
-                {(hasAI && ai.arguments_for_petitioner?.length > 0
-                  ? ai.arguments_for_petitioner
+                {(hasAI && petitionerArguments.length > 0
+                  ? petitionerArguments
                   : analysis.arguments || []
                 ).map((arg: string, i: number) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
@@ -396,14 +421,14 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </ul>
             </Card>
 
-            {hasAI && ai.arguments_for_respondent?.length > 0 && (
+            {hasAI && respondentArguments.length > 0 && (
               <Card>
                 <h4 className="font-bold text-red-700 flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 bg-red-500 rounded-full"></span>
                   Arguments for Respondent (Anticipate)
                 </h4>
                 <ul className="space-y-2">
-                  {ai.arguments_for_respondent.map((arg: string, i: number) => (
+                  {respondentArguments.map((arg: string, i: number) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                       <span className="text-red-500 mt-0.5 flex-shrink-0">✗</span>
                       <span>{arg}</span>
@@ -430,10 +455,9 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </Card>
             )}
 
-            {isFallback && rawText && !ai.arguments_for_petitioner?.length && !ai.arguments_for_respondent?.length && analysis.arguments?.length === 0 && (
+            {isFallback && rawText && !petitionerArguments.length && !respondentArguments.length && analysis.arguments?.length === 0 && (
               <Card>
-                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Full analysis including legal arguments" />
-                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
+                <SectionHeading icon="ℹ️" title="Structured argument extraction unavailable" subtitle="See complete AI text once in the Overview tab" />
               </Card>
             )}
           </div>
@@ -445,7 +469,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
             <SectionHeading icon="🎯" title="Strategic Recommendations" subtitle="Actionable next steps for your case" />
 
             {/* ── LAYMAN SECTION — shown first, most prominent ── */}
-            {hasAI && ai.next_steps_layman?.length > 0 && (
+            {hasAI && laymanSteps.length > 0 && (
               <div className="rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 p-5 shadow-sm">
                 <div className="flex items-center gap-2 mb-4">
                   <span className="text-2xl">🙋</span>
@@ -455,7 +479,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
                   </div>
                 </div>
                 <ol className="space-y-3">
-                  {ai.next_steps_layman.map((step: string, i: number) => (
+                  {laymanSteps.map((step: string, i: number) => (
                     <li key={i} className="flex gap-3">
                       <span className="flex-shrink-0 w-7 h-7 bg-emerald-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-sm">
                         {i + 1}
@@ -468,12 +492,12 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
             )}
 
             {/* ── LAWYER / ADVOCATE STRATEGY ── */}
-            {hasAI && ai.strategic_recommendations?.length > 0 && (
+            {hasAI && strategicRecommendations.length > 0 && (
               <Card>
                 <h4 className="font-bold text-[#0a2e5c] mb-1">⚖️ Legal Strategy</h4>
                 <p className="text-xs text-gray-400 mb-3">Detailed recommendations for your advocate</p>
                 <ol className="space-y-3">
-                  {ai.strategic_recommendations.map((rec: string, i: number) => (
+                  {strategicRecommendations.map((rec: string, i: number) => (
                     <li key={i} className="flex gap-3 text-sm">
                       <span className="flex-shrink-0 w-6 h-6 bg-[#0a2e5c] text-white rounded-full flex items-center justify-center text-xs font-bold">
                         {i + 1}
@@ -485,11 +509,11 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </Card>
             )}
 
-            {hasAI && ai.procedural_requirements?.length > 0 && (
+            {hasAI && proceduralRequirements.length > 0 && (
               <Card>
                 <h4 className="font-bold text-indigo-700 mb-3">📋 Procedural Requirements</h4>
                 <ol className="space-y-2">
-                  {ai.procedural_requirements.map((step: string, i: number) => (
+                  {proceduralRequirements.map((step: string, i: number) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                       <span className="text-indigo-500 font-mono text-xs mt-0.5">→</span>
                       <span>{step}</span>
@@ -499,11 +523,11 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </Card>
             )}
 
-            {hasAI && ai.evidence_checklist?.length > 0 && (
+            {hasAI && evidenceChecklist.length > 0 && (
               <Card>
                 <h4 className="font-bold text-emerald-700 mb-3">🗂️ Evidence Checklist</h4>
                 <div className="space-y-2">
-                  {ai.evidence_checklist.map((item: string, i: number) => (
+                  {evidenceChecklist.map((item: string, i: number) => (
                     <label key={i} className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
                       <input type="checkbox" className="mt-0.5 accent-[#0a2e5c] rounded" />
                       <span>{item}</span>
@@ -527,7 +551,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </Card>
             )}
 
-            {hasAI && !ai.next_steps_layman?.length && !ai.strategic_recommendations?.length && !ai.procedural_requirements?.length && !ai.evidence_checklist?.length && !isFallback && (
+            {hasAI && !laymanSteps.length && !strategicRecommendations.length && !proceduralRequirements.length && !evidenceChecklist.length && !isFallback && (
               <Card>
                 <div className="text-center py-8 text-gray-400">
                   <div className="text-4xl mb-2">🎯</div>
@@ -537,10 +561,9 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </Card>
             )}
 
-            {isFallback && rawText && !ai.strategic_recommendations?.length && !ai.procedural_requirements?.length && !ai.evidence_checklist?.length && (
+            {isFallback && rawText && !strategicRecommendations.length && !proceduralRequirements.length && !evidenceChecklist.length && (
               <Card>
-                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Strategy details within full analysis" />
-                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
+                <SectionHeading icon="ℹ️" title="Structured strategy extraction unavailable" subtitle="See complete AI text once in the Overview tab" />
               </Card>
             )}
           </div>
@@ -618,8 +641,7 @@ const ResponseTabs: React.FC<ResponseTabsProps> = ({
               </>
             ) : isFallback && rawText ? (
               <Card>
-                <SectionHeading icon="🧠" title="AI Analysis" subtitle="Risk details within full analysis" />
-                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-line leading-relaxed">{rawText}</div>
+                <SectionHeading icon="ℹ️" title="Structured risk extraction unavailable" subtitle="See complete AI text once in the Overview tab" />
               </Card>
             ) : (
               <Card>
